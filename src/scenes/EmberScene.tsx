@@ -15,12 +15,14 @@ export function EmberScene({
   active,
   rainActive,
   snowActive,
+  visible,
 }: {
   speed: number
   soundOn: boolean
   active: boolean
   rainActive: boolean
   snowActive: boolean
+  visible: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
@@ -28,6 +30,7 @@ export function EmberScene({
   const snowActiveRef = useRef(snowActive)
   const soundOnRef = useRef(soundOn)
   const speedRef = useRef(speed)
+  const visibleRef = useRef(visible)
 
   useEffect(() => {
     activeRef.current = active
@@ -48,6 +51,10 @@ export function EmberScene({
   useEffect(() => {
     speedRef.current = speed
   }, [speed])
+
+  useEffect(() => {
+    visibleRef.current = visible
+  }, [visible])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -82,12 +89,15 @@ export function EmberScene({
 
     let fire = pitchWorld.ember
     let residue = pitchWorld.char
+    let fireSnapshot = new Float32Array(fire.length)
 
     let audioCtx: AudioContext | null = null
     let whooshGain: GainNode | null = null
     let whooshSource: AudioBufferSourceNode | null = null
     let fireGain: GainNode | null = null
     let fireSource: AudioBufferSourceNode | null = null
+    let lastFireLevelNode: GainNode | null = null
+    let lastFireLevel = Number.NaN
 
     const ensureAudio = () => {
       audioCtx = getPitchAudio()
@@ -212,6 +222,7 @@ export function EmberScene({
     const ensureFields = () => {
       fire = pitchWorld.ember
       residue = pitchWorld.char
+      if (fireSnapshot.length !== fire.length) fireSnapshot = new Float32Array(fire.length)
     }
 
     const chooseTrajectory = () => {
@@ -240,7 +251,11 @@ export function EmberScene({
           size: 2.2 + Math.random() * 3.8,
         })
       }
-      if (steam.length > 220) steam = steam.slice(steam.length - 220)
+      if (steam.length > 220) {
+        const excess = steam.length - 220
+        steam.copyWithin(0, excess)
+        steam.length = 220
+      }
     }
 
     const spawnSmoke = (index: number, strength: number) => {
@@ -255,22 +270,33 @@ export function EmberScene({
         life: 0.75 + Math.random() * 0.90,
         size: 4 + strength * 8 + Math.random() * 5,
       })
-      if (smoke.length > 180) smoke = smoke.slice(smoke.length - 180)
+      if (smoke.length > 180) {
+        const excess = smoke.length - 180
+        smoke.copyWithin(0, excess)
+        smoke.length = 180
+      }
     }
 
-    const spawnSpark = (index: number, strength: number) => {
+    const spawnSpark = (index: number, strength: number, count = 1) => {
       if (strength < 0.28) return
       const x = Math.min(width, index * 6) + (Math.random() - 0.5) * 6
       const y = snowSurfaceYAtIndex(index, height) - 2
-      sparks.push({
-        x,
-        y,
-        vx: (Math.random() - 0.5) * 0.45,
-        vy: -(0.7 + Math.random() * 0.95),
-        life: 0.35 + Math.random() * 0.32,
-        size: 0.9 + Math.random() * 1.1,
-      })
-      if (sparks.length > 150) sparks = sparks.slice(sparks.length - 150)
+      for (let i = 0; i < count; i++) {
+        const lift = Math.max(0, strength - 0.35)
+        sparks.push({
+          x: x + (Math.random() - 0.5) * 3.4,
+          y: y - Math.random() * 1.8,
+          vx: (Math.random() - 0.5) * (0.42 + lift * 0.18),
+          vy: -(0.72 + Math.random() * 1.02 + lift * (0.18 + Math.random() * 0.24)),
+          life: 0.36 + Math.random() * 0.34 + lift * Math.random() * 0.10,
+          size: 0.85 + Math.random() * 1.08,
+        })
+      }
+      if (sparks.length > 195) {
+        const excess = sparks.length - 195
+        sparks.copyWithin(0, excess)
+        sparks.length = 195
+      }
     }
 
     const resize = () => {
@@ -350,8 +376,11 @@ export function EmberScene({
       ensureFields()
 
       const scaled = (dt / 16.67) * speedRef.current
-      const previous = fire.slice()
-      const next = new Float32Array(previous.length)
+      fireSnapshot.set(fire)
+      const previous = fireSnapshot
+      fire[0] = 0
+      fire[fire.length - 1] = 0
+      let totalHeat = 0
       const impactAge = (time - impactAt) / 1000
 
       // Keep an ignition source alive briefly at the strike point.
@@ -407,12 +436,13 @@ export function EmberScene({
         )
 
         heat = Math.max(0, Math.min(1, heat))
-        next[i] = heat
+        fire[i] = heat
+        totalHeat += fire[i]
 
         if (heat > 0.06) {
           residue[i] = Math.min(1, residue[i] + heat * 0.0032 * scaled)
 
-          const melt = Math.min(pitchWorld.drifts[i], heat * 0.050 * scaled)
+          const melt = Math.min(pitchWorld.drifts[i], heat * 0.065 * scaled)
           if (melt > 0) {
             pitchWorld.drifts[i] = Math.max(0, pitchWorld.drifts[i] - melt)
             spawnSteam(i, melt)
@@ -424,7 +454,10 @@ export function EmberScene({
             spawnSteam(i, evap * 1.35)
           }
 
-          if (heat > 0.34 && Math.random() < 0.015 * scaled) spawnSpark(i, heat)
+          if (heat > 0.34 && Math.random() < 0.0195 * scaled) spawnSpark(i, heat)
+          if (heat > 0.62 && Math.random() < 0.0022 * scaled) {
+            spawnSpark(i, heat, 2 + Math.floor(Math.random() * 3))
+          }
           if ((heat > 0.20 || residue[i] > 0.34) && Math.random() < 0.010 * scaled) {
             spawnSmoke(i, Math.max(heat, residue[i] * 0.8))
           }
@@ -436,8 +469,7 @@ export function EmberScene({
         }
       }
 
-      pitchWorld.ember = next
-      fire = pitchWorld.ember
+      pitchWorld.ember = fire
       pitchWorld.char = residue
 
       pitchWorld.wetness = Math.max(
@@ -446,13 +478,22 @@ export function EmberScene({
       )
 
       if (fireGain && audioCtx) {
-        const totalHeat = fire.reduce((sum, value) => sum + value, 0)
         const level = soundOnRef.current ? Math.min(0.085, 0.018 + totalHeat / fire.length * 0.18) : 0
-        fireGain.gain.setTargetAtTime(level, audioCtx.currentTime, 0.25)
+        if (fireGain !== lastFireLevelNode) {
+          lastFireLevelNode = fireGain
+          lastFireLevel = Number.NaN
+        }
+        if (level !== lastFireLevel) {
+          fireGain.gain.setTargetAtTime(level, audioCtx.currentTime, 0.25)
+          lastFireLevel = level
+        }
+      } else {
+        lastFireLevelNode = null
+        lastFireLevel = Number.NaN
       }
     }
 
-    const drawMeteor = (time: number) => {
+    const drawMeteor = (time: number, render: boolean) => {
       if (meteorStartedAt < 0 || impacted) return
 
       const elapsed = time - meteorStartedAt
@@ -466,49 +507,54 @@ export function EmberScene({
       const y = startY + (targetY - startY) * t
 
       trail.push({ x, y, age: time })
-      if (trail.length > 16) trail.shift()
-
-      for (let i = 0; i < trail.length; i++) {
-        const point = trail[i]
-        const age = Math.min(1, (time - point.age) / 460)
-        const alpha = (1 - age) * (0.05 + raw * 0.20) * (i / trail.length)
-        const radius = 0.8 + (i / trail.length) * (1.5 + raw * 1.6)
-        ctx.beginPath()
-        ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(191, 92, 39, ${alpha})`
-        ctx.fill()
+      if (trail.length > 16) {
+        trail.copyWithin(0, trail.length - 16)
+        trail.length = 16
       }
 
-      ctx.beginPath()
-      ctx.arc(x, y, 2.2 + raw * 2.6, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(165, 65, 25, ${0.34 + raw * 0.28})`
-      ctx.fill()
+      if (render) {
+        for (let i = 0; i < trail.length; i++) {
+          const point = trail[i]
+          const age = Math.min(1, (time - point.age) / 460)
+          const alpha = (1 - age) * (0.05 + raw * 0.20) * (i / trail.length)
+          const radius = 0.8 + (i / trail.length) * (1.5 + raw * 1.6)
+          ctx.beginPath()
+          ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(191, 92, 39, ${alpha})`
+          ctx.fill()
+        }
 
-      ctx.beginPath()
-      ctx.arc(x, y, 1.15 + raw * 1.25, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(238, 151, 82, ${0.58 + raw * 0.30})`
-      ctx.fill()
+        ctx.beginPath()
+        ctx.arc(x, y, 2.2 + raw * 2.6, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(165, 65, 25, ${0.34 + raw * 0.28})`
+        ctx.fill()
 
-      ctx.beginPath()
-      ctx.arc(x - 0.4, y - 0.4, 0.65 + raw * 0.45, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(255, 224, 176, ${0.70 + raw * 0.24})`
-      ctx.fill()
+        ctx.beginPath()
+        ctx.arc(x, y, 1.15 + raw * 1.25, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(238, 151, 82, ${0.58 + raw * 0.30})`
+        ctx.fill()
 
-      if (raw > 0.72) {
-        const warmth = (raw - 0.72) / 0.28
-        const groundWidth = 24 + warmth * 80
-        ctx.fillStyle = `rgba(118, 42, 18, ${warmth * 0.042})`
-        ctx.fillRect(targetX - groundWidth / 2, targetY - 2, groundWidth, 4)
+        ctx.beginPath()
+        ctx.arc(x - 0.4, y - 0.4, 0.65 + raw * 0.45, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(255, 224, 176, ${0.70 + raw * 0.24})`
+        ctx.fill()
+
+        if (raw > 0.72) {
+          const warmth = (raw - 0.72) / 0.28
+          const groundWidth = 24 + warmth * 80
+          ctx.fillStyle = `rgba(118, 42, 18, ${warmth * 0.042})`
+          ctx.fillRect(targetX - groundWidth / 2, targetY - 2, groundWidth, 4)
+        }
       }
 
       if (raw >= 1) applyImpact(time)
     }
 
-    const drawImpact = (time: number, dt: number) => {
+    const drawImpact = (time: number, dt: number, render: boolean) => {
       if (!impacted) return
       const age = (time - impactAt) / 1000
 
-      if (age < 0.11) {
+      if (render && age < 0.11) {
         const flash = 1 - age / 0.11
         ctx.fillStyle = `rgba(216, 154, 101, ${flash * 0.065})`
         ctx.fillRect(0, 0, width, height)
@@ -521,15 +567,17 @@ export function EmberScene({
         fragment.y += fragment.vy * (dt / 16.67)
         fragment.life -= 0.018 * (dt / 16.67)
 
-        ctx.fillStyle = `rgba(224, 91, 35, ${Math.max(0, fragment.life) * 0.52})`
-        ctx.fillRect(fragment.x, fragment.y, fragment.size, fragment.size)
+        if (render) {
+          ctx.fillStyle = `rgba(224, 91, 35, ${Math.max(0, fragment.life) * 0.52})`
+          ctx.fillRect(fragment.x, fragment.y, fragment.size, fragment.size)
+        }
       }
     }
 
-    const drawFire = (time: number, dt: number) => {
+    const drawFire = (time: number, dt: number, render: boolean) => {
       const t = time * 0.001
 
-      for (let i = 1; i < fire.length - 1; i++) {
+      if (render) for (let i = 1; i < fire.length - 1; i++) {
         const heat = fire[i]
         const char = residue[i]
         if (heat < 0.02 && char < 0.03) continue
@@ -597,6 +645,41 @@ export function EmberScene({
           }
         }
 
+        // Cooling char keeps a faint buried afterglow after the active front has passed.
+        if (char > 0.065 && heat < 0.20) {
+          const cooling = Math.max(0, 1 - heat / 0.20)
+          const glowPulse = 0.82 + Math.sin(t * 1.35 + i * 0.57) * 0.10 + seeded(i * 7) * 0.08
+          const glowAlpha = Math.min(0.17, (0.018 + char * 0.12) * cooling * glowPulse)
+
+          ctx.beginPath()
+          ctx.ellipse(
+            x + (seeded(i * 13) - 0.5) * 1.8,
+            surface - 0.25,
+            1.25 + char * 2.1,
+            0.42 + char * 0.52,
+            0,
+            0,
+            Math.PI * 2
+          )
+          ctx.fillStyle = `rgba(132, 39, 18, ${glowAlpha})`
+          ctx.fill()
+
+          if (char > 0.12 && seeded(i * 17) > 0.62) {
+            ctx.beginPath()
+            ctx.ellipse(
+              x + (seeded(i * 19) - 0.5) * 2.2,
+              surface - 0.45,
+              0.55 + char * 0.75,
+              0.30 + char * 0.24,
+              0,
+              0,
+              Math.PI * 2
+            )
+            ctx.fillStyle = `rgba(205, 70, 27, ${Math.min(0.15, glowAlpha * 1.35)})`
+            ctx.fill()
+          }
+        }
+
         // Hot ember bed lingers behind the front.
         if (char > 0.18) {
           const pulse = 0.80 + Math.sin(t * 4.6 + i * 0.83) * 0.18 + seeded(i) * 0.10
@@ -626,8 +709,10 @@ export function EmberScene({
         particle.vy += 0.018 * (dt / 16.67)
         particle.life -= 0.015 * (dt / 16.67)
 
-        ctx.fillStyle = `rgba(241, 121, 46, ${Math.max(0, particle.life) * 0.72})`
-        ctx.fillRect(particle.x, particle.y, particle.size, particle.size)
+        if (render) {
+          ctx.fillStyle = `rgba(241, 121, 46, ${Math.max(0, particle.life) * 0.72})`
+          ctx.fillRect(particle.x, particle.y, particle.size, particle.size)
+        }
       }
 
       for (const plume of steam) {
@@ -637,10 +722,12 @@ export function EmberScene({
         plume.vx += Math.sin(t * 2.2 + plume.y * 0.03) * 0.002
         plume.life -= 0.0065 * (dt / 16.67)
 
-        ctx.beginPath()
-        ctx.ellipse(plume.x, plume.y, plume.size, plume.size * 0.42, 0, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(188, 193, 198, ${Math.max(0, plume.life) * 0.032})`
-        ctx.fill()
+        if (render) {
+          ctx.beginPath()
+          ctx.ellipse(plume.x, plume.y, plume.size, plume.size * 0.42, 0, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(188, 193, 198, ${Math.max(0, plume.life) * 0.032})`
+          ctx.fill()
+        }
       }
 
       for (const plume of smoke) {
@@ -650,10 +737,12 @@ export function EmberScene({
         plume.vx += Math.sin(t * 1.6 + plume.y * 0.02) * 0.0015
         plume.life -= 0.0048 * (dt / 16.67)
 
-        ctx.beginPath()
-        ctx.ellipse(plume.x, plume.y, plume.size, plume.size * 0.58, 0, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(70, 62, 58, ${Math.max(0, plume.life) * 0.040})`
-        ctx.fill()
+        if (render) {
+          ctx.beginPath()
+          ctx.ellipse(plume.x, plume.y, plume.size, plume.size * 0.58, 0, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(70, 62, 58, ${Math.max(0, plume.life) * 0.040})`
+          ctx.fill()
+        }
       }
     }
 
@@ -674,10 +763,11 @@ export function EmberScene({
       syncFireSound()
       updateFire(time, dt)
 
-      ctx.clearRect(0, 0, width, height)
-      drawMeteor(time)
-      drawImpact(time, dt)
-      drawFire(time, dt)
+      const render = visibleRef.current
+      if (render) ctx.clearRect(0, 0, width, height)
+      drawMeteor(time, render)
+      drawImpact(time, dt, render)
+      drawFire(time, dt, render)
 
       raf = requestAnimationFrame(draw)
     })

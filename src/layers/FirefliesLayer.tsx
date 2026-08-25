@@ -59,13 +59,18 @@ function chooseExitEdge(firefly: Firefly, width: number, height: number) {
   }
 }
 
-export function FirefliesLayer({ active }: { active: boolean }) {
+export function FirefliesLayer({ active, visible }: { active: boolean; visible: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
+  const visibleRef = useRef(visible)
 
   useEffect(() => {
     activeRef.current = active
   }, [active])
+
+  useEffect(() => {
+    visibleRef.current = visible
+  }, [visible])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -84,6 +89,7 @@ export function FirefliesLayer({ active }: { active: boolean }) {
     let recoveryBlockedUntil = 0
     let nextFireflyId = 1
     const fireflies: Firefly[] = []
+    let canvasCleared = false
 
     const resize = () => {
       width = window.innerWidth
@@ -420,7 +426,14 @@ export function FirefliesLayer({ active }: { active: boolean }) {
         nextSpawn = time + 2100 + Math.random() * 1900
       }
 
-      ctx.clearRect(0, 0, width, height)
+      const render = visibleRef.current
+      if (render) {
+        ctx.clearRect(0, 0, width, height)
+        canvasCleared = false
+      } else if (!canvasCleared) {
+        ctx.clearRect(0, 0, width, height)
+        canvasCleared = true
+      }
 
       for (let i = fireflies.length - 1; i >= 0; i--) {
         const firefly = fireflies[i]
@@ -434,7 +447,7 @@ export function FirefliesLayer({ active }: { active: boolean }) {
         }
 
         updateFirefly(firefly, time, dt)
-        drawFirefly(firefly, time)
+        if (render) drawFirefly(firefly, time)
 
         const deathFinished = firefly.dying && time >= firefly.deathStart + firefly.deathDuration
         const exitFinished = firefly.exiting && time >= firefly.exitAt && isFarOutside(firefly)

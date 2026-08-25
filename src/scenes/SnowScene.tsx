@@ -27,6 +27,19 @@ type WindState = {
   nextChange: number
 }
 
+type LoosePowder = {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  life: number
+  maxLife: number
+  alpha: number
+  size: number
+  phase: number
+  swirl: number
+}
+
 
 export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed: number; active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -101,8 +114,12 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
     let height = window.innerHeight
     let dpr = Math.min(window.devicePixelRatio || 1, 2)
     let flakes: Flake[] = []
-    let loosePowder: Array<{ x: number; y: number; vx: number; vy: number; life: number; alpha: number; size: number }> = []
+    let loosePowder: LoosePowder[] = []
     let drifts = pitchWorld.drifts
+    let driftSnapshot = new Float32Array(drifts.length)
+    let idleCleared = false
+    let lastAudioGainNode: GainNode | null = null
+    let lastAudioTargetGain = Number.NaN
     let wind: WindState = {
       value: 0,
       target: 0,
@@ -151,6 +168,7 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
       flakes = Array.from({ length: count }, () => createFlake(true))
       ensureWorld(width, height)
       drifts = pitchWorld.drifts
+      if (driftSnapshot.length !== drifts.length) driftSnapshot = new Float32Array(drifts.length)
     }
 
     const settle = (flake: Flake) => {
@@ -195,7 +213,8 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
     const smoothDrifts = () => {
       if (frame % 8 !== 0) return
-      const copy = drifts.slice()
+      driftSnapshot.set(drifts)
+      const copy = driftSnapshot
       for (let i = 2; i < drifts.length - 2; i++) {
         // Five samples only: enough diffusion for rounded, pillow-like banks
         // without the expensive contour work that hurt earlier snow builds.
@@ -253,19 +272,60 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
         drifts[landing - direction] += moved * 0.010
 
         if (
-          Math.random() < Math.min(0.34, strength * (0.055 + stormSignal.mix * 0.052)) &&
-          loosePowder.length < 36
+          exposed > 0.22 &&
+          Math.random() < Math.min(0.38, strength * (0.050 + exposed * 0.006 + stormSignal.mix * 0.052)) &&
+          loosePowder.length < 42
         ) {
+          const maxLife = 74 + Math.random() * 94
           loosePowder.push({
-            x: i * 6,
-            y: snowSurfaceYAtIndex(i, height) - 1,
-            vx: direction * (0.28 + Math.random() * 0.72) * strength,
-            vy: -0.05 - Math.random() * 0.19,
-            life: 60 + Math.random() * 76,
-            alpha: 0.040 + Math.random() * 0.070,
-            size: 0.32 + Math.random() * 0.58,
+            x: i * 6 + (Math.random() * 2 - 1) * 2.5,
+            y: snowSurfaceYAtIndex(i, height) - 1 - Math.random() * 1.4,
+            vx: direction * (0.22 + Math.random() * 0.58) * strength,
+            vy: -0.035 - Math.random() * 0.16,
+            life: maxLife,
+            maxLife,
+            alpha: 0.052 + Math.random() * 0.072,
+            size: 0.34 + Math.random() * 0.52,
+            phase: Math.random() * Math.PI * 2,
+            swirl: 0.035 + Math.random() * 0.075,
           })
         }
+      }
+    }
+
+
+    const combDriftCrests = () => {
+      const currentWind = effectiveWind()
+      if (Math.abs(currentWind) < 0.22 || frame % 24 !== 0 || drifts.length < 7) return
+
+      driftSnapshot.set(drifts)
+      const copy = driftSnapshot
+      const direction = currentWind > 0 ? 1 : -1
+      const strength = Math.min(2.2, Math.abs(currentWind))
+      const stormLift = 1 + stormSignal.mix * 0.7
+      const start = direction > 0 ? 3 : drifts.length - 4
+      const end = direction > 0 ? drifts.length - 3 : 2
+
+      for (let i = start; i !== end; i += direction) {
+        if (copy[i] < 1.2) continue
+
+        const upwind = i - direction
+        const downwind = i + direction
+        const shoulder = (copy[upwind] + copy[downwind]) * 0.5
+        const exposed = copy[i] - shoulder
+        if (exposed < 0.34) continue
+
+        const transfer = Math.min(
+          0.012 * stormLift,
+          exposed * 0.0014 * strength * stormLift,
+        )
+        if (transfer <= 0.0008) continue
+
+        const leeNear = Math.max(2, Math.min(drifts.length - 3, i + direction))
+        const leeFar = Math.max(2, Math.min(drifts.length - 3, i + direction * 2))
+        drifts[i] = Math.max(0, drifts[i] - transfer)
+        drifts[leeNear] += transfer * 0.68
+        drifts[leeFar] += transfer * 0.32
       }
     }
 
@@ -382,17 +442,33 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
       const blend = 1 - Math.exp(-dt / 900)
       weatherMix += (targetMix - weatherMix) * blend
 
-      ctx.clearRect(0, 0, width, height)
-      if (audioRef.current) {
+      const currentAudio = audioRef.current
+      if (currentAudio) {
         const targetGain = soundOnRef.current ? 0.035 * weatherMix : 0
-        audioRef.current.gain.gain.setTargetAtTime(targetGain, audioRef.current.ctx.currentTime, 0.18)
+        if (currentAudio.gain !== lastAudioGainNode) {
+          lastAudioGainNode = currentAudio.gain
+          lastAudioTargetGain = Number.NaN
+        }
+        if (targetGain !== lastAudioTargetGain) {
+          currentAudio.gain.gain.setTargetAtTime(targetGain, currentAudio.ctx.currentTime, 0.18)
+          lastAudioTargetGain = targetGain
+        }
+      } else {
+        lastAudioGainNode = null
+        lastAudioTargetGain = Number.NaN
       }
 
       if (weatherMix < 0.004 && !activeRef.current) {
+        if (!idleCleared) {
+          ctx.clearRect(0, 0, width, height)
+          idleCleared = true
+        }
         raf = requestAnimationFrame(draw)
         return
       }
 
+      idleCleared = false
+      ctx.clearRect(0, 0, width, height)
       ctx.globalAlpha = weatherMix
       updateWind(simTime)
       const activeWind = effectiveWind()
@@ -460,23 +536,39 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
       depositWorldSnow(dt, simTime)
       erodeDrifts()
+      combDriftCrests()
       smoothDrifts()
       drawDrifts(simTime)
 
-      loosePowder = loosePowder.filter((p) => {
+      let powderWrite = 0
+      const powderWind = effectiveWind()
+      const powderMotionScale = Math.min(1.9, Math.max(0.7, 0.9 + speed * 0.13))
+      for (let powderRead = 0; powderRead < loosePowder.length; powderRead++) {
+        const p = loosePowder[powderRead]
         p.life -= Math.min(1.8, Math.max(0.8, 0.9 + speed * 0.12))
-        if (p.life <= 0) return false
-        p.x += p.vx * Math.min(1.9, Math.max(0.7, 0.9 + speed * 0.13))
-        p.y += p.vy
-        p.vy += 0.006
-        p.alpha *= 0.991
-        if (p.x < -5 || p.x > width + 5) return false
+        if (p.life <= 0) continue
+
+        const age = 1 - p.life / p.maxLife
+        const lift = Math.sin(Math.min(1, age * 1.8) * Math.PI)
+        const curl = Math.sin(simTime * 0.0042 + p.phase + p.x * 0.013) * p.swirl
+        p.x += (p.vx + curl + powderWind * 0.028) * powderMotionScale
+        p.y += p.vy - lift * 0.012 + Math.cos(simTime * 0.0034 + p.phase) * 0.008
+        p.vy += 0.0042
+        p.vx *= 0.9985
+
+        if (p.x < -6 || p.x > width + 6) continue
+        const fadeIn = Math.min(1, age * 5)
+        const fadeOut = Math.min(1, p.life / Math.max(1, p.maxLife * 0.32))
+        const visibleAlpha = p.alpha * fadeIn * fadeOut
+        if (visibleAlpha <= 0.003) continue
+
         ctx.beginPath()
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(235, 241, 245, ${p.alpha})`
+        ctx.fillStyle = `rgba(235, 241, 245, ${visibleAlpha})`
         ctx.fill()
-        return true
-      })
+        loosePowder[powderWrite++] = p
+      }
+      loosePowder.length = powderWrite
 
       ctx.globalAlpha = 1
       raf = requestAnimationFrame(draw)

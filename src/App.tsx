@@ -22,12 +22,18 @@ function App() {
   const controlsVisible = useIdleControls()
 
   useEffect(() => {
-    const id = window.setInterval(saveWorld, 4000)
+    const id = window.setInterval(saveWorld, 15000)
     const persist = () => saveWorld()
+    const persistWhenHidden = () => {
+      if (document.visibilityState === 'hidden') saveWorld()
+    }
+
     window.addEventListener('pagehide', persist)
+    document.addEventListener('visibilitychange', persistWhenHidden)
     return () => {
       window.clearInterval(id)
       window.removeEventListener('pagehide', persist)
+      document.removeEventListener('visibilitychange', persistWhenHidden)
       saveWorld()
     }
   }, [])
@@ -82,8 +88,9 @@ function App() {
           snowActive={scene === 'snow'}
           speed={1}
           soundOn={soundOn}
+          visible={scene !== 'black'}
         />
-        <FirefliesLayer active={layers.fireflies} />
+        <FirefliesLayer active={layers.fireflies} visible={scene !== 'black'} />
         <StormLayer active={layers.storm} scene={scene} soundOn={soundOn} />
       </div>
 

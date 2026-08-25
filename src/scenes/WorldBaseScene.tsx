@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { ensureWorld, pitchWorld } from '../world/worldState'
-import { drawStandingWater, drawTerrain } from '../world/worldRendering'
+import {
+  createTerrainRenderCache,
+  drawStandingWater,
+  drawTerrain,
+  invalidateTerrainRenderCache,
+} from '../world/worldRendering'
 
 export function WorldBaseScene({ scene }: { scene: Scene }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -23,6 +28,8 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
     let raf = 0
     let last = performance.now()
     let light = sceneRef.current === 'snow' ? 1 : 0.82
+    let idleCleared = false
+    const terrainCache = createTerrainRenderCache()
 
     const resize = () => {
       width = window.innerWidth
@@ -33,6 +40,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      invalidateTerrainRenderCache(terrainCache)
       ensureWorld(width, height)
     }
 
@@ -49,11 +57,19 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
       const blend = 1 - Math.exp(-dt / 950)
       light += (targetLight() - light) * blend
 
-      ctx.clearRect(0, 0, width, height)
-      if (light > 0.008) {
-        drawTerrain(ctx, width, height, light, time, pitchWorld.wetness)
-        drawStandingWater(ctx, width, height, Math.max(0.20, light))
+      if (light <= 0.008) {
+        if (!idleCleared) {
+          ctx.clearRect(0, 0, width, height)
+          idleCleared = true
+        }
+        raf = requestAnimationFrame(draw)
+        return
       }
+
+      idleCleared = false
+      ctx.clearRect(0, 0, width, height)
+      drawTerrain(ctx, width, height, light, time, pitchWorld.wetness, terrainCache)
+      drawStandingWater(ctx, width, height, Math.max(0.20, light))
 
       raf = requestAnimationFrame(draw)
     }
