@@ -1,184 +1,372 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+.pitchblack {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  color: rgba(236, 239, 242, 0.35);
+  user-select: none;
+  touch-action: manipulation;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
-}
-
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
-}
-
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
-}
-
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
-}
-
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
-}
-
-.ticks {
-  position: relative;
+.scene-layer,
+.scene-canvas,
+.moon-scene {
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
+}
 
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
+.scene-layer { pointer-events: none; }
+.scene-canvas { display: block; background: transparent; z-index: 1; }
 
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
-  }
+.brand-whisper {
+  position: absolute;
+  top: max(22px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  letter-spacing: .32em;
+  text-transform: lowercase;
+  opacity: 0;
+  transition: opacity 900ms ease;
+  color: rgba(255,255,255,.18);
+}
+.brand-whisper.visible { opacity: 1; }
+
+.control-dock {
+  position: absolute;
+  left: 50%;
+  max-width: calc(100vw - 20px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  bottom: max(25px, calc(env(safe-area-inset-bottom) + 14px));
+  transform: translate(-50%, 10px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 999px;
+  background: rgba(7,7,7,.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 14px 60px rgba(0,0,0,.68), inset 0 1px 0 rgba(255,255,255,.025);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 650ms ease, transform 650ms cubic-bezier(.2,.8,.2,1);
+}
+.control-dock.visible { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+
+.control-dock button {
+  appearance: none;
+  border: 0;
+  min-width: 54px;
+  height: 47px;
+  padding: 0 10px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  background: transparent;
+  color: rgba(255,255,255,.24);
+  cursor: pointer;
+  transition: color 260ms ease, background 260ms ease, transform 160ms ease;
+}
+.control-dock button:hover,
+.control-dock button:focus-visible { color: rgba(255,255,255,.55); background: rgba(255,255,255,.035); outline: none; }
+.control-dock button:active { transform: scale(.94); }
+.control-dock button.active { color: rgba(255,255,255,.66); background: rgba(255,255,255,.045); }
+.control-dock button span { font-size: 8px; letter-spacing: .08em; text-transform: uppercase; opacity: .72; }
+.dock-divider { width: 1px; height: 23px; margin: 0 2px; background: rgba(255,255,255,.07); }
+
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  font-size: 8px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255,255,255,.08);
+  opacity: 0;
+  transition: opacity 900ms ease;
+}
+.hint.visible { opacity: 1; }
+
+.sleep-clock {
+  position: absolute;
+  left: 50%;
+  top: 70%;
+  width: min(88vw, 780px);
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: rgb(226, 223, 211);
+  opacity: .27;
+  transition: opacity 1400ms ease;
+  z-index: 20;
+}
+
+.sleep-clock.clock-awake {
+  opacity: .43;
+}
+
+.sleep-clock-time {
+  font-size: clamp(52px, 8.4vw, 108px);
+  line-height: .94;
+  font-weight: 200;
+  letter-spacing: -.045em;
+  white-space: nowrap;
+}
+
+.sleep-clock-date {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .72em;
+  min-height: 1.4em;
+  margin-top: clamp(12px, 1.8vh, 19px);
+  font-size: clamp(8px, .72vw, 11px);
+  line-height: 1;
+  font-weight: 300;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 900ms ease, transform 1100ms cubic-bezier(.2,.8,.2,1);
+}
+
+.sleep-clock.clock-awake .sleep-clock-date {
+  opacity: .38;
+  transform: translateY(0);
+}
+
+.sleep-clock-separator {
+  opacity: .52;
+}
+
+
+.moon-scene {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(24,27,31,.11), transparent 26%),
+    #000;
+}
+.moon-wrap {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 25px;
+  animation: moon-breathe 12s ease-in-out infinite alternate;
+}
+.moon-disc {
+  position: relative;
+  width: clamp(112px, 20vw, 230px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #111417;
+  box-shadow: 0 0 42px rgba(168,178,188,.025);
+}
+.moon-texture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: .72;
+  filter: contrast(.92) brightness(.72);
+}
+.moon-shadow {
+  position: absolute;
+  inset: -4%;
+  width: 108%;
+  height: 108%;
+  background: rgba(0,0,0,.92);
+  filter: blur(.6px);
+}
+.moon-grain {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset -8px -9px 22px rgba(0,0,0,.28), inset 5px 5px 18px rgba(255,255,255,.018);
+}
+.moon-caption {
+  font-size: 8px;
+  letter-spacing: .19em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.08);
+}
+
+.cloud-veil {
+  position: absolute;
+  inset: -12% -18%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 28% 46%, rgba(18,22,26,.56) 0 20%, transparent 47%),
+    radial-gradient(ellipse at 72% 54%, rgba(14,18,22,.48) 0 18%, transparent 45%);
+  animation: cloud-drift 38s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes cloud-drift {
+  from { transform: translate3d(-2.5%, 0, 0) scale(1.03); }
+  to { transform: translate3d(3.5%, 1%, 0) scale(1.05); }
+}
+
+@keyframes moon-breathe {
+  from { transform: translate(-50%, -50%) translateY(-3px); }
+  to { transform: translate(-50%, -50%) translateY(3px); }
+}
+
+@media (max-width: 620px) {
+  .control-dock { gap: 0; bottom: max(24px, calc(env(safe-area-inset-bottom) + 14px)); }
+  .control-dock button { min-width: 44px; padding: 0 7px; }
+  .control-dock button span { display: none; }
+  .hint { display: none; }
+  .moon-wrap { top: 39%; }
+  .sleep-clock { top: 67%; width: 92vw; }
+  .sleep-clock-time { font-size: clamp(48px, 15vw, 82px); }
+  .sleep-clock-date { font-size: 8px; letter-spacing: .13em; }
+}
+
+@media (max-height: 520px) {
+  .sleep-clock { top: 57%; }
+  .sleep-clock-time { font-size: clamp(44px, 11vh, 68px); }
+  .sleep-clock-date { margin-top: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moon-wrap, .cloud-veil, .storm-clouds, .ember-clouds { animation: none; }
+  .control-dock, .brand-whisper, .hint, .sleep-clock, .sleep-clock-date { transition-duration: 0ms; }
+}
+
+
+.storm-scene,
+.ember-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  z-index: 1;
+}
+
+.storm-moon {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: clamp(105px, 18vw, 210px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  border-radius: 50%;
+  opacity: .14;
+  background: #111417;
+}
+
+.storm-clouds,
+.ember-clouds {
+  position: absolute;
+  inset: -14% -20%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.storm-clouds {
+  background:
+    radial-gradient(ellipse at 18% 42%, rgba(18,22,26,.88) 0 19%, transparent 44%),
+    radial-gradient(ellipse at 48% 53%, rgba(13,17,21,.92) 0 23%, transparent 49%),
+    radial-gradient(ellipse at 78% 39%, rgba(20,24,28,.84) 0 18%, transparent 45%);
+  animation: storm-cloud-drift 28s ease-in-out infinite alternate;
+}
+
+.ember-clouds {
+  background:
+    radial-gradient(ellipse at 35% 26%, rgba(20,18,17,.42) 0 17%, transparent 46%),
+    radial-gradient(ellipse at 72% 34%, rgba(16,15,14,.30) 0 16%, transparent 42%);
+  opacity: .55;
+  animation: ember-cloud-clear 34s ease-out infinite alternate;
+}
+
+@keyframes storm-cloud-drift {
+  from { transform: translate3d(-3%, 0, 0) scale(1.04); }
+  to { transform: translate3d(4%, 1.5%, 0) scale(1.07); }
+}
+
+@keyframes ember-cloud-clear {
+  from { transform: translate3d(-1%, 0, 0); opacity: .58; }
+  to { transform: translate3d(2%, -1%, 0); opacity: .28; }
+}
+
+.control-dock::-webkit-scrollbar { display: none; }
+
+
+.scene-layer {
+  z-index: 1;
+}
+
+.brand-whisper,
+.sleep-clock,
+.control-dock,
+.hint {
+  z-index: 20;
+}
+
+.global-moon {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 1200ms ease;
+}
+
+.global-moon-svg {
+  display: block;
+  width: clamp(128px, 21vw, 238px);
+  height: auto;
+  overflow: visible;
+  filter: grayscale(.88) brightness(.76) contrast(1.08) drop-shadow(0 0 16px rgba(168,178,188,.022));
+}
+
+.control-dock {
+  max-width: calc(100vw - 18px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.control-dock::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* Black remains an intentional hard blackout while the world keeps simulating underneath. */
+.scene-layer.world-hidden {
+  visibility: hidden;
+}
+
+/* Shared world base is always the first canvas above the moon. Weather/fire canvases layer over it. */
+.world-base-canvas {
+  z-index: 1;
+}
+
+/* Fireflies live above the scene renderers but below storm cloud cover. */
+.fireflies-layer-canvas {
+  z-index: 3;
+}
+
+
+/* Storm sits above the world/weather canvases so its clouds can naturally veil
+   the moon and scenery without changing any underlying scene renderer. */
+.storm-layer-canvas {
+  z-index: 4;
 }
