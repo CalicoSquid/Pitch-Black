@@ -10,6 +10,10 @@ export const stormSignal: StormSignal = {
   flash: 0,
 }
 
+export const worldResetSignal = {
+  version: 0,
+}
+
 export type PitchWorld = {
   ground: Float32Array
   drifts: Float32Array
@@ -22,7 +26,11 @@ export type PitchWorld = {
   cloudCover: number
 }
 
-const GROUND_LEVEL_RATIO = 0.91
+const DESKTOP_GROUND_LEVEL_RATIO = 0.888
+const MOBILE_GROUND_LEVEL_RATIO = 0.85
+const MOBILE_BREAKPOINT = 620
+const MIN_UI_QUIET_ZONE_DESKTOP = 82
+const MIN_UI_QUIET_ZONE_MOBILE = 106
 const WORLD_STORAGE_KEY = 'pitchblack-world-v2'
 
 export const pitchWorld: PitchWorld = {
@@ -78,6 +86,17 @@ function loadWorld() {
   } catch {
     // A corrupt saved world should never stop PitchBlack loading.
   }
+}
+
+export function resetWorld() {
+  pitchWorld.drifts.fill(0)
+  pitchWorld.water.fill(0)
+  pitchWorld.ember.fill(0)
+  pitchWorld.char.fill(0)
+  pitchWorld.wetness = 0
+  pitchWorld.cloudCover = 0.12
+  worldResetSignal.version += 1
+  saveWorld()
 }
 
 export function saveWorld() {
@@ -151,7 +170,7 @@ export function ensureWorld(width: number, height: number) {
     nextEmber = new Float32Array(targetLength)
     nextChar = new Float32Array(targetLength)
 
-    // Permanent terrain: broad, shallow undulation around the 84% world line.
+    // Permanent terrain: broad, shallow undulation around the shared world floor.
     // Positive values raise the ground; negative values form shallow basins.
     for (let i = 0; i < targetLength; i++) {
       const broad =
@@ -173,7 +192,15 @@ export function ensureWorld(width: number, height: number) {
 }
 
 export function worldBaseY(height = pitchWorld.height) {
-  return height * GROUND_LEVEL_RATIO
+  const width = pitchWorld.width
+  const mobile = width > 0 && width <= MOBILE_BREAKPOINT
+  const ratio = mobile ? MOBILE_GROUND_LEVEL_RATIO : DESKTOP_GROUND_LEVEL_RATIO
+  const minQuietZone = mobile ? MIN_UI_QUIET_ZONE_MOBILE : MIN_UI_QUIET_ZONE_DESKTOP
+
+  // Keep only enough foreground clearance for the dock to live beneath the weather.
+  // The normal ratio stays close to the original composition; short viewports retain
+  // a pixel safety floor so the controls cannot climb into the terrain.
+  return Math.min(height * ratio, Math.max(0, height - minQuietZone))
 }
 
 export function worldIndexAt(x: number, width = pitchWorld.width) {
@@ -187,9 +214,24 @@ export function worldIndexAt(x: number, width = pitchWorld.width) {
   )
 }
 
+export function terrainClearanceLiftAtIndex(index: number) {
+  const last = pitchWorld.ground.length - 1
+  if (last <= 0) return 0
+
+  // A very broad, shallow rise beneath the dock gives the controls a little natural
+  // breathing room without turning the lower screen into an obvious reserved UI band.
+  // Polynomial shaping keeps this cheap in the render hot path.
+  const i = Math.max(0, Math.min(last, index))
+  const distance = Math.abs(i / last - 0.5) / 0.28
+  if (distance >= 1) return 0
+  const shoulder = 1 - distance * distance
+  const maxLift = pitchWorld.width > 0 && pitchWorld.width <= MOBILE_BREAKPOINT ? 7 : 5
+  return maxLift * shoulder * shoulder
+}
+
 export function groundSurfaceYAtIndex(index: number, height = pitchWorld.height) {
   const i = Math.max(0, Math.min(pitchWorld.ground.length - 1, index))
-  return worldBaseY(height) - pitchWorld.ground[i]
+  return worldBaseY(height) - pitchWorld.ground[i] - terrainClearanceLiftAtIndex(i)
 }
 
 export function snowSurfaceYAtIndex(index: number, height = pitchWorld.height) {

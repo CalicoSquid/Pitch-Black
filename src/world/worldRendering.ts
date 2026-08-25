@@ -1,6 +1,7 @@
 import {
   groundSurfaceYAtIndex,
   pitchWorld,
+  terrainClearanceLiftAtIndex,
   worldBaseY,
   worldIndexAt,
 } from './worldState'
@@ -85,7 +86,7 @@ export function drawTerrain(
     const base = (a + b * 2 + c * 3 + d * 2 + e) / 9
     const shimmer = Math.sin(time * 0.00022 + i * 0.31) * Math.min(0.32, base * 0.008)
     const depth = Math.max(0, base + shimmer)
-    const groundY = baseY - ground[i]
+    const groundY = baseY - ground[i] - terrainClearanceLiftAtIndex(i)
 
     cache.snowDepth[i] = depth
     cache.groundY[i] = groundY

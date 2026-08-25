@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { lightningGroundStrikeSignal } from '../world/lightningSignal'
 import {
   ensureWorld,
   pitchWorld,
   saveWorld,
   snowSurfaceYAtIndex,
+  worldResetSignal,
   surfaceYAt,
   worldIndexAt,
 } from '../world/worldState'
@@ -84,8 +86,10 @@ export function EmberScene({
     let trail: Array<{ x: number; y: number; age: number }> = []
     let fragments: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
     let sparks: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
-    let steam: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
+    let steam: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number; opacity: number }> = []
     let smoke: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
+    let lastLightningVersion = lightningGroundStrikeSignal.version
+    let lastWorldResetVersion = worldResetSignal.version
 
     let fire = pitchWorld.ember
     let residue = pitchWorld.char
@@ -249,12 +253,81 @@ export function EmberScene({
           vy: -(0.12 + Math.random() * 0.18),
           life: 0.85 + Math.random() * 0.70,
           size: 2.2 + Math.random() * 3.8,
+          opacity: 0.032,
         })
       }
       if (steam.length > 220) {
         const excess = steam.length - 220
         steam.copyWithin(0, excess)
         steam.length = 220
+      }
+    }
+
+
+    const spawnLightningSteam = (index: number, strength: number) => {
+      const x = Math.min(width, index * 6)
+      const y = snowSurfaceYAtIndex(index, height) - 2
+      const count = 5 + Math.floor(strength * 4)
+      for (let i = 0; i < count; i++) {
+        const spread = 7 + strength * 8
+        steam.push({
+          x: x + (Math.random() - 0.5) * spread,
+          y: y - Math.random() * 3,
+          vx: (Math.random() - 0.5) * (0.16 + strength * 0.08),
+          vy: -(0.18 + Math.random() * 0.24 + strength * 0.06),
+          life: 0.95 + Math.random() * 0.75,
+          size: 3.0 + Math.random() * 4.8 + strength * 1.2,
+          opacity: 0.060 + Math.random() * 0.025,
+        })
+      }
+      if (steam.length > 220) {
+        const excess = steam.length - 220
+        steam.copyWithin(0, excess)
+        steam.length = 220
+      }
+    }
+
+    const consumeWorldReset = (time: number) => {
+      if (worldResetSignal.version === lastWorldResetVersion) return
+      lastWorldResetVersion = worldResetSignal.version
+      hasIgnited = false
+      meteorStartedAt = -1
+      impacted = false
+      impactAt = 0
+      impactIndex = 0
+      trail.length = 0
+      fragments.length = 0
+      sparks.length = 0
+      steam.length = 0
+      smoke.length = 0
+      fireSnapshot.fill(0)
+
+      if (whooshSource) {
+        try { whooshSource.stop() } catch { /* already stopped */ }
+        whooshSource = null
+        whooshGain = null
+      }
+      if (fireGain && audioCtx) fireGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.12)
+      if (activeRef.current) beginMeteor(time)
+    }
+
+    const consumeLightningStrike = () => {
+      const signal = lightningGroundStrikeSignal
+      if (signal.version === lastLightningVersion) return
+      lastLightningVersion = signal.version
+
+      if (signal.scene === 'snow') {
+        hasIgnited = true
+        for (let i = 0; i < 5; i++) {
+          spawnSpark(signal.index + Math.floor((Math.random() - 0.5) * 3), 0.82 + signal.strength * 0.16)
+        }
+        spawnSteam(signal.index, 0.12 + signal.strength * 0.08)
+      } else if (signal.scene === 'ember') {
+        // The Storm layer already preserves Ember's established strike heat.
+        // This only guarantees the persistent fire simulation is awake.
+        hasIgnited = true
+      } else if (signal.scene === 'rain') {
+        spawnLightningSteam(signal.index, signal.strength)
       }
     }
 
@@ -725,7 +798,7 @@ export function EmberScene({
         if (render) {
           ctx.beginPath()
           ctx.ellipse(plume.x, plume.y, plume.size, plume.size * 0.42, 0, 0, Math.PI * 2)
-          ctx.fillStyle = `rgba(188, 193, 198, ${Math.max(0, plume.life) * 0.032})`
+          ctx.fillStyle = `rgba(188, 193, 198, ${Math.max(0, plume.life) * plume.opacity})`
           ctx.fill()
         }
       }
@@ -760,6 +833,8 @@ export function EmberScene({
       if (isActive && !wasActive) beginMeteor(time)
       wasActive = isActive
 
+      consumeWorldReset(time)
+      consumeLightningStrike()
       syncFireSound()
       updateFire(time, dt)
 

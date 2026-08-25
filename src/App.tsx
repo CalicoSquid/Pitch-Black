@@ -11,14 +11,58 @@ import { EmberScene } from './scenes/EmberScene'
 import { RainScene } from './scenes/RainScene'
 import { SnowScene } from './scenes/SnowScene'
 import { WorldBaseScene } from './scenes/WorldBaseScene'
-import { saveWorld } from './world/worldState'
+import { resetWorld, saveWorld } from './world/worldState'
 import { ClockDisplay } from './ui/ClockDisplay'
 
+type PitchPreferences = {
+  scene: Scene
+  showClock: boolean
+  soundOn: boolean
+  layers: LayerState
+}
+
+const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v1'
+const DEFAULT_PREFERENCES: PitchPreferences = {
+  scene: 'black',
+  showClock: false,
+  soundOn: false,
+  layers: { moon: false, storm: false, fireflies: false },
+}
+
+function loadPreferences(): PitchPreferences {
+  if (typeof window === 'undefined') return DEFAULT_PREFERENCES
+
+  try {
+    const raw = window.localStorage.getItem(PREFERENCES_STORAGE_KEY)
+    if (!raw) return DEFAULT_PREFERENCES
+    const saved = JSON.parse(raw) as Partial<PitchPreferences>
+    const validScene: Scene =
+      saved.scene === 'black' || saved.scene === 'snow' || saved.scene === 'rain' || saved.scene === 'ember'
+        ? saved.scene
+        : DEFAULT_PREFERENCES.scene
+
+    return {
+      scene: validScene,
+      showClock: typeof saved.showClock === 'boolean' ? saved.showClock : DEFAULT_PREFERENCES.showClock,
+      soundOn: typeof saved.soundOn === 'boolean' ? saved.soundOn : DEFAULT_PREFERENCES.soundOn,
+      layers: {
+        moon: typeof saved.layers?.moon === 'boolean' ? saved.layers.moon : DEFAULT_PREFERENCES.layers.moon,
+        storm: typeof saved.layers?.storm === 'boolean' ? saved.layers.storm : DEFAULT_PREFERENCES.layers.storm,
+        fireflies: typeof saved.layers?.fireflies === 'boolean' ? saved.layers.fireflies : DEFAULT_PREFERENCES.layers.fireflies,
+      },
+    }
+  } catch {
+    return DEFAULT_PREFERENCES
+  }
+}
+
 function App() {
-  const [scene, setScene] = useState<Scene>('snow')
-  const [showClock, setShowClock] = useState(false)
-  const [soundOn, setSoundOn] = useState(true)
-  const [layers, setLayers] = useState<LayerState>({ moon: true, storm: false, fireflies: false })
+  const [initialPreferences] = useState(loadPreferences)
+  const [scene, setScene] = useState<Scene>(initialPreferences.scene)
+  const [showClock, setShowClock] = useState(initialPreferences.showClock)
+  const [soundOn, setSoundOn] = useState(initialPreferences.soundOn)
+  const [layers, setLayers] = useState<LayerState>(initialPreferences.layers)
+  const [showUtilities, setShowUtilities] = useState(false)
   const controlsVisible = useIdleControls()
 
   useEffect(() => {
@@ -59,11 +103,63 @@ function App() {
     setPitchAudioMuted(!soundOn)
   }, [soundOn])
 
+  useEffect(() => {
+    if (!controlsVisible) setShowUtilities(false)
+  }, [controlsVisible])
+
+  useEffect(() => {
+    if (!soundOn) return
+
+    // Browsers require a user gesture before Web Audio can actually run. Any
+    // first tap/click/key should satisfy that policy, even if the user only
+    // wakes the controls or toggles a non-audio layer.
+    const unlockOnGesture = () => {
+      unlockPitchAudio()
+      window.removeEventListener('pointerdown', unlockOnGesture)
+      window.removeEventListener('keydown', unlockOnGesture)
+    }
+
+    window.addEventListener('pointerdown', unlockOnGesture, { passive: true, once: true })
+    window.addEventListener('keydown', unlockOnGesture, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlockOnGesture)
+      window.removeEventListener('keydown', unlockOnGesture)
+    }
+  }, [soundOn])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify({
+        scene,
+        showClock,
+        soundOn,
+        layers,
+      } satisfies PitchPreferences))
+    } catch {
+      // Preferences are optional in private/restricted browser contexts.
+    }
+  }, [scene, showClock, soundOn, layers])
+
   const goFullscreen = async () => {
     unlockPitchAudio()
     try {
-      if (!document.fullscreenElement) await document.documentElement.requestFullscreen()
-      else await document.exitFullscreen()
+      const doc = document as Document & {
+        webkitFullscreenElement?: Element | null
+        webkitExitFullscreen?: () => Promise<void> | void
+      }
+      const root = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void> | void
+      }
+      const fullscreenElement = document.fullscreenElement ?? doc.webkitFullscreenElement
+
+      if (!fullscreenElement) {
+        if (typeof root.requestFullscreen === 'function') await root.requestFullscreen()
+        else if (typeof root.webkitRequestFullscreen === 'function') await root.webkitRequestFullscreen()
+      } else if (typeof document.exitFullscreen === 'function') {
+        await document.exitFullscreen()
+      } else if (typeof doc.webkitExitFullscreen === 'function') {
+        await doc.webkitExitFullscreen()
+      }
     } catch {
       // Fullscreen support varies by browser; failure is harmless.
     }
@@ -96,7 +192,32 @@ function App() {
 
       {showClock && <ClockDisplay awake={controlsVisible} />}
 
-      <div className={`brand-whisper ${controlsVisible ? 'visible' : ''}`}>pitchblack</div>
+      <button
+        type="button"
+        className={`brand-whisper ${controlsVisible ? 'visible' : ''}`}
+        onClick={() => setShowUtilities((value) => !value)}
+        aria-expanded={showUtilities}
+        aria-controls="pitchblack-utilities"
+        aria-label="Open my quiet world utilities"
+      >
+        my quiet world
+      </button>
+
+      <div
+        id="pitchblack-utilities"
+        className={`utility-popover ${controlsVisible && showUtilities ? 'visible' : ''}`}
+        aria-hidden={!controlsVisible || !showUtilities}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            resetWorld()
+            setShowUtilities(false)
+          }}
+        >
+          Reset world
+        </button>
+      </div>
 
       <nav className={`control-dock ${controlsVisible ? 'visible' : ''}`} aria-label="PitchBlack controls">
         <button className={scene === 'black' ? 'active' : ''} onClick={() => chooseScene('black')} aria-label="Black scene">
