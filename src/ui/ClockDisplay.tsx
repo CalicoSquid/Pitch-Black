@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 
 type ClockDisplayProps = {
   awake: boolean
@@ -20,6 +21,14 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
 
 export function ClockDisplay({ awake }: ClockDisplayProps) {
   const [now, setNow] = useState(new Date())
+  const [driftStep, setDriftStep] = useState(() => Math.floor(Date.now() / 300_000))
+
+  const drift = useMemo(() => {
+    const positions = [
+      [0, 0], [2, -1], [-2, 1], [1, 2], [-1, -2], [3, 0], [-3, 1], [1, -3],
+    ] as const
+    return positions[Math.abs(driftStep) % positions.length]
+  }, [driftStep])
 
   useEffect(() => {
     let timer = 0
@@ -27,6 +36,7 @@ export function ClockDisplay({ awake }: ClockDisplayProps) {
     const tick = () => {
       const next = new Date()
       setNow(next)
+      setDriftStep(Math.floor(next.getTime() / 300_000))
 
       const delay = 60_000 - (next.getTime() % 60_000) + 20
       timer = window.setTimeout(tick, delay)
@@ -49,7 +59,12 @@ export function ClockDisplay({ awake }: ClockDisplayProps) {
   }, [])
 
   return (
-    <div className={`sleep-clock ${awake ? 'clock-awake' : 'clock-asleep'}`} role="timer" aria-live="off">
+    <div
+      className={`sleep-clock ${awake ? 'clock-awake' : 'clock-asleep'}`}
+      role="timer"
+      aria-live="off"
+      style={{ '--clock-drift-x': `${drift[0]}px`, '--clock-drift-y': `${drift[1]}px` } as CSSProperties}
+    >
       <div className="sleep-clock-time">{timeFormatter.format(now)}</div>
       <div className="sleep-clock-date" aria-hidden={!awake}>
         <span>{weekdayFormatter.format(now)}</span>

@@ -1,16 +1,27 @@
 type PitchAudioContext = AudioContext
 
 let pitchAudioContext: PitchAudioContext | null = null
-let pitchAudioMasterGain: GainNode | null = null
+let pitchAudioOutputGain: GainNode | null = null
+let pitchAudioFadeGain: GainNode | null = null
+let pitchAudioMuteGain: GainNode | null = null
 let pitchAudioMuted = false
+let pitchAudioVolume = 1
 
 function ensurePitchAudioMaster(audioCtx: AudioContext) {
-  if (!pitchAudioMasterGain) {
-    pitchAudioMasterGain = audioCtx.createGain()
-    pitchAudioMasterGain.gain.value = pitchAudioMuted ? 0 : 1
-    pitchAudioMasterGain.connect(audioCtx.destination)
+  if (!pitchAudioOutputGain || !pitchAudioFadeGain || !pitchAudioMuteGain) {
+    pitchAudioOutputGain = audioCtx.createGain()
+    pitchAudioFadeGain = audioCtx.createGain()
+    pitchAudioMuteGain = audioCtx.createGain()
+
+    pitchAudioOutputGain.gain.value = pitchAudioVolume
+    pitchAudioFadeGain.gain.value = 1
+    pitchAudioMuteGain.gain.value = pitchAudioMuted ? 0 : 1
+
+    pitchAudioOutputGain.connect(pitchAudioFadeGain)
+    pitchAudioFadeGain.connect(pitchAudioMuteGain)
+    pitchAudioMuteGain.connect(audioCtx.destination)
   }
-  return pitchAudioMasterGain
+  return pitchAudioOutputGain
 }
 
 export function unlockPitchAudio() {
@@ -27,7 +38,9 @@ export function unlockPitchAudio() {
 
     if (!pitchAudioContext || pitchAudioContext.state === 'closed') {
       pitchAudioContext = new AudioCtx()
-      pitchAudioMasterGain = null
+      pitchAudioOutputGain = null
+      pitchAudioFadeGain = null
+      pitchAudioMuteGain = null
     }
 
     ensurePitchAudioMaster(pitchAudioContext)
@@ -63,10 +76,42 @@ export function getPitchAudioOutput(audioCtx: AudioContext) {
 export function setPitchAudioMuted(muted: boolean) {
   pitchAudioMuted = muted
   const audioCtx = pitchAudioContext
-  const master = pitchAudioMasterGain
-  if (!audioCtx || !master) return
+  const muteGain = pitchAudioMuteGain
+  if (!audioCtx || !muteGain) return
 
   const target = muted ? 0 : 1
-  master.gain.cancelScheduledValues(audioCtx.currentTime)
-  master.gain.setTargetAtTime(target, audioCtx.currentTime, 0.055)
+  muteGain.gain.cancelScheduledValues(audioCtx.currentTime)
+  muteGain.gain.setTargetAtTime(target, audioCtx.currentTime, 0.055)
+}
+
+export function setPitchAudioVolume(volume: number) {
+  pitchAudioVolume = Math.min(1, Math.max(0, volume))
+  const audioCtx = pitchAudioContext
+  const outputGain = pitchAudioOutputGain
+  if (!audioCtx || !outputGain) return
+
+  outputGain.gain.cancelScheduledValues(audioCtx.currentTime)
+  outputGain.gain.setTargetAtTime(pitchAudioVolume, audioCtx.currentTime, 0.045)
+}
+
+export function fadePitchAudioToSilence(durationSeconds: number) {
+  const audioCtx = pitchAudioContext
+  const fadeGain = pitchAudioFadeGain
+  if (!audioCtx || !fadeGain) return
+
+  const now = audioCtx.currentTime
+  const duration = Math.max(0.05, durationSeconds)
+  fadeGain.gain.cancelScheduledValues(now)
+  fadeGain.gain.setValueAtTime(fadeGain.gain.value, now)
+  fadeGain.gain.linearRampToValueAtTime(0, now + duration)
+}
+
+export function restorePitchAudioFade() {
+  const audioCtx = pitchAudioContext
+  const fadeGain = pitchAudioFadeGain
+  if (!audioCtx || !fadeGain) return
+
+  const now = audioCtx.currentTime
+  fadeGain.gain.cancelScheduledValues(now)
+  fadeGain.gain.setTargetAtTime(1, now, 0.08)
 }

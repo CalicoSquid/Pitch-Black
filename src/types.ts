@@ -1,4 +1,4 @@
-export type Scene = 'black' | 'snow' | 'rain' | 'ember'
+export type Scene = 'black' | 'calm' | 'snow' | 'rain' | 'ember'
 
 export type LayerState = {
   moon: boolean

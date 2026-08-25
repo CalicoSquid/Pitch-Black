@@ -48,6 +48,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
       if (sceneRef.current === 'snow') return 1
       if (sceneRef.current === 'rain') return 0.82
       if (sceneRef.current === 'ember') return 0.42
+      if (sceneRef.current === 'calm') return 0.58
       return 0
     }
 

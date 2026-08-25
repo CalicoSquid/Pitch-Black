@@ -40,10 +40,12 @@ function wrapAngle(angle: number) {
   return angle
 }
 
-function populationForWidth(width: number) {
-  if (width < 560) return 8 + Math.floor(Math.random() * 5)
-  if (width < 900) return 10 + Math.floor(Math.random() * 5)
-  return 12 + Math.floor(Math.random() * 7)
+function populationForWidth(width: number, multiplier = 1) {
+  let base = 0
+  if (width < 560) base = 8 + Math.floor(Math.random() * 5)
+  else if (width < 900) base = 10 + Math.floor(Math.random() * 5)
+  else base = 12 + Math.floor(Math.random() * 7)
+  return Math.min(54, Math.max(0, Math.round(base * multiplier)))
 }
 
 function chooseExitEdge(firefly: Firefly, width: number, height: number) {
@@ -59,10 +61,11 @@ function chooseExitEdge(firefly: Firefly, width: number, height: number) {
   }
 }
 
-export function FirefliesLayer({ active, visible }: { active: boolean; visible: boolean }) {
+export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boolean; visible: boolean; abundance?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
   const visibleRef = useRef(visible)
+  const abundanceRef = useRef(abundance)
 
   useEffect(() => {
     activeRef.current = active
@@ -71,6 +74,10 @@ export function FirefliesLayer({ active, visible }: { active: boolean; visible: 
   useEffect(() => {
     visibleRef.current = visible
   }, [visible])
+
+  useEffect(() => {
+    abundanceRef.current = Math.max(0.4, Math.min(3, abundance))
+  }, [abundance])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -84,7 +91,8 @@ export function FirefliesLayer({ active, visible }: { active: boolean; visible: 
     let raf = 0
     let last = performance.now()
     let wasActive = activeRef.current
-    let targetPopulation = wasActive ? populationForWidth(width) : 0
+    let lastAbundance = abundanceRef.current
+    let targetPopulation = wasActive ? populationForWidth(width, lastAbundance) : 0
     let nextSpawn = last + 120
     let recoveryBlockedUntil = 0
     let nextFireflyId = 1
@@ -102,7 +110,7 @@ export function FirefliesLayer({ active, visible }: { active: boolean; visible: 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
       if (activeRef.current && fireflies.length > targetPopulation + 2) {
-        targetPopulation = populationForWidth(width)
+        targetPopulation = populationForWidth(width, abundanceRef.current)
       }
     }
 
@@ -401,9 +409,15 @@ export function FirefliesLayer({ active, visible }: { active: boolean; visible: 
       last = time
 
       const isActive = activeRef.current
+      const currentAbundance = abundanceRef.current
+      if (isActive && Math.abs(currentAbundance - lastAbundance) > 0.04) {
+        lastAbundance = currentAbundance
+        targetPopulation = populationForWidth(width, currentAbundance)
+        nextSpawn = Math.min(nextSpawn, time + 120)
+      }
       if (isActive !== wasActive) {
         if (isActive) {
-          targetPopulation = populationForWidth(width)
+          targetPopulation = populationForWidth(width, abundanceRef.current)
           nextSpawn = time + 90
           for (let i = 0; i < fireflies.length; i++) {
             const firefly = fireflies[i]

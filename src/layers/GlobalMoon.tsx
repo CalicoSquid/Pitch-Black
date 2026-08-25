@@ -29,7 +29,7 @@ function buildMoonLitPath(phase: number) {
     ' Z'
 }
 
-export function GlobalMoon({ visible }: { visible: boolean }) {
+export function GlobalMoon({ visible, halo = false }: { visible: boolean; halo?: boolean }) {
   const now = new Date()
   const synodic = 29.53058867
   const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14)
@@ -42,7 +42,7 @@ export function GlobalMoon({ visible }: { visible: boolean }) {
 
   return (
     <div
-      className="global-moon"
+      className={`global-moon ${halo && visible ? 'moon-halo' : ''}`}
       style={{ opacity }}
       aria-hidden={!visible}
       aria-label={visible ? `Moon, ${Math.round(illumination * 100)} percent illuminated` : undefined}

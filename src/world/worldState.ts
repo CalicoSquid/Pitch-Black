@@ -31,7 +31,7 @@ const MOBILE_GROUND_LEVEL_RATIO = 0.85
 const MOBILE_BREAKPOINT = 620
 const MIN_UI_QUIET_ZONE_DESKTOP = 82
 const MIN_UI_QUIET_ZONE_MOBILE = 106
-const WORLD_STORAGE_KEY = 'pitchblack-world-v2'
+const WORLD_STORAGE_KEY = 'pitchblack-world-v3'
 
 export const pitchWorld: PitchWorld = {
   ground: new Float32Array(1),

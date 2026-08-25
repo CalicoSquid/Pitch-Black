@@ -1,8 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Circle, Clock3, Expand, Moon, Snowflake, CloudRain, CloudLightning, Flame, Sparkles, Volume2, VolumeX } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Circle, Clock3, Expand, Moon, Snowflake, CloudRain, CloudLightning, Flame, Sparkles, Volume2, VolumeX, Orbit } from 'lucide-react'
 import './App.css'
+import { AliveSkyEvents } from './alive/AliveSkyEvents'
+import { useAliveWorld } from './alive/useAliveWorld'
 import type { LayerKey, LayerState, Scene } from './types'
-import { setPitchAudioMuted, suspendPitchAudio, unlockPitchAudio } from './audio/pitchAudio'
+import {
+  fadePitchAudioToSilence,
+  restorePitchAudioFade,
+  setPitchAudioMuted,
+  setPitchAudioVolume,
+  suspendPitchAudio,
+  unlockPitchAudio,
+} from './audio/pitchAudio'
 import { useIdleControls } from './hooks/useIdleControls'
 import { FirefliesLayer } from './layers/FirefliesLayer'
 import { GlobalMoon } from './layers/GlobalMoon'
@@ -18,15 +27,72 @@ type PitchPreferences = {
   scene: Scene
   showClock: boolean
   soundOn: boolean
+  volume: number
+  aliveOn: boolean
   layers: LayerState
 }
 
-const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v1'
+type WakeLockSentinelLike = {
+  release: () => Promise<void>
+  addEventListener: (type: 'release', listener: () => void) => void
+}
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: 'screen') => Promise<WakeLockSentinelLike>
+  }
+}
+
+type BeforeInstallPromptEventLike = Event & {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+}
+
+const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
+const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
+const SLEEP_FADE_MS = 60_000
+const SLEEP_TIMER_OPTIONS = [30, 60, 120, 240] as const
+
 const DEFAULT_PREFERENCES: PitchPreferences = {
   scene: 'black',
-  showClock: true,
+  showClock: false,
   soundOn: false,
-  layers: { moon: true, storm: false, fireflies: false },
+  volume: 1,
+  aliveOn: false,
+  layers: { moon: false, storm: false, fireflies: false },
+}
+
+function readSharedWorld(): Partial<PitchPreferences> | null {
+  if (typeof window === 'undefined') return null
+
+  const params = new URLSearchParams(window.location.search)
+  const world = params.get('world')
+  if (world !== 'black' && world !== 'snow' && world !== 'rain' && world !== 'ember') return null
+
+  return {
+    scene: world,
+    aliveOn: params.get('alive') === '1',
+    showClock: params.get('clock') === '1',
+    soundOn: false,
+    layers: {
+      moon: params.get('moon') === '1',
+      storm: params.get('storm') === '1',
+      fireflies: params.get('fireflies') === '1',
+    },
+  }
+}
+
+function buildSharedWorldUrl(scene: Scene, layers: LayerState, showClock: boolean, aliveOn: boolean) {
+  const url = new URL(window.location.href)
+  url.search = ''
+  url.hash = ''
+  url.searchParams.set('world', scene === 'calm' ? 'black' : scene)
+  if (aliveOn) url.searchParams.set('alive', '1')
+  if (layers.moon) url.searchParams.set('moon', '1')
+  if (layers.storm) url.searchParams.set('storm', '1')
+  if (layers.fireflies) url.searchParams.set('fireflies', '1')
+  if (showClock) url.searchParams.set('clock', '1')
+  return url.toString()
 }
 
 function loadPreferences(): PitchPreferences {
@@ -34,26 +100,51 @@ function loadPreferences(): PitchPreferences {
 
   try {
     const raw = window.localStorage.getItem(PREFERENCES_STORAGE_KEY)
-    if (!raw) return DEFAULT_PREFERENCES
+    if (!raw) {
+      const shared = readSharedWorld()
+      return shared
+        ? { ...DEFAULT_PREFERENCES, ...shared, layers: shared.layers ?? DEFAULT_PREFERENCES.layers }
+        : DEFAULT_PREFERENCES
+    }
     const saved = JSON.parse(raw) as Partial<PitchPreferences>
+    const savedAliveOn = typeof saved.aliveOn === 'boolean' ? saved.aliveOn : DEFAULT_PREFERENCES.aliveOn
     const validScene: Scene =
-      saved.scene === 'black' || saved.scene === 'snow' || saved.scene === 'rain' || saved.scene === 'ember'
+      saved.scene === 'black' || saved.scene === 'snow' || saved.scene === 'rain' || saved.scene === 'ember' || (saved.scene === 'calm' && savedAliveOn)
         ? saved.scene
         : DEFAULT_PREFERENCES.scene
+    const savedVolume = typeof saved.volume === 'number' ? saved.volume : DEFAULT_PREFERENCES.volume
 
-    return {
+    const preferences: PitchPreferences = {
       scene: validScene,
       showClock: typeof saved.showClock === 'boolean' ? saved.showClock : DEFAULT_PREFERENCES.showClock,
       soundOn: typeof saved.soundOn === 'boolean' ? saved.soundOn : DEFAULT_PREFERENCES.soundOn,
+      volume: Math.min(1, Math.max(0, savedVolume)),
+      aliveOn: savedAliveOn,
       layers: {
         moon: typeof saved.layers?.moon === 'boolean' ? saved.layers.moon : DEFAULT_PREFERENCES.layers.moon,
         storm: typeof saved.layers?.storm === 'boolean' ? saved.layers.storm : DEFAULT_PREFERENCES.layers.storm,
         fireflies: typeof saved.layers?.fireflies === 'boolean' ? saved.layers.fireflies : DEFAULT_PREFERENCES.layers.fireflies,
       },
     }
+
+    const shared = readSharedWorld()
+    return shared
+      ? { ...preferences, ...shared, layers: shared.layers ?? preferences.layers }
+      : preferences
   } catch {
-    return DEFAULT_PREFERENCES
+    const shared = readSharedWorld()
+    return shared
+      ? { ...DEFAULT_PREFERENCES, ...shared, layers: shared.layers ?? DEFAULT_PREFERENCES.layers }
+      : DEFAULT_PREFERENCES
   }
+}
+
+function formatSleepRemaining(milliseconds: number) {
+  const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60_000))
+  if (totalMinutes < 60) return `${totalMinutes}m`
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
 }
 
 function App() {
@@ -61,9 +152,75 @@ function App() {
   const [scene, setScene] = useState<Scene>(initialPreferences.scene)
   const [showClock, setShowClock] = useState(initialPreferences.showClock)
   const [soundOn, setSoundOn] = useState(initialPreferences.soundOn)
+  const [volume, setVolume] = useState(initialPreferences.volume)
+  const [aliveOn, setAliveOn] = useState(initialPreferences.aliveOn)
   const [layers, setLayers] = useState<LayerState>(initialPreferences.layers)
   const [showUtilities, setShowUtilities] = useState(false)
+  const [fullscreenOn, setFullscreenOn] = useState(false)
+  const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null)
+  const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0)
+  const [keepAwake, setKeepAwake] = useState(false)
+  const [wakeLockSupported] = useState(() => typeof navigator !== 'undefined' && 'wakeLock' in navigator)
+  const [firstVisit, setFirstVisit] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return window.localStorage.getItem(FIRST_VISIT_STORAGE_KEY) !== '1'
+    } catch {
+      return true
+    }
+  })
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEventLike | null>(null)
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared'>('idle')
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
+  const shareStatusTimerRef = useRef<number | null>(null)
+  const lastWorldTapRef = useRef<{ at: number; x: number; y: number } | null>(null)
   const controlsVisible = useIdleControls()
+  const { phase: alivePhase, weatherSpeed, fireflyMultiplier, moonHalo, skyEvent, aliveLayers } = useAliveWorld({
+    enabled: aliveOn,
+    scene,
+    layers,
+    setScene,
+  })
+
+  const dismissFirstVisit = useCallback(() => {
+    setFirstVisit(false)
+    try {
+      window.localStorage.setItem(FIRST_VISIT_STORAGE_KEY, '1')
+    } catch {
+      // The intro can safely reappear when storage is unavailable.
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!firstVisit) return
+    const dismiss = () => dismissFirstVisit()
+    window.addEventListener('pointerdown', dismiss, { once: true, passive: true })
+    window.addEventListener('keydown', dismiss, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', dismiss)
+      window.removeEventListener('keydown', dismiss)
+    }
+  }, [dismissFirstVisit, firstVisit])
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault()
+      setInstallPrompt(event as BeforeInstallPromptEventLike)
+    }
+    const handleInstalled = () => setInstallPrompt(null)
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    window.addEventListener('appinstalled', handleInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', handleInstalled)
+    }
+  }, [])
+
+  useEffect(() => () => {
+    if (shareStatusTimerRef.current !== null) window.clearTimeout(shareStatusTimerRef.current)
+  }, [])
 
   useEffect(() => {
     const id = window.setInterval(saveWorld, 15000)
@@ -83,18 +240,40 @@ function App() {
   }, [])
 
   const chooseScene = (nextScene: Scene) => {
+    setAliveOn(false)
     // This runs synchronously inside the user's click, satisfying browser audio policy
     // before any later animation frame needs meteor/thunder/fire audio.
     unlockPitchAudio()
     setScene(nextScene)
   }
 
+  const chooseBlackout = () => {
+    setAliveOn(false)
+    unlockPitchAudio()
+    setScene('black')
+    setShowClock(false)
+    setLayers({ moon: false, storm: false, fireflies: false })
+  }
+
   const toggleSound = () => {
     unlockPitchAudio()
-    setSoundOn((value) => !value)
+    setSoundOn((value) => {
+      const next = !value
+      if (next) {
+        const remaining = sleepTimerEndAt === null ? null : sleepTimerEndAt - Date.now()
+        if (remaining !== null && remaining > 0 && remaining <= SLEEP_FADE_MS) {
+          fadePitchAudioToSilence(remaining / 1000)
+        } else {
+          restorePitchAudioFade()
+        }
+      }
+      return next
+    })
   }
 
   const toggleLayer = (layer: LayerKey) => {
+    // Overlays are always independent. In Alive mode they are simply added on top
+    // of whatever atmosphere the autonomous world is currently producing.
     if (layer === 'storm') unlockPitchAudio()
     setLayers((value) => ({ ...value, [layer]: !value[layer] }))
   }
@@ -104,8 +283,8 @@ function App() {
   }, [soundOn])
 
   useEffect(() => {
-    if (!controlsVisible) setShowUtilities(false)
-  }, [controlsVisible])
+    setPitchAudioVolume(volume)
+  }, [volume])
 
   useEffect(() => {
     // A hidden/backgrounded page should never keep sounding. Resume is attempted
@@ -147,12 +326,197 @@ function App() {
         scene,
         showClock,
         soundOn,
+        volume,
+        aliveOn,
         layers,
       } satisfies PitchPreferences))
     } catch {
       // Preferences are optional in private/restricted browser contexts.
     }
-  }, [scene, showClock, soundOn, layers])
+  }, [scene, showClock, soundOn, volume, aliveOn, layers])
+
+  const cancelSleepTimer = useCallback(() => {
+    setSleepTimerEndAt(null)
+    setSleepTimerMinutes(null)
+    setSleepTimerRemaining(0)
+    restorePitchAudioFade()
+  }, [])
+
+  const setSleepTimer = (minutes: number) => {
+    unlockPitchAudio()
+    restorePitchAudioFade()
+    const duration = minutes * 60_000
+    setSleepTimerEndAt(Date.now() + duration)
+    setSleepTimerMinutes(minutes)
+    setSleepTimerRemaining(duration)
+  }
+
+  useEffect(() => {
+    if (sleepTimerEndAt === null) return
+
+    const finishAt = sleepTimerEndAt
+    let fadeTimeout = 0
+    let finishTimeout = 0
+    let remainingInterval = 0
+
+    const finishTimer = () => {
+      setPitchAudioMuted(true)
+      setSoundOn(false)
+      setSleepTimerEndAt(null)
+      setSleepTimerMinutes(null)
+      setSleepTimerRemaining(0)
+    }
+
+    const schedule = () => {
+      const remaining = finishAt - Date.now()
+      setSleepTimerRemaining(Math.max(0, remaining))
+
+      if (remaining <= 0) {
+        finishTimer()
+        return
+      }
+
+      if (remaining <= SLEEP_FADE_MS) {
+        fadePitchAudioToSilence(remaining / 1000)
+      } else {
+        fadeTimeout = window.setTimeout(() => {
+          const fadeRemaining = Math.max(0.05, (finishAt - Date.now()) / 1000)
+          fadePitchAudioToSilence(Math.min(SLEEP_FADE_MS / 1000, fadeRemaining))
+        }, remaining - SLEEP_FADE_MS)
+      }
+
+      finishTimeout = window.setTimeout(finishTimer, remaining)
+      remainingInterval = window.setInterval(() => {
+        const nextRemaining = finishAt - Date.now()
+        setSleepTimerRemaining(Math.max(0, nextRemaining))
+      }, 15_000)
+    }
+
+    schedule()
+
+    return () => {
+      window.clearTimeout(fadeTimeout)
+      window.clearTimeout(finishTimeout)
+      window.clearInterval(remainingInterval)
+    }
+  }, [sleepTimerEndAt])
+
+  const releaseWakeLock = useCallback(async () => {
+    const sentinel = wakeLockRef.current
+    wakeLockRef.current = null
+    if (!sentinel) return
+    try {
+      await sentinel.release()
+    } catch {
+      // Releasing an already-released wake lock is harmless.
+    }
+  }, [])
+
+  const acquireWakeLock = useCallback(async () => {
+    if (!wakeLockSupported || document.visibilityState !== 'visible') return false
+    const wakeLock = (navigator as WakeLockNavigator).wakeLock
+    if (!wakeLock) return false
+
+    try {
+      const sentinel = await wakeLock.request('screen')
+      wakeLockRef.current = sentinel
+      sentinel.addEventListener('release', () => {
+        if (wakeLockRef.current === sentinel) wakeLockRef.current = null
+      })
+      return true
+    } catch {
+      return false
+    }
+  }, [wakeLockSupported])
+
+  const toggleKeepAwake = async () => {
+    if (keepAwake) {
+      setKeepAwake(false)
+      await releaseWakeLock()
+      return
+    }
+
+    const acquired = await acquireWakeLock()
+    if (acquired) setKeepAwake(true)
+  }
+
+  useEffect(() => {
+    if (!keepAwake) return
+
+    const reacquireWhenVisible = () => {
+      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
+        void acquireWakeLock()
+      }
+    }
+
+    document.addEventListener('visibilitychange', reacquireWhenVisible)
+    return () => document.removeEventListener('visibilitychange', reacquireWhenVisible)
+  }, [acquireWakeLock, keepAwake])
+
+  useEffect(() => () => {
+    void releaseWakeLock()
+  }, [releaseWakeLock])
+
+  const showTransientShareStatus = (status: 'copied' | 'shared') => {
+    setShareStatus(status)
+    if (shareStatusTimerRef.current !== null) window.clearTimeout(shareStatusTimerRef.current)
+    shareStatusTimerRef.current = window.setTimeout(() => setShareStatus('idle'), 1800)
+  }
+
+  const shareWorld = async () => {
+    const url = buildSharedWorldUrl(scene, layers, showClock, aliveOn)
+    const shareData = { title: 'this quiet world', text: 'a quiet world for an unused screen', url }
+
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share(shareData)
+        showTransientShareStatus('shared')
+      } else {
+        await navigator.clipboard.writeText(url)
+        showTransientShareStatus('copied')
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      try {
+        await navigator.clipboard.writeText(url)
+        showTransientShareStatus('copied')
+      } catch {
+        window.prompt('Copy this world', url)
+      }
+    }
+  }
+
+  const installApp = async () => {
+    if (!installPrompt) return
+    await installPrompt.prompt()
+    const choice = await installPrompt.userChoice
+    if (choice.outcome === 'accepted') setInstallPrompt(null)
+  }
+
+  const toggleAlive = () => {
+    unlockPitchAudio()
+    setAliveOn((value) => {
+      const next = !value
+      if (!next && scene === 'calm') setScene('black')
+      return next
+    })
+    setShowUtilities(false)
+  }
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      const doc = document as Document & { webkitFullscreenElement?: Element | null }
+      setFullscreenOn(Boolean(document.fullscreenElement ?? doc.webkitFullscreenElement))
+    }
+
+    document.addEventListener('fullscreenchange', syncFullscreenState)
+    document.addEventListener('webkitfullscreenchange', syncFullscreenState as EventListener)
+    syncFullscreenState()
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState)
+      document.removeEventListener('webkitfullscreenchange', syncFullscreenState as EventListener)
+    }
+  }, [])
 
   const goFullscreen = async () => {
     unlockPitchAudio()
@@ -179,20 +543,63 @@ function App() {
     }
   }
 
+  const isWorldSurfaceTarget = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return true
+    return !target.closest('button, input, label, .control-dock, .utility-panel')
+  }
+
+  const handleWorldPointerDown = (event: React.PointerEvent<HTMLElement>) => {
+    if (isWorldSurfaceTarget(event.target)) setShowUtilities(false)
+  }
+
+  const handleWorldDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
+    if (!isWorldSurfaceTarget(event.target)) return
+    void goFullscreen()
+  }
+
+  const handleWorldPointerUp = (event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'mouse' || !isWorldSurfaceTarget(event.target)) return
+
+    const now = performance.now()
+    const previous = lastWorldTapRef.current
+    lastWorldTapRef.current = { at: now, x: event.clientX, y: event.clientY }
+    if (!previous) return
+
+    const closeInTime = now - previous.at <= 360
+    const closeInSpace = Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= 32
+    if (!closeInTime || !closeInSpace) return
+
+    lastWorldTapRef.current = null
+    void goFullscreen()
+  }
+
+  const displayLayers: LayerState = {
+    moon: layers.moon || (aliveOn && aliveLayers.moon),
+    storm: layers.storm || (aliveOn && aliveLayers.storm),
+    fireflies: layers.fireflies || (aliveOn && aliveLayers.fireflies),
+  }
+  const sleepTimerActive = sleepTimerEndAt !== null
+  const blackoutActive = scene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
+
   return (
     <main
       className="pitchblack"
       data-scene={scene}
-      data-layer-moon={layers.moon ? 'on' : 'off'}
-      data-layer-storm={layers.storm ? 'on' : 'off'}
-      data-layer-fireflies={layers.fireflies ? 'on' : 'off'}
+      data-layer-moon={displayLayers.moon ? 'on' : 'off'}
+      data-layer-storm={displayLayers.storm ? 'on' : 'off'}
+      data-layer-fireflies={displayLayers.fireflies ? 'on' : 'off'}
+      data-alive={aliveOn ? 'on' : 'off'}
+      data-alive-phase={alivePhase}
+      onPointerDown={handleWorldPointerDown}
+      onDoubleClick={handleWorldDoubleClick}
+      onPointerUp={handleWorldPointerUp}
     >
       <div className="scene-layer">
-        <GlobalMoon visible={layers.moon} />
+        <GlobalMoon visible={displayLayers.moon} halo={aliveOn && moonHalo} />
         <div className={`world-weather-layer ${scene === 'black' ? 'world-hidden' : ''}`}>
           <WorldBaseScene scene={scene} />
-          <SnowScene active={scene === 'snow'} soundOn={soundOn} speed={1} />
-          <RainScene active={scene === 'rain'} soundOn={soundOn} speed={1} />
+          <SnowScene active={scene === 'snow'} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
+          <RainScene active={scene === 'rain'} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
           <EmberScene
             active={scene === 'ember'}
             rainActive={scene === 'rain'}
@@ -202,44 +609,141 @@ function App() {
             visible={scene !== 'black'}
           />
         </div>
-        <FirefliesLayer active={layers.fireflies} visible />
-        <StormLayer active={layers.storm} scene={scene} soundOn={soundOn} />
+        <FirefliesLayer active={displayLayers.fireflies} visible abundance={aliveOn ? fireflyMultiplier : 1} />
+        <AliveSkyEvents event={aliveOn ? skyEvent : null} />
+        <StormLayer active={displayLayers.storm} scene={scene} soundOn={soundOn} />
       </div>
 
       {showClock && <ClockDisplay awake={controlsVisible} />}
 
+      <div className={`first-visit-whisper ${firstVisit ? 'visible' : ''}`} aria-hidden={!firstVisit}>
+        <div className="first-visit-title">this quiet world</div>
+        <div className="first-visit-hint">tap anywhere to explore</div>
+        <div className="first-visit-secondary">double tap for fullscreen</div>
+      </div>
+
       <button
         type="button"
-        className={`brand-whisper ${controlsVisible ? 'visible' : ''}`}
+        className={`brand-whisper ${(controlsVisible || showUtilities) && !firstVisit ? 'visible' : ''} ${(sleepTimerActive || keepAwake || fullscreenOn) ? 'has-active-utility' : ''}`}
         onClick={() => setShowUtilities((value) => !value)}
         aria-expanded={showUtilities}
         aria-controls="pitchblack-utilities"
         aria-label="Open this quiet world utilities"
       >
-        this quiet world
+        <span>this quiet world</span><span className="brand-menu-dots" aria-hidden="true">•••</span>
       </button>
 
-      <div
+      <section
         id="pitchblack-utilities"
-        className={`utility-popover ${controlsVisible && showUtilities ? 'visible' : ''}`}
-        aria-hidden={!controlsVisible || !showUtilities}
+        className={`utility-panel ${showUtilities ? 'visible' : ''}`}
+        aria-hidden={!showUtilities}
+        aria-label="This quiet world settings"
       >
-        <button
-          type="button"
-          onClick={() => {
-            resetWorld()
-            setShowUtilities(false)
-          }}
-        >
-          Reset world
-        </button>
-      </div>
+        <div className="utility-section">
+          <div className="utility-section-title">Sleep</div>
+          <div className="utility-row utility-timer-row">
+            <span className="utility-label">Fade out</span>
+            <div className="sleep-timer-options">
+              <button type="button" className={!sleepTimerActive ? 'active' : ''} onClick={cancelSleepTimer}>Off</button>
+              {SLEEP_TIMER_OPTIONS.map((minutes) => (
+                <button
+                  type="button"
+                  key={minutes}
+                  className={sleepTimerMinutes === minutes ? 'active' : ''}
+                  onClick={() => setSleepTimer(minutes)}
+                >
+                  {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {sleepTimerActive && (
+            <div className="sleep-timer-status" aria-live="polite">
+              sound fades during the final minute · {formatSleepRemaining(sleepTimerRemaining)} left
+            </div>
+          )}
+
+          <label className="utility-row volume-row">
+            <span className="utility-label">Volume</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(volume * 100)}
+              onChange={(event) => {
+                unlockPitchAudio()
+                setVolume(Number(event.target.value) / 100)
+              }}
+              aria-label="Master volume"
+            />
+            <output>{Math.round(volume * 100)}%</output>
+          </label>
+        </div>
+
+        <div className="utility-section">
+          <div className="utility-section-title">Display</div>
+          {wakeLockSupported && (
+            <button
+              type="button"
+              className={`utility-toggle-row ${keepAwake ? 'active' : ''}`}
+              onClick={() => void toggleKeepAwake()}
+              aria-pressed={keepAwake}
+            >
+              <span>Keep screen on</span>
+              <span className="quiet-switch" aria-hidden="true"><i /></span>
+            </button>
+          )}
+          <button
+            type="button"
+            className={`utility-toggle-row ${fullscreenOn ? 'active' : ''}`}
+            onClick={() => void goFullscreen()}
+            aria-pressed={fullscreenOn}
+          >
+            <span>Fullscreen</span>
+            <span className="utility-action-icon" aria-hidden="true"><Expand size={14} strokeWidth={1.5} /></span>
+          </button>
+          <div className="utility-note">double tap the world for fullscreen</div>
+        </div>
+
+        <div className="utility-section utility-actions">
+          <div className="utility-section-title">World</div>
+          <button type="button" onClick={() => void shareWorld()}>
+            {shareStatus === 'copied' ? 'Link copied' : shareStatus === 'shared' ? 'Shared' : 'Share this world'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              resetWorld()
+              setShowUtilities(false)
+            }}
+          >
+            Reset world
+          </button>
+        </div>
+
+        {installPrompt && (
+          <div className="utility-section utility-actions">
+            <div className="utility-section-title">App</div>
+            <button type="button" onClick={() => void installApp()}>
+              Install this quiet world
+            </button>
+          </div>
+        )}
+      </section>
 
       <nav className={`control-dock ${controlsVisible ? 'visible' : ''}`} aria-label="This quiet world controls">
-        <button className={scene === 'black' ? 'active' : ''} onClick={() => chooseScene('black')} aria-label="Black scene">
-          <Circle size={17} strokeWidth={1.5} />
-          <span>Black</span>
+        <button className={aliveOn ? 'active' : ''} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
+          <Orbit size={17} strokeWidth={1.5} />
+          <span>Alive</span>
         </button>
+        <div className="dock-divider" />
+        <button className={blackoutActive ? 'active' : ''} onClick={chooseBlackout} aria-label="Blackout: clear the visible world to pure black">
+          <Circle size={17} strokeWidth={1.5} />
+          <span>Blackout</span>
+        </button>
+        <div className="dock-divider" />
         <button className={scene === 'snow' ? 'active' : ''} onClick={() => chooseScene('snow')} aria-label="Snow scene">
           <Snowflake size={17} strokeWidth={1.5} />
           <span>Snow</span>
@@ -273,10 +777,6 @@ function App() {
         <button className={soundOn ? 'active' : ''} onClick={toggleSound} aria-label={soundOn ? 'Mute all sound' : 'Enable all sound'}>
           {soundOn ? <Volume2 size={17} strokeWidth={1.5} /> : <VolumeX size={17} strokeWidth={1.5} />}
           <span>{soundOn ? 'Sound' : 'Muted'}</span>
-        </button>
-        <button onClick={goFullscreen} aria-label="Toggle fullscreen">
-          <Expand size={17} strokeWidth={1.5} />
-          <span>Full</span>
         </button>
       </nav>
 
