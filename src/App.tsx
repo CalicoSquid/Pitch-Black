@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Circle, Clock3, Expand, Moon, Snowflake, CloudRain, CloudLightning, Flame, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import './App.css'
 import type { LayerKey, LayerState, Scene } from './types'
-import { setPitchAudioMuted, unlockPitchAudio } from './audio/pitchAudio'
+import { setPitchAudioMuted, suspendPitchAudio, unlockPitchAudio } from './audio/pitchAudio'
 import { useIdleControls } from './hooks/useIdleControls'
 import { FirefliesLayer } from './layers/FirefliesLayer'
 import { GlobalMoon } from './layers/GlobalMoon'
@@ -24,9 +24,9 @@ type PitchPreferences = {
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v1'
 const DEFAULT_PREFERENCES: PitchPreferences = {
   scene: 'black',
-  showClock: false,
+  showClock: true,
   soundOn: false,
-  layers: { moon: false, storm: false, fireflies: false },
+  layers: { moon: true, storm: false, fireflies: false },
 }
 
 function loadPreferences(): PitchPreferences {
@@ -108,20 +108,34 @@ function App() {
   }, [controlsVisible])
 
   useEffect(() => {
-    if (!soundOn) return
-
-    // Browsers require a user gesture before Web Audio can actually run. Any
-    // first tap/click/key should satisfy that policy, even if the user only
-    // wakes the controls or toggles a non-audio layer.
-    const unlockOnGesture = () => {
-      unlockPitchAudio()
-      window.removeEventListener('pointerdown', unlockOnGesture)
-      window.removeEventListener('keydown', unlockOnGesture)
+    // A hidden/backgrounded page should never keep sounding. Resume is attempted
+    // when the page becomes visible again, while the gesture listeners remain as
+    // a browser-policy fallback for mobile browsers that demand a fresh gesture.
+    const syncAudioVisibility = () => {
+      if (document.visibilityState !== 'visible') {
+        suspendPitchAudio()
+        return
+      }
+      if (soundOn) unlockPitchAudio()
     }
 
-    window.addEventListener('pointerdown', unlockOnGesture, { passive: true, once: true })
-    window.addEventListener('keydown', unlockOnGesture, { once: true })
+    const suspendForPageHide = () => suspendPitchAudio()
+    const unlockOnGesture = () => {
+      if (soundOn && document.visibilityState === 'visible') unlockPitchAudio()
+    }
+
+    document.addEventListener('visibilitychange', syncAudioVisibility)
+    window.addEventListener('pagehide', suspendForPageHide)
+    window.addEventListener('pageshow', syncAudioVisibility)
+    window.addEventListener('pointerdown', unlockOnGesture, { passive: true })
+    window.addEventListener('keydown', unlockOnGesture)
+
+    syncAudioVisibility()
+
     return () => {
+      document.removeEventListener('visibilitychange', syncAudioVisibility)
+      window.removeEventListener('pagehide', suspendForPageHide)
+      window.removeEventListener('pageshow', syncAudioVisibility)
       window.removeEventListener('pointerdown', unlockOnGesture)
       window.removeEventListener('keydown', unlockOnGesture)
     }
@@ -173,20 +187,22 @@ function App() {
       data-layer-storm={layers.storm ? 'on' : 'off'}
       data-layer-fireflies={layers.fireflies ? 'on' : 'off'}
     >
-      <div className={`scene-layer ${scene === 'black' ? 'world-hidden' : ''}`}>
-        <GlobalMoon visible={layers.moon} clouded={scene === 'ember'} />
-        <WorldBaseScene scene={scene} />
-        <SnowScene active={scene === 'snow'} soundOn={soundOn} speed={1} />
-        <RainScene active={scene === 'rain'} soundOn={soundOn} speed={1} />
-        <EmberScene
-          active={scene === 'ember'}
-          rainActive={scene === 'rain'}
-          snowActive={scene === 'snow'}
-          speed={1}
-          soundOn={soundOn}
-          visible={scene !== 'black'}
-        />
-        <FirefliesLayer active={layers.fireflies} visible={scene !== 'black'} />
+      <div className="scene-layer">
+        <GlobalMoon visible={layers.moon} />
+        <div className={`world-weather-layer ${scene === 'black' ? 'world-hidden' : ''}`}>
+          <WorldBaseScene scene={scene} />
+          <SnowScene active={scene === 'snow'} soundOn={soundOn} speed={1} />
+          <RainScene active={scene === 'rain'} soundOn={soundOn} speed={1} />
+          <EmberScene
+            active={scene === 'ember'}
+            rainActive={scene === 'rain'}
+            snowActive={scene === 'snow'}
+            speed={1}
+            soundOn={soundOn}
+            visible={scene !== 'black'}
+          />
+        </div>
+        <FirefliesLayer active={layers.fireflies} visible />
         <StormLayer active={layers.storm} scene={scene} soundOn={soundOn} />
       </div>
 
@@ -198,9 +214,9 @@ function App() {
         onClick={() => setShowUtilities((value) => !value)}
         aria-expanded={showUtilities}
         aria-controls="pitchblack-utilities"
-        aria-label="Open my quiet world utilities"
+        aria-label="Open this quiet world utilities"
       >
-        my quiet world
+        this quiet world
       </button>
 
       <div
@@ -219,7 +235,7 @@ function App() {
         </button>
       </div>
 
-      <nav className={`control-dock ${controlsVisible ? 'visible' : ''}`} aria-label="PitchBlack controls">
+      <nav className={`control-dock ${controlsVisible ? 'visible' : ''}`} aria-label="This quiet world controls">
         <button className={scene === 'black' ? 'active' : ''} onClick={() => chooseScene('black')} aria-label="Black scene">
           <Circle size={17} strokeWidth={1.5} />
           <span>Black</span>

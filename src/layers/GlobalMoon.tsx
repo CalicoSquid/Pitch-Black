@@ -1,5 +1,3 @@
-import { pitchWorld } from '../world/worldState'
-
 function buildMoonLitPath(phase: number) {
   const cx = 100
   const cy = 100
@@ -31,7 +29,7 @@ function buildMoonLitPath(phase: number) {
     ' Z'
 }
 
-export function GlobalMoon({ visible, clouded }: { visible: boolean; clouded: boolean }) {
+export function GlobalMoon({ visible }: { visible: boolean }) {
   const now = new Date()
   const synodic = 29.53058867
   const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14)
@@ -40,10 +38,7 @@ export function GlobalMoon({ visible, clouded }: { visible: boolean; clouded: bo
   const illumination = (1 - Math.cos(phase * Math.PI * 2)) / 2
   const litPath = buildMoonLitPath(phase)
 
-  const sceneOpacity = clouded
-    ? Math.max(0.14, 0.94 - pitchWorld.cloudCover * 0.72)
-    : 0.94
-  const opacity = visible ? sceneOpacity : 0
+  const opacity = visible ? 0.94 : 0
 
   return (
     <div

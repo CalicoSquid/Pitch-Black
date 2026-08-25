@@ -105,7 +105,6 @@ export function EmberScene({
 
     const ensureAudio = () => {
       audioCtx = getPitchAudio()
-      if (audioCtx?.state === 'suspended') void audioCtx.resume()
       return audioCtx
     }
 
@@ -318,10 +317,12 @@ export function EmberScene({
 
       if (signal.scene === 'snow') {
         hasIgnited = true
-        for (let i = 0; i < 5; i++) {
-          spawnSpark(signal.index + Math.floor((Math.random() - 0.5) * 3), 0.82 + signal.strength * 0.16)
+        for (let i = 0; i < 8; i++) {
+          spawnSpark(signal.index + Math.floor((Math.random() - 0.5) * 4), 0.92 + signal.strength * 0.20)
         }
-        spawnSteam(signal.index, 0.12 + signal.strength * 0.08)
+        spawnSteam(signal.index, 0.24 + signal.strength * 0.14)
+        spawnLightningSteam(signal.index, 0.72 + signal.strength * 0.45)
+        spawnSmoke(signal.index, 0.26 + signal.strength * 0.18)
       } else if (signal.scene === 'ember') {
         // The Storm layer already preserves Ember's established strike heat.
         // This only guarantees the persistent fire simulation is awake.
@@ -515,7 +516,7 @@ export function EmberScene({
         if (heat > 0.06) {
           residue[i] = Math.min(1, residue[i] + heat * 0.0032 * scaled)
 
-          const melt = Math.min(pitchWorld.drifts[i], heat * 0.065 * scaled)
+          const melt = Math.min(pitchWorld.drifts[i], heat * 0.176 * scaled)
           if (melt > 0) {
             pitchWorld.drifts[i] = Math.max(0, pitchWorld.drifts[i] - melt)
             spawnSteam(i, melt)

@@ -15,6 +15,11 @@ function ensurePitchAudioMaster(audioCtx: AudioContext) {
 
 export function unlockPitchAudio() {
   try {
+    // Never create or resume Web Audio while the page is backgrounded. Some
+    // mobile browsers otherwise keep ambient audio alive after the browser closes.
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return pitchAudioContext
+    }
     const AudioCtx =
       window.AudioContext ||
       (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
@@ -36,8 +41,19 @@ export function unlockPitchAudio() {
   }
 }
 
+export function suspendPitchAudio() {
+  const audioCtx = pitchAudioContext
+  if (!audioCtx || audioCtx.state !== 'running') return
+
+  try {
+    void audioCtx.suspend()
+  } catch {
+    // Browser audio lifecycle support varies; suspension failure is harmless.
+  }
+}
+
 export function getPitchAudio() {
-  return pitchAudioContext ?? unlockPitchAudio()
+  return unlockPitchAudio()
 }
 
 export function getPitchAudioOutput(audioCtx: AudioContext) {

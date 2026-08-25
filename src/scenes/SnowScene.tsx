@@ -69,7 +69,6 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
-    if (audioCtx.state === 'suspended') void audioCtx.resume()
     const seconds = 3
     const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * seconds, audioCtx.sampleRate)
     const data = buffer.getChannelData(0)

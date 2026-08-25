@@ -70,7 +70,6 @@ export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
-    if (audioCtx.state === 'suspended') void audioCtx.resume()
     const seconds = 4
     const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * seconds, audioCtx.sampleRate)
     const data = buffer.getChannelData(0)
@@ -379,7 +378,7 @@ export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed:
       // Rain slowly compacts and washes the whole snowpack, with impacts doing the local work.
       if (pitchWorld.drifts.length > 2) {
         const scaledDt = (dt / 16.67) * speed
-        const meltRate = (0.00195 + intensity * 0.00317) * scaledDt * weatherMix
+        const meltRate = (0.00390 + intensity * 0.00634) * scaledDt * weatherMix
         driftSnapshot.set(pitchWorld.drifts)
         const copy = driftSnapshot
 

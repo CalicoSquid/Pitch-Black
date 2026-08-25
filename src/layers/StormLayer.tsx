@@ -10,188 +10,221 @@ import {
   worldIndexAt,
 } from '../world/worldState'
 
-type CloudLayer = 'far' | 'main' | 'scud'
+type StormDensityLayerKind = 'upper' | 'main'
 
-type ContourMass = {
-  bodyPath: Path2D
-  ridgePath: Path2D
-  underPath: Path2D
-  corePath: Path2D
-  width: number
-  anchorX: number
-  anchorY: number
-  speed: number
-  parallax: number
+type StormDensityLayer = {
+  kind: StormDensityLayerKind
+  bodyCanvas: HTMLCanvasElement
+  glowCanvas: HTMLCanvasElement
+  revealCanvas: HTMLCanvasElement
+  renderWidth: number
+  renderHeight: number
+  phaseX: number
+  phaseY: number
+  driftX: number
   driftY: number
-  phase: number
-  bodyAlpha: number
-  ridgeAlpha: number
-  underAlpha: number
-  coreAlpha: number
   entryDelay: number
   entryDuration: number
-  exitDelay: number
   exitDuration: number
+  retreat: number
 }
+
+type BoltPoint = { x: number; y: number }
+type BoltPath = { points: BoltPoint[]; alpha: number; width: number }
+
+const UPPER_LAYER_TIMING = { entryDelay: 0, entryDuration: 52000, exitDuration: 13800, retreat: 0.16 } as const
+const MAIN_LAYER_TIMING = { entryDelay: 8800, entryDuration: 60000, exitDuration: 16200, retreat: 0.24 } as const
 
 function seededFrac(seed: number) {
   const n = Math.sin(seed * 127.1 + 311.7) * 43758.5453123
   return n - Math.floor(n)
 }
 
-function wrapValue(value: number, span: number) {
-  return ((value % span) + span) % span
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value))
 }
 
 function smoothStep(value: number) {
   return value * value * (3 - 2 * value)
 }
 
-function valueNoise(x: number, seed: number) {
-  const left = Math.floor(x)
-  const frac = smoothStep(x - left)
-  const a = seededFrac(seed + left * 1.971) * 2 - 1
-  const b = seededFrac(seed + (left + 1) * 1.971) * 2 - 1
-  return a + (b - a) * frac
+function smoothPulse(edge0: number, edge1: number, edge2: number, edge3: number, x: number) {
+  return clamp01((x - edge0) / (edge1 - edge0)) * (1 - clamp01((x - edge2) / (edge3 - edge2)))
 }
 
-function buildClosedContourPath(top: Float32Array, bottom: Float32Array, step: number, smooth: boolean) {
-  const path = new Path2D()
-  const last = top.length - 1
-  path.moveTo(0, top[0])
+function hash2D(ix: number, iy: number, seed: number) {
+  const n = Math.sin(ix * 127.1 + iy * 311.7 + seed * 74.7) * 43758.5453123
+  return n - Math.floor(n)
+}
 
-  if (smooth) {
-    for (let i = 1; i <= last; i++) {
-      const prevX = (i - 1) * step
-      const x = i * step
-      const midX = (prevX + x) * 0.5
-      const midY = (top[i - 1] + top[i]) * 0.5
-      path.quadraticCurveTo(prevX, top[i - 1], midX, midY)
-    }
-    path.quadraticCurveTo(last * step, top[last], last * step, bottom[last])
-    for (let i = last - 1; i >= 0; i--) {
-      const nextX = (i + 1) * step
-      const x = i * step
-      const midX = (nextX + x) * 0.5
-      const midY = (bottom[i + 1] + bottom[i]) * 0.5
-      path.quadraticCurveTo(nextX, bottom[i + 1], midX, midY)
-    }
-    path.quadraticCurveTo(0, bottom[0], 0, top[0])
-  } else {
-    for (let i = 1; i <= last; i++) path.lineTo(i * step, top[i])
-    for (let i = last; i >= 0; i--) path.lineTo(i * step, bottom[i])
+function valueNoise2D(x: number, y: number, seed: number) {
+  const ix = Math.floor(x)
+  const iy = Math.floor(y)
+  const fx = smoothStep(x - ix)
+  const fy = smoothStep(y - iy)
+
+  const v00 = hash2D(ix, iy, seed)
+  const v10 = hash2D(ix + 1, iy, seed)
+  const v01 = hash2D(ix, iy + 1, seed)
+  const v11 = hash2D(ix + 1, iy + 1, seed)
+
+  const a = v00 + (v10 - v00) * fx
+  const b = v01 + (v11 - v01) * fx
+  return a + (b - a) * fy
+}
+
+function fbm2D(x: number, y: number, seed: number) {
+  let total = 0
+  let amplitude = 0.58
+  let frequency = 1
+  let normalizer = 0
+
+  for (let octave = 0; octave < 4; octave++) {
+    total += (valueNoise2D(x * frequency, y * frequency, seed + octave * 19.3) * 2 - 1) * amplitude
+    normalizer += amplitude
+    amplitude *= 0.52
+    frequency *= 2.03
   }
 
-  path.closePath()
-  return path
+  return total / normalizer
 }
 
-function createContourMass(
+function createTintedCanvas(width: number, height: number) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  return canvas
+}
+
+/**
+ * Generate a low-resolution cloud-density field once, then let browser scaling do the
+ * softening at runtime. This avoids per-frame blur or visible geometric construction.
+ */
+function createStormDensityLayer(
   viewportWidth: number,
   viewportHeight: number,
-  layer: CloudLayer,
-  index: number,
-): ContourMass {
-  const layerSeed = layer === 'far' ? 13.7 : layer === 'main' ? 41.9 : 79.3
-  const seed = layerSeed + index * 11.73
-  const a = seededFrac(seed + 0.7)
-  const b = seededFrac(seed + 2.3)
-  const c = seededFrac(seed + 5.9)
+  kind: StormDensityLayerKind,
+): StormDensityLayer {
+  const shortLandscape = viewportWidth > viewportHeight * 1.35 && viewportHeight <= 520
+  const seed = kind === 'upper' ? 27.4 : 83.2
+  const mapWidth = shortLandscape ? 320 : viewportWidth < 700 ? 360 : 460
+  const mapHeight = kind === 'upper'
+    ? (shortLandscape ? 120 : 170)
+    : (shortLandscape ? 145 : 210)
+  const density = new Float32Array(mapWidth * mapHeight)
 
-  const widthScale = layer === 'far'
-    ? 0.70 + a * 0.46
-    : layer === 'main'
-      ? 0.46 + a * 0.36
-      : 0.12 + a * 0.20
-  const massWidth = Math.max(layer === 'scud' ? 120 : 310, viewportWidth * widthScale)
-  const pointCount = layer === 'far' ? 32 : layer === 'main' ? 30 : 16
-  const step = massWidth / (pointCount - 1)
-  const top = new Float32Array(pointCount)
-  const bottom = new Float32Array(pointCount)
-  const ridgeBottom = new Float32Array(pointCount)
-  const underTop = new Float32Array(pointCount)
-  const coreTop = new Float32Array(pointCount)
-  const coreBottom = new Float32Array(pointCount)
+  for (let y = 0; y < mapHeight; y++) {
+    const ny = y / (mapHeight - 1)
+    const verticalBias = kind === 'upper'
+      ? Math.pow(Math.max(0, 1 - ny), 0.82)
+      : Math.pow(Math.max(0, 1 - ny), 0.72)
 
-  const baseThickness = layer === 'far'
-    ? viewportHeight * (0.18 + b * 0.10)
-    : layer === 'main'
-      ? viewportHeight * (0.16 + b * 0.12)
-      : viewportHeight * (0.038 + b * 0.050)
-  const broadAmplitude = layer === 'far' ? 22 : layer === 'main' ? 30 : 11
-  const mediumAmplitude = layer === 'far' ? 13 : layer === 'main' ? 18 : 10
-  const fineAmplitude = layer === 'scud' ? 7 : 4
+    for (let x = 0; x < mapWidth; x++) {
+      const nx = x / (mapWidth - 1)
+      const warpX = fbm2D(nx * 1.4 + 5.2, ny * 1.1 + 1.9, seed + 11.7) * 0.09
+      const warpY = fbm2D(nx * 1.0 + 2.8, ny * 1.7 + 0.7, seed + 23.1) * 0.08
+      const large = fbm2D((nx + warpX) * 1.05 + 1.3, (ny + warpY) * 0.85 + 4.8, seed + 4.3)
+      const medium = fbm2D((nx - warpX) * 3.0 + 8.7, (ny + warpY) * 2.2 + 2.1, seed + 31.6)
+      const fine = fbm2D(nx * 6.4 + 3.4, ny * 4.9 + 7.2, seed + 57.4)
 
-  for (let i = 0; i < pointCount; i++) {
-    const t = i / (pointCount - 1)
-    const broad = valueNoise(i * 0.18, seed + 17.2)
-    const medium = valueNoise(i * 0.43, seed + 39.1)
-    const fine = valueNoise(i * (layer === 'scud' ? 1.34 : 0.86), seed + 67.4)
-    const asymmetry = valueNoise(i * 0.27, seed + 88.6)
-    const centreY = broad * broadAmplitude + medium * mediumAmplitude + fine * fineAmplitude
+      const broadBody = large * 0.68 + medium * 0.24 + fine * 0.08
+      const hangingNoise = kind === 'main'
+        ? Math.max(0, fbm2D(nx * 1.35 + 9.2, ny * 3.7 + 4.3, seed + 91.5) - 0.30)
+        : Math.max(0, fbm2D(nx * 1.6 + 7.2, ny * 3.1 + 2.3, seed + 74.8) - 0.48) * 0.55
 
-    const edge = Math.pow(Math.max(0, Math.sin(Math.PI * t)), layer === 'scud' ? 0.34 : 0.48)
-    const thicknessNoise = 0.90 + valueNoise(i * 0.29, seed + 101.8) * 0.22 + valueNoise(i * 0.73, seed + 133.5) * 0.11
-    const lobe = 0.88 + valueNoise(i * (layer === 'scud' ? 0.67 : 0.36), seed + 156.3) * (layer === 'scud' ? 0.22 : 0.16)
-    const thickness = Math.max(0, baseThickness * thicknessNoise * lobe * edge)
-    const topShare = 0.30 + asymmetry * 0.055
-    const bottomShare = 1 - topShare
+      let threshold = kind === 'upper'
+        ? 0.00 + ny * 0.74
+        : -0.11 + ny * 0.83
 
-    const topY = centreY - thickness * topShare
-    const bottomY = centreY + thickness * bottomShare
-    top[i] = topY
-    bottom[i] = bottomY
+      threshold -= hangingNoise * (kind === 'main' ? 0.29 : 0.13)
 
-    const ridgeDepth = thickness * (layer === 'scud' ? 0.12 : 0.16)
-    ridgeBottom[i] = topY + ridgeDepth
-    underTop[i] = topY + thickness * (layer === 'scud' ? 0.50 : 0.57)
-    coreTop[i] = topY + thickness * (layer === 'scud' ? 0.38 : 0.43)
-    coreBottom[i] = topY + thickness * (layer === 'scud' ? 0.82 : 0.88)
+      const topField = verticalBias * (kind === 'upper' ? 0.44 : 0.39)
+      let localDensity = (broadBody + 0.08 + topField) - threshold
+      localDensity = clamp01(localDensity * (kind === 'upper' ? 2.02 : 2.28))
+
+      // Break the lower edges into soft rounded bellies rather than one continuous band.
+      const lowerBreak = smoothPulse(0.18, 0.38, 0.72, 0.98, ny)
+      const softness = 0.80 + lowerBreak * 0.20
+      localDensity = smoothStep(localDensity) * softness
+
+      density[y * mapWidth + x] = localDensity
+    }
   }
 
-  const smooth = true
+  const bodyCanvas = createTintedCanvas(mapWidth, mapHeight)
+  const glowCanvas = createTintedCanvas(mapWidth, mapHeight)
+  const revealCanvas = createTintedCanvas(mapWidth, mapHeight)
+  const bodyCtx = bodyCanvas.getContext('2d')!
+  const glowCtx = glowCanvas.getContext('2d')!
+  const revealCtx = revealCanvas.getContext('2d')!
+  const bodyImage = bodyCtx.createImageData(mapWidth, mapHeight)
+  const glowImage = glowCtx.createImageData(mapWidth, mapHeight)
+  const revealImage = revealCtx.createImageData(mapWidth, mapHeight)
+  const bodyPixels = bodyImage.data
+  const glowPixels = glowImage.data
+  const revealPixels = revealImage.data
+
+  for (let y = 0; y < mapHeight; y++) {
+    const ny = y / (mapHeight - 1)
+    for (let x = 0; x < mapWidth; x++) {
+      const i = y * mapWidth + x
+      const d = density[i]
+      const below = y < mapHeight - 1 ? density[i + mapWidth] : 0
+      const below2 = y < mapHeight - 2 ? density[i + mapWidth * 2] : 0
+      const above = y > 0 ? density[i - mapWidth] : d
+      const edge = clamp01((d - below) * 2.4)
+      const internal = clamp01((d - above) * 1.9)
+      const lowerMask = smoothPulse(0.14, 0.30, 0.88, 1.00, ny)
+      const moonBias = 0.70 + 0.30 * (1 - Math.abs((x / (mapWidth - 1)) - 0.5) * 2)
+      const wispMask = smoothPulse(0.22, 0.42, 0.86, 0.98, ny)
+
+      const bodyAlpha = Math.round(Math.pow(d, 1.15) * (kind === 'upper' ? 150 : 181))
+      const glowAlpha = Math.round(clamp01(edge * 0.78 + (d - below2) * 0.22) * lowerMask * moonBias * (kind === 'upper' ? 19 : 29))
+      const revealAlpha = Math.round(clamp01(d * 0.40 + edge * 1.02 + internal * 0.58 + wispMask * d * 0.16) * (kind === 'upper' ? 118 : 158))
+      const softFold = Math.round(clamp01(internal * 0.60 + d * 0.14) * (kind === 'upper' ? 24 : 34))
+
+      const bi = i * 4
+      bodyPixels[bi] = kind === 'upper' ? 5 : 3
+      bodyPixels[bi + 1] = kind === 'upper' ? 6 : 4
+      bodyPixels[bi + 2] = kind === 'upper' ? 8 : 6
+      bodyPixels[bi + 3] = bodyAlpha
+
+      glowPixels[bi] = 130
+      glowPixels[bi + 1] = 138
+      glowPixels[bi + 2] = 146
+      glowPixels[bi + 3] = glowAlpha
+
+      revealPixels[bi] = 112 + softFold
+      revealPixels[bi + 1] = 120 + softFold
+      revealPixels[bi + 2] = 128 + softFold
+      revealPixels[bi + 3] = revealAlpha
+    }
+  }
+
+  bodyCtx.putImageData(bodyImage, 0, 0)
+  glowCtx.putImageData(glowImage, 0, 0)
+  revealCtx.putImageData(revealImage, 0, 0)
+
   return {
-    bodyPath: buildClosedContourPath(top, bottom, step, smooth),
-    ridgePath: buildClosedContourPath(top, ridgeBottom, step, smooth),
-    underPath: buildClosedContourPath(underTop, bottom, step, smooth),
-    corePath: buildClosedContourPath(coreTop, coreBottom, step, smooth),
-    width: massWidth,
-    anchorX: a,
-    anchorY: layer === 'far'
-      ? -0.015 + b * 0.13
-      : layer === 'main'
-        ? 0.055 + b * 0.23
-        : 0.15 + b * 0.30,
-    speed: layer === 'far' ? 0.65 + c * 0.22 : layer === 'main' ? 0.82 + c * 0.28 : 1.12 + c * 0.44,
-    parallax: layer === 'far' ? 0.48 : layer === 'main' ? 0.82 : 1.28,
-    driftY: layer === 'far' ? 1.4 + c * 1.2 : layer === 'main' ? 2.2 + c * 2.0 : 5 + c * 5,
-    phase: seededFrac(seed + 203.1) * Math.PI * 2,
-    bodyAlpha: layer === 'far' ? 0.22 : layer === 'main' ? 0.29 : 0.22,
-    ridgeAlpha: layer === 'far' ? 0.014 : layer === 'main' ? 0.022 : 0.015,
-    underAlpha: layer === 'far' ? 0.22 : layer === 'main' ? 0.32 : 0.27,
-    coreAlpha: layer === 'far' ? 0.18 : layer === 'main' ? 0.29 : 0.27,
-    entryDelay: layer === 'far'
-      ? a * 2600
-      : layer === 'main'
-        ? 2200 + a * 4900
-        : 5400 + a * 5950,
-    entryDuration: layer === 'far'
-      ? 7400 + b * 3100
-      : layer === 'main'
-        ? 8200 + b * 3800
-        : 6000 + b * 3000,
-    exitDelay: layer === 'far'
-      ? a * 900
-      : layer === 'main'
-        ? 350 + a * 1300
-        : a * 800,
-    exitDuration: layer === 'far'
-      ? 5200 + c * 1700
-      : layer === 'main'
-        ? 5600 + c * 1900
-        : 3600 + c * 1600,
+    kind,
+    bodyCanvas,
+    glowCanvas,
+    revealCanvas,
+    renderWidth: Math.round(viewportWidth * (kind === 'upper' ? 1.24 : 1.16)),
+    renderHeight: Math.round(viewportHeight * (kind === 'upper'
+      ? (shortLandscape ? 0.45 : 0.61)
+      : (shortLandscape ? 0.52 : 0.72))),
+    phaseX: seededFrac(seed + 131.7) * Math.PI * 2,
+    phaseY: seededFrac(seed + 211.9) * Math.PI * 2,
+    driftX: viewportWidth * (kind === 'upper' ? 0.022 : 0.032),
+    driftY: viewportHeight * (kind === 'upper' ? 0.012 : 0.018),
+    entryDelay: kind === 'upper' ? UPPER_LAYER_TIMING.entryDelay : MAIN_LAYER_TIMING.entryDelay,
+    entryDuration: kind === 'upper' ? UPPER_LAYER_TIMING.entryDuration : MAIN_LAYER_TIMING.entryDuration,
+    exitDuration: kind === 'upper' ? UPPER_LAYER_TIMING.exitDuration : MAIN_LAYER_TIMING.exitDuration,
+    retreat: kind === 'upper' ? UPPER_LAYER_TIMING.retreat : MAIN_LAYER_TIMING.retreat,
   }
 }
+
 export function StormLayer({
   active,
   scene,
@@ -247,7 +280,6 @@ export function StormLayer({
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
-    if (audioCtx.state === 'suspended') void audioCtx.resume()
 
     const seconds = 6
     const deepBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * seconds), audioCtx.sampleRate)
@@ -324,28 +356,27 @@ export function StormLayer({
     let last = performance.now()
     let lastCloudFrame = 0
     let stormMix = activeRef.current ? 1 : 0
-    let frontDirection: 1 | -1 = Math.random() > 0.5 ? 1 : -1
     let wasActive = activeRef.current
     const initialPhaseTime = performance.now()
-    let activationTime = activeRef.current ? initialPhaseTime - 18000 : Number.NEGATIVE_INFINITY
-    let deactivationTime = activeRef.current ? Number.NEGATIVE_INFINITY : initialPhaseTime - 18000
-    let cloudOffset = 0
+    let activationTime = activeRef.current ? initialPhaseTime - 70000 : initialPhaseTime
+    let deactivationTime = activeRef.current ? Number.NEGATIVE_INFINITY : initialPhaseTime
     let gust = 0
     let gustTarget = 0
-    let nextGust = performance.now() + 4200
-    let nextStrike = performance.now() + 7000 + Math.random() * 9000
-    let nextDistantThunder = performance.now() + 4200 + Math.random() * 5200
+    let nextGust = performance.now() + 3600
+    let nextStrike = performance.now() + 5200 + Math.random() * 7600
+    let queuedStrikeBurst = 0
+    let nextDistantThunder = performance.now() + 3800 + Math.random() * 4800
     let flashStarted = -1
+    let flashPower = 0
     let boltUntil = -1
-    let bolt: Array<{ x: number; y: number }> = []
+    let boltPaths: BoltPath[] = []
     let canvasCleared = false
     let deepIdle = !activeRef.current && stormMix < 0.08
     let lastRumbleUpdate = 0
     let lastDeepRumbleTarget = Number.NaN
     let lastTextureRumbleTarget = Number.NaN
-    let farMasses: ContourMass[] = []
-    let mainMasses: ContourMass[] = []
-    let scudMasses: ContourMass[] = []
+    let upperLayer: StormDensityLayer | null = null
+    let mainLayer: StormDensityLayer | null = null
 
     const resize = () => {
       width = window.innerWidth
@@ -357,12 +388,8 @@ export function StormLayer({
       canvas.style.height = `${height}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ensureWorld(width, height)
-      const farCount = Math.max(2, Math.min(3, Math.round(width / 760)))
-      const mainCount = Math.max(3, Math.min(4, Math.round(width / 560)))
-      const scudCount = Math.max(4, Math.min(6, Math.round(width / 360)))
-      farMasses = Array.from({ length: farCount }, (_, i) => createContourMass(width, height, 'far', i))
-      mainMasses = Array.from({ length: mainCount }, (_, i) => createContourMass(width, height, 'main', i))
-      scudMasses = Array.from({ length: scudCount }, (_, i) => createContourMass(width, height, 'scud', i))
+      upperLayer = createStormDensityLayer(width, height, 'upper')
+      mainLayer = createStormDensityLayer(width, height, 'main')
     }
 
     const buildThunderBuffer = (audioCtx: AudioContext, duration: number, strikeStyle: boolean, variation: number) => {
@@ -446,29 +473,47 @@ export function StormLayer({
       if (!soundOnRef.current) return
       const audioCtx = getPitchAudio()
       if (!audioCtx) return
-      if (audioCtx.state === 'suspended') void audioCtx.resume()
 
       const bank = getThunderBank(audioCtx)
       const buffer = bank.strike[Math.random() < 0.5 ? 0 : 1]
-      const delay = 0.42 + Math.random() * 0.92
+      const delay = 1.35 + (1 - strength) * 1.65 + Math.random() * 0.95
       const rate = 0.94 + Math.random() * 0.10
+
+      const clapBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.24), audioCtx.sampleRate)
+      const clapData = clapBuffer.getChannelData(0)
+      for (let i = 0; i < clapData.length; i++) {
+        const t = i / audioCtx.sampleRate
+        const envelope = Math.exp(-t / 0.040)
+        clapData[i] = (Math.random() * 2 - 1) * envelope
+      }
+      const clapSource = audioCtx.createBufferSource()
+      const clapFilter = audioCtx.createBiquadFilter()
+      const clapGain = audioCtx.createGain()
+      clapSource.buffer = clapBuffer
+      clapFilter.type = 'bandpass'
+      clapFilter.frequency.value = 1240 + strength * 260
+      clapFilter.Q.value = 0.68
+      clapGain.gain.value = 0.022 + strength * 0.020
+      clapSource.connect(clapFilter).connect(clapGain).connect(getPitchAudioOutput(audioCtx))
+      clapSource.start(audioCtx.currentTime + delay)
+
       playThunderBuffer(
         audioCtx,
         buffer,
-        delay,
-        0.092 + strength * 0.028,
-        0.018 + strength * 0.010,
+        delay + 0.045,
+        0.082 + strength * 0.034,
+        0.016 + strength * 0.010,
         rate,
         235 + strength * 55,
       )
 
-      if (strength > 0.87 && Math.random() < 0.34) {
+      if (strength > 0.78 && Math.random() < 0.44) {
         const tailBuffer = bank.distant[Math.random() < 0.5 ? 0 : 1]
         playThunderBuffer(
           audioCtx,
           tailBuffer,
-          delay + 1.55 + Math.random() * 0.75,
-          0.026 + strength * 0.012,
+          delay + 1.45 + Math.random() * 1.10,
+          0.024 + strength * 0.014,
           0.006,
           0.90 + Math.random() * 0.08,
           180,
@@ -480,7 +525,6 @@ export function StormLayer({
       if (!soundOnRef.current) return
       const audioCtx = getPitchAudio()
       if (!audioCtx) return
-      if (audioCtx.state === 'suspended') void audioCtx.resume()
 
       const bank = getThunderBank(audioCtx)
       const buffer = bank.distant[Math.random() < 0.5 ? 0 : 1]
@@ -515,28 +559,25 @@ export function StormLayer({
       if (strikeScene === 'black') return
 
       if (strikeScene === 'snow') {
-        // Lightning punches through the snowpack first. The persistent Ember
-        // simulation below then decides whether the exposed fire survives.
-        for (let offset = -5; offset <= 5; offset++) {
+        for (let offset = -7; offset <= 7; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.drifts.length - 2) continue
-          const falloff = Math.max(0, 1 - Math.abs(offset) / 6)
-          const melted = Math.min(pitchWorld.drifts[i], 2.05 * falloff * strength)
+          const falloff = Math.max(0, 1 - Math.abs(offset) / 8)
+          const crater = Math.pow(falloff, 1.35)
+          const melted = Math.min(pitchWorld.drifts[i], (4.6 + strength * 1.8) * crater)
           pitchWorld.drifts[i] -= melted
-          pitchWorld.water[i] = Math.min(9, pitchWorld.water[i] + melted * 0.10)
+          pitchWorld.water[i] = Math.min(9, pitchWorld.water[i] + melted * 0.16)
         }
 
-        for (let offset = -3; offset <= 3; offset++) {
+        for (let offset = -4; offset <= 4; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.ember.length - 2) continue
-          const falloff = Math.max(0, 1 - Math.abs(offset) / 4)
-          pitchWorld.ember[i] = Math.max(pitchWorld.ember[i], (0.76 + strength * 0.18) * falloff)
-          pitchWorld.char[i] = Math.max(pitchWorld.char[i], 0.09 * falloff)
+          const falloff = Math.max(0, 1 - Math.abs(offset) / 5)
+          const heat = Math.pow(falloff, 1.1)
+          pitchWorld.ember[i] = Math.max(pitchWorld.ember[i], (0.86 + strength * 0.22) * heat)
+          pitchWorld.char[i] = Math.max(pitchWorld.char[i], 0.12 * heat)
         }
       } else if (strikeScene === 'rain') {
-        // Wet ground takes the strike as a burst of heat rather than a lasting
-        // fire. Consume a little standing water so the persistent world also
-        // records that brief evaporation event.
         for (let offset = -4; offset <= 4; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.water.length - 2) continue
@@ -545,7 +586,6 @@ export function StormLayer({
           pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - evaporated)
         }
       } else if (strikeScene === 'ember') {
-        // Preserve the existing Ember strike behavior exactly.
         for (let offset = -3; offset <= 3; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.ember.length - 2) continue
@@ -561,111 +601,83 @@ export function StormLayer({
     const strike = (time: number) => {
       const targetX = width * (0.14 + Math.random() * 0.72)
       const targetY = surfaceYAt(targetX, width, height)
-      const strength = 0.72 + Math.random() * 0.28
+      const strength = 0.70 + Math.random() * 0.30
       const startX = targetX + (Math.random() - 0.5) * width * 0.16
-      const segments = 8
+      const segments = 9
 
-      bolt = [{ x: startX, y: -12 }]
+      const main: BoltPoint[] = [{ x: startX, y: -12 }]
       for (let i = 1; i < segments; i++) {
         const t = i / segments
-        bolt.push({
+        main.push({
           x: startX * (1 - t) + targetX * t + (Math.random() - 0.5) * 34 * (1 - t),
           y: targetY * t,
         })
       }
-      bolt.push({ x: targetX, y: targetY })
+      main.push({ x: targetX, y: targetY })
+
+      boltPaths = [{ points: main, alpha: 0.48, width: 0.68 }]
+      const forkCount = Math.random() < 0.78 ? 1 + (Math.random() < 0.38 ? 1 : 0) + (Math.random() < 0.16 ? 1 : 0) : 0
+      for (let branch = 0; branch < forkCount; branch++) {
+        const originIndex = 2 + Math.floor(Math.random() * Math.max(1, main.length - 5))
+        const origin = main[originIndex]
+        const branchPoints: BoltPoint[] = [{ x: origin.x, y: origin.y }]
+        const branchSegments = 2 + Math.floor(Math.random() * 3)
+        let bx = origin.x
+        let by = origin.y
+        for (let i = 0; i < branchSegments; i++) {
+          const step = 12 + Math.random() * 28
+          bx += (Math.random() > 0.5 ? 1 : -1) * step
+          by += (targetY - origin.y) * (0.11 + Math.random() * 0.14)
+          branchPoints.push({ x: bx, y: Math.min(targetY - 10, by) })
+        }
+        boltPaths.push({ points: branchPoints, alpha: 0.28 + Math.random() * 0.14, width: 0.34 + Math.random() * 0.18 })
+      }
 
       flashStarted = time
-      boltUntil = time + 185
+      flashPower = 0.92 + strength * 0.16
+      boltUntil = time + 210
       strikeWorld(targetX, strength)
       thunder(strength)
     }
 
-    const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
-
-    const getMassPresence = (mass: ContourMass, time: number) => {
+    const getLayerPresence = (layer: StormDensityLayer, time: number) => {
       if (activeRef.current) {
-        const progress = clamp01((time - activationTime - mass.entryDelay) / mass.entryDuration)
+        const progress = clamp01((time - activationTime - layer.entryDelay) / layer.entryDuration)
         return smoothStep(progress)
       }
-      const entryAtDeactivation = smoothStep(clamp01((deactivationTime - activationTime - mass.entryDelay) / mass.entryDuration))
-      const progress = clamp01((time - deactivationTime - mass.exitDelay) / mass.exitDuration)
-      return entryAtDeactivation * (1 - smoothStep(progress))
+
+      const entryAtDeactivation = smoothStep(clamp01(
+        (deactivationTime - activationTime - layer.entryDelay) / layer.entryDuration,
+      ))
+      const exitProgress = clamp01((time - deactivationTime) / layer.exitDuration)
+      return entryAtDeactivation * (1 - smoothStep(exitProgress))
     }
 
     const getCloudCoverage = (time: number) => {
-      let far = 0
-      let main = 0
-      let scud = 0
-
-      for (let i = 0; i < farMasses.length; i++) far += getMassPresence(farMasses[i], time)
-      for (let i = 0; i < mainMasses.length; i++) main += getMassPresence(mainMasses[i], time)
-      for (let i = 0; i < scudMasses.length; i++) scud += getMassPresence(scudMasses[i], time)
-
-      const farMix = farMasses.length ? far / farMasses.length : 0
-      const mainMix = mainMasses.length ? main / mainMasses.length : 0
-      const scudMix = scudMasses.length ? scud / scudMasses.length : 0
-      return clamp01(farMix * 0.28 + mainMix * 0.57 + scudMix * 0.15)
+      const upper = upperLayer ? getLayerPresence(upperLayer, time) : 0
+      const main = mainLayer ? getLayerPresence(mainLayer, time) : 0
+      return clamp01(upper * 0.34 + main * 0.66)
     }
 
-    const drawContourMass = (mass: ContourMass, layer: CloudLayer, time: number, flash: number) => {
-      const presence = getMassPresence(mass, time)
-      if (presence < 0.002) return
+    const drawDensityLayer = (layer: StormDensityLayer, time: number, flash: number) => {
+      const presence = getLayerPresence(layer, time)
+      if (presence < 0.001) return
 
-      const travelSpeed = layer === 'far' ? 0.0018 : layer === 'main' ? 0.0030 : 0.0056
-      const span = width + mass.width * 1.45
-      const travel = time * travelSpeed * frontDirection * mass.speed + cloudOffset * mass.parallax
-      const baseX = wrapValue(mass.anchorX * span + travel, span) - mass.width * 0.72
-      const entryShift = activeRef.current
-        ? (frontDirection > 0 ? -1 : 1) * (width + mass.width) * (1 - presence)
-        : 0
-      const exitShift = activeRef.current
-        ? 0
-        : (frontDirection > 0 ? 1 : -1) * (width + mass.width) * (1 - presence)
-      const x = baseX + entryShift + exitShift
-      const y = height * mass.anchorY + Math.sin(time * (layer === 'scud' ? 0.00015 : 0.000052) + mass.phase) * mass.driftY
+      const settled = Math.pow(presence, 0.86)
+      const x = (width - layer.renderWidth) * 0.5
+        + Math.sin(time * (layer.kind === 'upper' ? 0.000007 : 0.000010) + layer.phaseX) * layer.driftX
+      const y = -layer.renderHeight * layer.retreat * (1 - settled)
+        + Math.sin(time * (layer.kind === 'upper' ? 0.000006 : 0.000009) + layer.phaseY) * layer.driftY
 
-      const drawAt = (offsetX: number) => {
-        ctx.translate(offsetX, y)
+      ctx.globalAlpha = 0.28 + settled * (layer.kind === 'upper' ? 0.64 : 0.80)
+      ctx.drawImage(layer.bodyCanvas, x, y, layer.renderWidth, layer.renderHeight)
 
-        const bodyColor = layer === 'far' ? 'rgb(23, 26, 30)' : layer === 'main' ? 'rgb(27, 31, 36)' : 'rgb(31, 35, 40)'
-        const bodyAlpha = presence * (mass.bodyAlpha + flash * (layer === 'main' ? 0.08 : 0.045))
+      ctx.globalAlpha = settled * (layer.kind === 'upper' ? 0.68 : 0.84)
+      ctx.drawImage(layer.glowCanvas, x, y, layer.renderWidth, layer.renderHeight)
 
-        if (layer !== 'scud') {
-          ctx.fillStyle = bodyColor
-          ctx.globalAlpha = bodyAlpha * 0.13
-          ctx.translate(-3, -2)
-          ctx.fill(mass.bodyPath)
-          ctx.translate(6, 4)
-          ctx.fill(mass.bodyPath)
-          ctx.translate(-3, -2)
-        }
-
-        ctx.fillStyle = bodyColor
-        ctx.globalAlpha = bodyAlpha
-        ctx.fill(mass.bodyPath)
-
-        ctx.fillStyle = 'rgb(5, 7, 9)'
-        ctx.globalAlpha = presence * mass.underAlpha
-        ctx.fill(mass.underPath)
-
-        ctx.fillStyle = 'rgb(0, 0, 0)'
-        ctx.globalAlpha = presence * mass.coreAlpha
-        ctx.fill(mass.corePath)
-
-        ctx.fillStyle = 'rgb(116, 125, 134)'
-        ctx.globalAlpha = presence * (mass.ridgeAlpha + flash * (layer === 'main' ? 0.15 : layer === 'far' ? 0.09 : 0.07))
-        ctx.fill(mass.ridgePath)
-
-        ctx.translate(-offsetX, -y)
-      }
-
-      drawAt(x)
-      // During arrival/exit, do not wrap in a replacement copy: the actual mass
-      // should visibly enter or leave the world. Fully established storms can wrap.
-      if (activeRef.current && presence > 0.995) {
-        if (x + mass.width < width * 0.18) drawAt(x + span)
-        else if (x > width * 0.82) drawAt(x - span)
+      if (flash > 0) {
+        ctx.globalAlpha = flash * settled * (layer.kind === 'upper' ? 0.90 : 1.00)
+        ctx.drawImage(layer.revealCanvas, x, y, layer.renderWidth, layer.renderHeight)
       }
     }
 
@@ -681,12 +693,12 @@ export function StormLayer({
       stormMix += (target - stormMix) * blend
 
       if (activeRef.current && !wasActive) {
-        frontDirection = Math.random() > 0.5 ? 1 : -1
         activationTime = time
         deactivationTime = Number.NEGATIVE_INFINITY
         if (deepIdle) {
-          nextStrike = time + 7000 + Math.random() * 9000
-          nextDistantThunder = time + 4200 + Math.random() * 5200
+          nextStrike = time + 5200 + Math.random() * 7600
+          queuedStrikeBurst = 0
+          nextDistantThunder = time + 3800 + Math.random() * 4800
           deepIdle = false
         }
       } else if (!activeRef.current && wasActive) {
@@ -695,15 +707,14 @@ export function StormLayer({
       wasActive = activeRef.current
 
       if (time > nextGust) {
-        gustTarget = (Math.random() > 0.5 ? 1 : -1) * (0.72 + Math.random() * 0.78)
-        nextGust = time + 4200 + Math.random() * 7200
+        gustTarget = (Math.random() > 0.5 ? 1 : -1) * (0.96 + Math.random() * 1.10)
+        nextGust = time + 3200 + Math.random() * 5600
       }
-      gust += (gustTarget - gust) * (1 - Math.exp(-dt / 1450))
-      cloudOffset += gust * dt * 0.016
+      gust += (gustTarget - gust) * (1 - Math.exp(-dt / 1180))
 
       const cloudCoverage = getCloudCoverage(time)
       stormSignal.mix = stormMix
-      stormSignal.wind = gust
+      stormSignal.wind = gust * (0.92 + cloudCoverage * 0.30)
       pitchWorld.cloudCover += ((0.12 + cloudCoverage * 0.80) - pitchWorld.cloudCover) * (1 - Math.exp(-dt / 1800))
 
       const rumble = rumbleRef.current
@@ -722,9 +733,17 @@ export function StormLayer({
         }
       }
 
-      if (activeRef.current && stormMix > 0.62 && time >= nextStrike) {
+      if (activeRef.current && stormMix > 0.58 && time >= nextStrike) {
         strike(time)
-        nextStrike = time + 12000 + Math.random() * 18000
+        if (queuedStrikeBurst > 0) {
+          queuedStrikeBurst -= 1
+          nextStrike = time + 1800 + Math.random() * 3200
+        } else if (Math.random() < 0.26) {
+          queuedStrikeBurst = 1 + Math.floor(Math.random() * 2)
+          nextStrike = time + 6200 + Math.random() * 6200
+        } else {
+          nextStrike = time + 7800 + Math.random() * 12800
+        }
       }
 
       if (activeRef.current && stormMix > 0.34 && time >= nextDistantThunder) {
@@ -733,18 +752,10 @@ export function StormLayer({
       }
 
       if (!activeRef.current && stormMix < 0.08 && !deepIdle) {
-        nextStrike = time + 7000 + Math.random() * 9000
-        nextDistantThunder = time + 4200 + Math.random() * 5200
+        nextStrike = time + 5200 + Math.random() * 7600
+        queuedStrikeBurst = 0
+        nextDistantThunder = time + 3800 + Math.random() * 4800
         deepIdle = true
-      }
-
-      if (sceneRef.current === 'black') {
-        if (!canvasCleared) {
-          ctx.clearRect(0, 0, width, height)
-          canvasCleared = true
-        }
-        stormSignal.flash = 0
-        return
       }
 
       if (time - lastCloudFrame < 40 && time > boltUntil) return
@@ -762,40 +773,39 @@ export function StormLayer({
       let flash = 0
       if (flashStarted >= 0) {
         const age = time - flashStarted
-        if (age < 145) flash = Math.max(0, 1 - age / 145)
+        const primary = age < 58 ? 1 - age / 58 : 0
+        const secondary = age > 68 && age < 138 ? 0.34 * (1 - (age - 68) / 70) : 0
+        flash = Math.max(primary, secondary) * flashPower
       }
 
       canvasCleared = false
       ctx.clearRect(0, 0, width, height)
 
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.042 * cloudCoverage})`
-      ctx.fillRect(0, 0, width, height)
+      // Keep the lower world slightly storm-darkened without dimming the moon itself.
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.065 * cloudCoverage})`
+      ctx.fillRect(0, height * 0.60, width, height * 0.40)
 
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.19 * cloudCoverage})`
-      ctx.fillRect(0, 0, width, height * 0.74)
-
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.08 * cloudCoverage})`
-      ctx.fillRect(0, 0, width, height * 0.18)
-
-      for (let i = 0; i < farMasses.length; i++) drawContourMass(farMasses[i], 'far', time, flash)
-      for (let i = 0; i < mainMasses.length; i++) drawContourMass(mainMasses[i], 'main', time, flash)
-      for (let i = 0; i < scudMasses.length; i++) drawContourMass(scudMasses[i], 'scud', time, flash)
+      if (upperLayer) drawDensityLayer(upperLayer, time, flash)
+      if (mainLayer) drawDensityLayer(mainLayer, time, flash)
       ctx.globalAlpha = 1
 
       if (flash > 0) {
-        ctx.fillStyle = `rgba(205, 218, 229, ${0.105 * flash * stormMix})`
+        ctx.fillStyle = `rgba(205, 218, 229, ${0.085 * flash * stormMix})`
         ctx.fillRect(0, 0, width, height)
       }
       stormSignal.flash = flash * stormMix
 
-      if (time < boltUntil && bolt.length > 1) {
-        const fade = Math.max(0, (boltUntil - time) / 185) * stormMix
-        ctx.beginPath()
-        ctx.moveTo(bolt[0].x, bolt[0].y)
-        for (let i = 1; i < bolt.length; i++) ctx.lineTo(bolt[i].x, bolt[i].y)
-        ctx.strokeStyle = `rgba(225, 234, 240, ${0.46 * fade})`
-        ctx.lineWidth = 0.65
-        ctx.stroke()
+      if (time < boltUntil && boltPaths.length > 0) {
+        const fade = Math.max(0, (boltUntil - time) / 210) * stormMix
+        for (const path of boltPaths) {
+          if (path.points.length < 2) continue
+          ctx.beginPath()
+          ctx.moveTo(path.points[0].x, path.points[0].y)
+          for (let i = 1; i < path.points.length; i++) ctx.lineTo(path.points[i].x, path.points[i].y)
+          ctx.strokeStyle = `rgba(225, 234, 240, ${path.alpha * fade})`
+          ctx.lineWidth = path.width
+          ctx.stroke()
+        }
       }
     }
 

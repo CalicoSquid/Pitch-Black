@@ -368,6 +368,17 @@
   z-index: 1;
 }
 
+.world-weather-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* Black removes the terrain/weather presentation but leaves optional sky/ambient
+   overlays alive: Moon, Fireflies and Storm can all exist over pure OLED black. */
+.world-weather-layer.world-hidden {
+  visibility: hidden;
+}
+
 .brand-whisper,
 .utility-popover,
 .sleep-clock,
@@ -409,11 +420,6 @@
 }
 
 
-/* Black remains an intentional hard blackout while the world keeps simulating underneath. */
-.scene-layer.world-hidden {
-  visibility: hidden;
-}
-
 /* Shared world base is always the first canvas above the moon. Weather/fire canvases layer over it. */
 .world-base-canvas {
   z-index: 1;
@@ -429,4 +435,30 @@
    the moon and scenery without changing any underlying scene renderer. */
 .storm-layer-canvas {
   z-index: 4;
+}
+
+
+/* Short landscape phones need their own composition: width-based desktop rules
+   make the moon enormous and leave the clock nowhere to breathe. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .global-moon {
+    top: 27%;
+  }
+
+  .global-moon-svg {
+    width: clamp(78px, 27vh, 126px);
+  }
+
+  .sleep-clock {
+    top: 56%;
+    width: min(64vw, 520px);
+  }
+
+  .sleep-clock-time {
+    font-size: clamp(38px, 12vh, 58px);
+  }
+
+  .sleep-clock-date {
+    display: none;
+  }
 }
