@@ -18,6 +18,7 @@ type RainDrop = {
   alpha: number
   width: number
   slantBias: number
+  presence: number
 }
 
 type Ripple = {
@@ -41,15 +42,17 @@ type Splash = {
   watery: boolean
 }
 
-export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed: number; active: boolean }) {
+export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean; speed: number; active: boolean; alive: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
+  const aliveRef = useRef(alive)
   const soundOnRef = useRef(soundOn)
   const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; source: AudioBufferSourceNode } | null>(null)
 
   useEffect(() => {
     activeRef.current = active
-  }, [active])
+    aliveRef.current = alive
+  }, [active, alive])
 
   useEffect(() => {
     soundOnRef.current = soundOn
@@ -153,6 +156,7 @@ export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed:
         alpha: 0.16 + depth * 0.30,
         width: 0.55 + depth * 0.42,
         slantBias: (Math.random() * 2 - 1) * 0.012,
+        presence: Math.random(),
       }
     }
 
@@ -333,20 +337,53 @@ export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
     let lastTime = performance.now()
     let simTime = performance.now()
-    let weatherMix = activeRef.current ? 1 : 0
+    let weatherMix = activeRef.current && !aliveRef.current ? 1 : 0
+    let wasActive = activeRef.current
+    let aliveRiseTau = 8_000
+    let aliveFallTau = 21_000 + Math.random() * 7_000
+    let aliveArrival: 'sudden' | 'gradual' = 'gradual'
     const draw = (time: number) => {
       frame += 1
       const dt = Math.min(32, time - lastTime)
       lastTime = time
       simTime += dt * speed
 
-      const targetMix = activeRef.current ? 1 : 0
-      const blend = 1 - Math.exp(-dt / 900)
+      const nowActive = activeRef.current
+      if (nowActive && !wasActive && aliveRef.current) {
+        // Rain gets two believable entrances in Alive: a front can build in, or
+        // a downpour can simply arrive. Both always leave with a long soft taper.
+        aliveArrival = Math.random() < 0.42 ? 'sudden' : 'gradual'
+        aliveRiseTau = aliveArrival === 'sudden'
+          ? 1_200 + Math.random() * 1_000
+          : 9_000 + Math.random() * 7_000
+        aliveFallTau = 20_000 + Math.random() * 8_000
+        if (aliveArrival === 'gradual') {
+          for (let i = 0; i < drops.length; i++) {
+            drops[i].y = -20 - Math.random() * 150
+          }
+        }
+      }
+      wasActive = nowActive
+
+      const targetMix = nowActive ? 1 : 0
+      const transitionTau = aliveRef.current
+        ? (nowActive ? aliveRiseTau : aliveFallTau)
+        : 520
+      const blend = 1 - Math.exp(-dt / transitionTau)
       weatherMix += (targetMix - weatherMix) * blend
+
+      const rainDensity = aliveRef.current
+        ? (aliveArrival === 'gradual' && nowActive
+          ? Math.pow(Math.max(0, weatherMix), 1.85)
+          : Math.pow(Math.max(0, weatherMix), 1.20))
+        : weatherMix
+      const visualAlpha = aliveRef.current
+        ? (nowActive ? 0.60 + weatherMix * 0.40 : Math.sqrt(Math.max(0, weatherMix)))
+        : weatherMix
 
       const currentAudio = audioRef.current
       if (currentAudio) {
-        const targetGain = soundOnRef.current ? 0.045 * weatherMix : 0
+        const targetGain = soundOnRef.current ? 0.045 * rainDensity : 0
         if (currentAudio.gain !== lastAudioGainNode) {
           lastAudioGainNode = currentAudio.gain
           lastAudioTargetGain = Number.NaN
@@ -371,14 +408,14 @@ export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
       idleCleared = false
       ctx.clearRect(0, 0, width, height)
-      ctx.globalAlpha = weatherMix
+      ctx.globalAlpha = visualAlpha
       updateWeather(simTime)
       drawWater()
 
       // Rain slowly compacts and washes the whole snowpack, with impacts doing the local work.
       if (pitchWorld.drifts.length > 2) {
         const scaledDt = (dt / 16.67) * speed
-        const meltRate = (0.00390 + intensity * 0.00634) * scaledDt * weatherMix
+        const meltRate = (0.00390 + intensity * 0.00634) * scaledDt * rainDensity
         driftSnapshot.set(pitchWorld.drifts)
         const copy = driftSnapshot
 
@@ -397,7 +434,7 @@ export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed:
             }
           }
         }
-        pitchWorld.wetness = Math.min(1, pitchWorld.wetness + 0.00042 * scaledDt * weatherMix)
+        pitchWorld.wetness = Math.min(1, pitchWorld.wetness + 0.00042 * scaledDt * rainDensity)
       }
 
       if (frame % 8 === 0 && pitchWorld.water.length > 2) {
@@ -422,22 +459,23 @@ export function RainScene({ soundOn, speed, active }: { soundOn: boolean; speed:
       const ambientGust = ambientGustAt(time)
       for (let i = 0; i < drops.length; i++) {
         const drop = drops[i]
+        const participating = drop.presence <= rainDensity
         drop.y += drop.speed * (dt / 16.67) * (0.78 + intensity * 0.42) * Math.max(0.7, Math.sqrt(speed))
         drop.x += (stormWind * 0.34 + ambientGust * 0.08) * (dt / 16.67)
 
         if (drop.x < -30) drop.x = width + 20
         if (drop.x > width + 30) drop.x = -20
 
-        tryExtinguishFirefly(drop, weatherMix, ambientGust)
+        if (participating) tryExtinguishFirefly(drop, rainDensity, ambientGust)
 
         const surface = surfaceYAt(drop.x, width, height)
         if (drop.y + drop.length >= surface) {
-          if (Math.random() < intensity * weatherMix * 0.96) impact(drop)
+          if (participating && Math.random() < intensity * rainDensity * 0.96) impact(drop)
           drops[i] = makeDrop(false)
           continue
         }
 
-        drawDrop(drop, curtainLiftAt(drop.x, time), ambientGust)
+        if (participating) drawDrop(drop, curtainLiftAt(drop.x, time), ambientGust)
       }
 
       let rippleWrite = 0

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Circle, Clock3, Expand, Moon, Snowflake, CloudRain, CloudLightning, Flame, Sparkles, Volume2, VolumeX, Orbit } from 'lucide-react'
 import './App.css'
 import { AliveSkyEvents } from './alive/AliveSkyEvents'
+import { AliveNightSky } from './alive/AliveNightSky'
+import { AliveAmbience } from './alive/AliveAmbience'
 import { useAliveWorld } from './alive/useAliveWorld'
 import type { LayerKey, LayerState, Scene } from './types'
 import {
@@ -69,16 +71,19 @@ function readSharedWorld(): Partial<PitchPreferences> | null {
   const world = params.get('world')
   if (world !== 'black' && world !== 'snow' && world !== 'rain' && world !== 'ember') return null
 
+  const sharedAliveOn = params.get('alive') === '1'
   return {
     scene: world,
-    aliveOn: params.get('alive') === '1',
+    aliveOn: sharedAliveOn,
     showClock: params.get('clock') === '1',
     soundOn: false,
-    layers: {
-      moon: params.get('moon') === '1',
-      storm: params.get('storm') === '1',
-      fireflies: params.get('fireflies') === '1',
-    },
+    layers: sharedAliveOn
+      ? { moon: false, storm: false, fireflies: false }
+      : {
+          moon: params.get('moon') === '1',
+          storm: params.get('storm') === '1',
+          fireflies: params.get('fireflies') === '1',
+        },
   }
 }
 
@@ -88,9 +93,9 @@ function buildSharedWorldUrl(scene: Scene, layers: LayerState, showClock: boolea
   url.hash = ''
   url.searchParams.set('world', scene === 'calm' ? 'black' : scene)
   if (aliveOn) url.searchParams.set('alive', '1')
-  if (layers.moon) url.searchParams.set('moon', '1')
-  if (layers.storm) url.searchParams.set('storm', '1')
-  if (layers.fireflies) url.searchParams.set('fireflies', '1')
+  if (!aliveOn && layers.moon) url.searchParams.set('moon', '1')
+  if (!aliveOn && layers.storm) url.searchParams.set('storm', '1')
+  if (!aliveOn && layers.fireflies) url.searchParams.set('fireflies', '1')
   if (showClock) url.searchParams.set('clock', '1')
   return url.toString()
 }
@@ -120,11 +125,13 @@ function loadPreferences(): PitchPreferences {
       soundOn: typeof saved.soundOn === 'boolean' ? saved.soundOn : DEFAULT_PREFERENCES.soundOn,
       volume: Math.min(1, Math.max(0, savedVolume)),
       aliveOn: savedAliveOn,
-      layers: {
-        moon: typeof saved.layers?.moon === 'boolean' ? saved.layers.moon : DEFAULT_PREFERENCES.layers.moon,
-        storm: typeof saved.layers?.storm === 'boolean' ? saved.layers.storm : DEFAULT_PREFERENCES.layers.storm,
-        fireflies: typeof saved.layers?.fireflies === 'boolean' ? saved.layers.fireflies : DEFAULT_PREFERENCES.layers.fireflies,
-      },
+      layers: savedAliveOn
+        ? { moon: false, storm: false, fireflies: false }
+        : {
+            moon: typeof saved.layers?.moon === 'boolean' ? saved.layers.moon : DEFAULT_PREFERENCES.layers.moon,
+            storm: typeof saved.layers?.storm === 'boolean' ? saved.layers.storm : DEFAULT_PREFERENCES.layers.storm,
+            fireflies: typeof saved.layers?.fireflies === 'boolean' ? saved.layers.fireflies : DEFAULT_PREFERENCES.layers.fireflies,
+          },
     }
 
     const shared = readSharedWorld()
@@ -175,11 +182,9 @@ function App() {
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
   const shareStatusTimerRef = useRef<number | null>(null)
   const lastWorldTapRef = useRef<{ at: number; x: number; y: number } | null>(null)
-  const controlsVisible = useIdleControls()
+  const controlsVisible = useIdleControls(4200)
   const { phase: alivePhase, weatherSpeed, fireflyMultiplier, moonHalo, skyEvent, aliveLayers } = useAliveWorld({
     enabled: aliveOn,
-    scene,
-    layers,
     setScene,
   })
 
@@ -240,6 +245,10 @@ function App() {
   }, [])
 
   const chooseScene = (nextScene: Scene) => {
+    // Choosing a world is also the explicit "take control" gesture when Alive
+    // is running. Manual composition starts clean rather than inheriting hidden
+    // overlay choices from before Alive was enabled.
+    if (aliveOn) setLayers({ moon: false, storm: false, fireflies: false })
     setAliveOn(false)
     // This runs synchronously inside the user's click, satisfying browser audio policy
     // before any later animation frame needs meteor/thunder/fire audio.
@@ -272,9 +281,21 @@ function App() {
   }
 
   const toggleLayer = (layer: LayerKey) => {
-    // Overlays are always independent. In Alive mode they are simply added on top
-    // of whatever atmosphere the autonomous world is currently producing.
     if (layer === 'storm') unlockPitchAudio()
+
+    if (aliveOn) {
+      // Alive is a complete autonomous state. Touching any manual atmosphere
+      // control means "I'll take it from here" and exits Alive immediately.
+      setAliveOn(false)
+      if (scene === 'calm') setScene('black')
+      setLayers({
+        moon: layer === 'moon',
+        storm: layer === 'storm',
+        fireflies: layer === 'fireflies',
+      })
+      return
+    }
+
     setLayers((value) => ({ ...value, [layer]: !value[layer] }))
   }
 
@@ -495,11 +516,18 @@ function App() {
 
   const toggleAlive = () => {
     unlockPitchAudio()
-    setAliveOn((value) => {
-      const next = !value
-      if (!next && scene === 'calm') setScene('black')
-      return next
-    })
+
+    if (aliveOn) {
+      setAliveOn(false)
+      if (scene === 'calm') setScene('black')
+    } else {
+      // Alive owns the complete world. Clear manual atmosphere choices so there
+      // is never a hidden additive state waiting underneath it.
+      setLayers({ moon: false, storm: false, fireflies: false })
+      setScene('calm')
+      setAliveOn(true)
+    }
+
     setShowUtilities(false)
   }
 
@@ -573,17 +601,16 @@ function App() {
     void goFullscreen()
   }
 
-  const displayLayers: LayerState = {
-    moon: layers.moon || (aliveOn && aliveLayers.moon),
-    storm: layers.storm || (aliveOn && aliveLayers.storm),
-    fireflies: layers.fireflies || (aliveOn && aliveLayers.fireflies),
-  }
+  const displayLayers: LayerState = aliveOn
+    ? aliveLayers
+    : layers
   const sleepTimerActive = sleepTimerEndAt !== null
-  const blackoutActive = scene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
+  const blackoutActive = !aliveOn && scene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
+  const interfaceAwake = controlsVisible || showUtilities || firstVisit
 
   return (
     <main
-      className="pitchblack"
+      className={`pitchblack ${interfaceAwake ? 'interface-awake' : 'interface-asleep'}`}
       data-scene={scene}
       data-layer-moon={displayLayers.moon ? 'on' : 'off'}
       data-layer-storm={displayLayers.storm ? 'on' : 'off'}
@@ -595,11 +622,12 @@ function App() {
       onPointerUp={handleWorldPointerUp}
     >
       <div className="scene-layer">
+        {aliveOn && <AliveNightSky phase={alivePhase} />}
         <GlobalMoon visible={displayLayers.moon} halo={aliveOn && moonHalo} />
         <div className={`world-weather-layer ${scene === 'black' ? 'world-hidden' : ''}`}>
           <WorldBaseScene scene={scene} />
-          <SnowScene active={scene === 'snow'} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
-          <RainScene active={scene === 'rain'} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
+          <SnowScene active={scene === 'snow'} alive={aliveOn} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
+          <RainScene active={scene === 'rain'} alive={aliveOn} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
           <EmberScene
             active={scene === 'ember'}
             rainActive={scene === 'rain'}
@@ -607,31 +635,34 @@ function App() {
             speed={1}
             soundOn={soundOn}
             visible={scene !== 'black'}
+            externalMeteorId={aliveOn && skyEvent?.kind === 'meteor-impact' ? skyEvent.id : 0}
           />
         </div>
         <FirefliesLayer active={displayLayers.fireflies} visible abundance={aliveOn ? fireflyMultiplier : 1} />
         <AliveSkyEvents event={aliveOn ? skyEvent : null} />
-        <StormLayer active={displayLayers.storm} scene={scene} soundOn={soundOn} />
+        <StormLayer
+          active={displayLayers.storm}
+          scene={scene}
+          soundOn={soundOn}
+          groundStrikeChance={aliveOn ? 0.14 : 0.42}
+        />
+        <AliveAmbience active={aliveOn} soundOn={soundOn} phase={alivePhase} />
       </div>
 
       {showClock && <ClockDisplay awake={controlsVisible} />}
 
       <div className={`first-visit-whisper ${firstVisit ? 'visible' : ''}`} aria-hidden={!firstVisit}>
-        <div className="first-visit-title">this quiet world</div>
-        <div className="first-visit-hint">tap anywhere to explore</div>
-        <div className="first-visit-secondary">double tap for fullscreen</div>
+        <div className="first-visit-title">Welcome to this quiet world</div>
+        <div className="first-visit-hint">Choose a scene below, or let <strong>Alive</strong> take over.</div>
+        <div className="first-visit-secondary">Double-tap anywhere for fullscreen.</div>
       </div>
 
-      <button
-        type="button"
-        className={`brand-whisper ${(controlsVisible || showUtilities) && !firstVisit ? 'visible' : ''} ${(sleepTimerActive || keepAwake || fullscreenOn) ? 'has-active-utility' : ''}`}
-        onClick={() => setShowUtilities((value) => !value)}
-        aria-expanded={showUtilities}
-        aria-controls="pitchblack-utilities"
-        aria-label="Open this quiet world utilities"
+      <div
+        className={`brand-whisper ${interfaceAwake && !firstVisit ? 'visible' : ''}`}
+        aria-hidden="true"
       >
-        <span>this quiet world</span><span className="brand-menu-dots" aria-hidden="true">•••</span>
-      </button>
+        <span>this quiet world</span>
+      </div>
 
       <section
         id="pitchblack-utilities"
@@ -682,9 +713,9 @@ function App() {
           </label>
         </div>
 
-        <div className="utility-section">
-          <div className="utility-section-title">Display</div>
-          {wakeLockSupported && (
+        {wakeLockSupported && (
+          <div className="utility-section">
+            <div className="utility-section-title">Display</div>
             <button
               type="button"
               className={`utility-toggle-row ${keepAwake ? 'active' : ''}`}
@@ -694,18 +725,8 @@ function App() {
               <span>Keep screen on</span>
               <span className="quiet-switch" aria-hidden="true"><i /></span>
             </button>
-          )}
-          <button
-            type="button"
-            className={`utility-toggle-row ${fullscreenOn ? 'active' : ''}`}
-            onClick={() => void goFullscreen()}
-            aria-pressed={fullscreenOn}
-          >
-            <span>Fullscreen</span>
-            <span className="utility-action-icon" aria-hidden="true"><Expand size={14} strokeWidth={1.5} /></span>
-          </button>
-          <div className="utility-note">double tap the world for fullscreen</div>
-        </div>
+          </div>
+        )}
 
         <div className="utility-section utility-actions">
           <div className="utility-section-title">World</div>
@@ -733,8 +754,8 @@ function App() {
         )}
       </section>
 
-      <nav className={`control-dock ${controlsVisible ? 'visible' : ''}`} aria-label="This quiet world controls">
-        <button className={aliveOn ? 'active' : ''} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
+      <nav className={`control-dock ${interfaceAwake ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
+        <button className={`alive-control ${aliveOn ? 'active alive-active' : ''}`} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
           <Orbit size={17} strokeWidth={1.5} />
           <span>Alive</span>
         </button>
@@ -744,28 +765,28 @@ function App() {
           <span>Blackout</span>
         </button>
         <div className="dock-divider" />
-        <button className={scene === 'snow' ? 'active' : ''} onClick={() => chooseScene('snow')} aria-label="Snow scene">
+        <button className={`manual-world-control ${!aliveOn && scene === 'snow' ? 'active' : ''}`} onClick={() => chooseScene('snow')} aria-label="Snow scene">
           <Snowflake size={17} strokeWidth={1.5} />
           <span>Snow</span>
         </button>
-        <button className={scene === 'rain' ? 'active' : ''} onClick={() => chooseScene('rain')} aria-label="Rain scene">
+        <button className={`manual-world-control ${!aliveOn && scene === 'rain' ? 'active' : ''}`} onClick={() => chooseScene('rain')} aria-label="Rain scene">
           <CloudRain size={17} strokeWidth={1.5} />
           <span>Rain</span>
         </button>
-        <button className={scene === 'ember' ? 'active' : ''} onClick={() => chooseScene('ember')} aria-label="Ember scene">
+        <button className={`manual-world-control ${!aliveOn && scene === 'ember' ? 'active' : ''}`} onClick={() => chooseScene('ember')} aria-label="Ember scene">
           <Flame size={17} strokeWidth={1.5} />
           <span>Ember</span>
         </button>
         <div className="dock-divider" />
-        <button className={layers.moon ? 'active' : ''} onClick={() => toggleLayer('moon')} aria-label="Toggle moon">
+        <button className={`manual-world-control ${!aliveOn && layers.moon ? 'active' : ''}`} onClick={() => toggleLayer('moon')} aria-label="Toggle moon">
           <Moon size={17} strokeWidth={1.5} />
           <span>Moon</span>
         </button>
-        <button className={layers.storm ? 'active' : ''} onClick={() => toggleLayer('storm')} aria-label="Toggle storm layer">
+        <button className={`manual-world-control ${!aliveOn && layers.storm ? 'active' : ''}`} onClick={() => toggleLayer('storm')} aria-label="Toggle storm layer">
           <CloudLightning size={17} strokeWidth={1.5} />
           <span>Storm</span>
         </button>
-        <button className={layers.fireflies ? 'active' : ''} onClick={() => toggleLayer('fireflies')} aria-label="Toggle fireflies layer">
+        <button className={`manual-world-control ${!aliveOn && layers.fireflies ? 'active' : ''}`} onClick={() => toggleLayer('fireflies')} aria-label="Toggle fireflies layer">
           <Sparkles size={17} strokeWidth={1.5} />
           <span>Fireflies</span>
         </button>
@@ -778,9 +799,21 @@ function App() {
           {soundOn ? <Volume2 size={17} strokeWidth={1.5} /> : <VolumeX size={17} strokeWidth={1.5} />}
           <span>{soundOn ? 'Sound' : 'Muted'}</span>
         </button>
+        <button className={fullscreenOn ? 'active' : ''} onClick={() => void goFullscreen()} aria-label={fullscreenOn ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreenOn}>
+          <Expand size={17} strokeWidth={1.5} />
+          <span>Fullscreen</span>
+        </button>
+        <button
+          className={`more-control ${showUtilities ? 'active' : ''}`}
+          onClick={() => setShowUtilities((value) => !value)}
+          aria-expanded={showUtilities}
+          aria-controls="pitchblack-utilities"
+          aria-label="More settings"
+        >
+          <b className="more-glyph" aria-hidden="true">•••</b>
+          <span>More</span>
+        </button>
       </nav>
-
-      <div className={`hint ${controlsVisible ? 'visible' : ''}`}>move or tap to wake controls</div>
     </main>
   )
 }

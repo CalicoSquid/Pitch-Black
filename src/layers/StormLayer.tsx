@@ -5,6 +5,7 @@ import { publishLightningGroundStrike } from '../world/lightningSignal'
 import {
   ensureWorld,
   pitchWorld,
+  saveWorld,
   stormSignal,
   surfaceYAt,
   worldIndexAt,
@@ -34,6 +35,10 @@ type BoltPath = { points: BoltPoint[]; alpha: number; width: number }
 
 const UPPER_LAYER_TIMING = { entryDelay: 0, entryDuration: 52000, exitDuration: 13800, retreat: 0.16 } as const
 const MAIN_LAYER_TIMING = { entryDelay: 8800, entryDuration: 60000, exitDuration: 16200, retreat: 0.24 } as const
+
+function between(min: number, max: number) {
+  return min + Math.random() * (max - min)
+}
 
 function seededFrac(seed: number) {
   const n = Math.sin(seed * 127.1 + 311.7) * 43758.5453123
@@ -229,15 +234,18 @@ export function StormLayer({
   active,
   scene,
   soundOn,
+  groundStrikeChance = 0.42,
 }: {
   active: boolean
   scene: Scene
   soundOn: boolean
+  groundStrikeChance?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
   const sceneRef = useRef(scene)
   const soundOnRef = useRef(soundOn)
+  const groundStrikeChanceRef = useRef(groundStrikeChance)
   const rumbleRef = useRef<{
     ctx: AudioContext
     deepGain: GainNode
@@ -262,6 +270,10 @@ export function StormLayer({
   useEffect(() => {
     soundOnRef.current = soundOn
   }, [soundOn])
+
+  useEffect(() => {
+    groundStrikeChanceRef.current = Math.max(0, Math.min(1, groundStrikeChance))
+  }, [groundStrikeChance])
 
   useEffect(() => {
     if (!active || !soundOn) {
@@ -559,23 +571,26 @@ export function StormLayer({
       if (strikeScene === 'black') return
 
       if (strikeScene === 'snow') {
-        for (let offset = -7; offset <= 7; offset++) {
+        // A direct hit should read as an event, not a tiny dent. It punches a
+        // broad bowl through the snow, flashes some melt-water into existence,
+        // and leaves enough heat/char for EmberScene to preserve the aftermath.
+        for (let offset = -12; offset <= 12; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.drifts.length - 2) continue
-          const falloff = Math.max(0, 1 - Math.abs(offset) / 8)
-          const crater = Math.pow(falloff, 1.35)
-          const melted = Math.min(pitchWorld.drifts[i], (4.6 + strength * 1.8) * crater)
-          pitchWorld.drifts[i] -= melted
-          pitchWorld.water[i] = Math.min(9, pitchWorld.water[i] + melted * 0.16)
+          const falloff = Math.max(0, 1 - Math.abs(offset) / 13)
+          const crater = Math.pow(falloff, 1.55)
+          const melted = Math.min(pitchWorld.drifts[i], (18 + strength * 14) * crater)
+          pitchWorld.drifts[i] = Math.max(0, pitchWorld.drifts[i] - melted)
+          pitchWorld.water[i] = Math.min(11, pitchWorld.water[i] + melted * 0.10)
         }
 
-        for (let offset = -4; offset <= 4; offset++) {
+        for (let offset = -7; offset <= 7; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.ember.length - 2) continue
-          const falloff = Math.max(0, 1 - Math.abs(offset) / 5)
-          const heat = Math.pow(falloff, 1.1)
-          pitchWorld.ember[i] = Math.max(pitchWorld.ember[i], (0.86 + strength * 0.22) * heat)
-          pitchWorld.char[i] = Math.max(pitchWorld.char[i], 0.12 * heat)
+          const falloff = Math.max(0, 1 - Math.abs(offset) / 8)
+          const heat = Math.pow(falloff, 1.18)
+          pitchWorld.ember[i] = Math.max(pitchWorld.ember[i], (1.02 + strength * 0.28) * heat)
+          pitchWorld.char[i] = Math.max(pitchWorld.char[i], (0.18 + strength * 0.52) * heat)
         }
       } else if (strikeScene === 'rain') {
         for (let offset = -4; offset <= 4; offset++) {
@@ -596,11 +611,15 @@ export function StormLayer({
       }
 
       publishLightningGroundStrike(idx, x, strength, strikeScene)
+      saveWorld()
     }
 
     const strike = (time: number) => {
       const targetX = width * (0.14 + Math.random() * 0.72)
-      const targetY = surfaceYAt(targetX, width, height)
+      const grounded = Math.random() < groundStrikeChanceRef.current
+      const targetY = grounded
+        ? surfaceYAt(targetX, width, height)
+        : height * between(0.28, 0.62)
       const strength = 0.70 + Math.random() * 0.30
       const startX = targetX + (Math.random() - 0.5) * width * 0.16
       const segments = 9
@@ -636,8 +655,12 @@ export function StormLayer({
       flashStarted = time
       flashPower = 0.92 + strength * 0.16
       boltUntil = time + 210
-      strikeWorld(targetX, strength)
-      thunder(strength)
+      if (grounded) {
+        strikeWorld(targetX, strength)
+        thunder(strength)
+      } else {
+        distantThunder()
+      }
     }
 
     const getLayerPresence = (layer: StormDensityLayer, time: number) => {

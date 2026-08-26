@@ -18,6 +18,7 @@ export function EmberScene({
   rainActive,
   snowActive,
   visible,
+  externalMeteorId = 0,
 }: {
   speed: number
   soundOn: boolean
@@ -25,6 +26,7 @@ export function EmberScene({
   rainActive: boolean
   snowActive: boolean
   visible: boolean
+  externalMeteorId?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
@@ -33,6 +35,7 @@ export function EmberScene({
   const soundOnRef = useRef(soundOn)
   const speedRef = useRef(speed)
   const visibleRef = useRef(visible)
+  const externalMeteorIdRef = useRef(externalMeteorId)
 
   useEffect(() => {
     activeRef.current = active
@@ -59,6 +62,10 @@ export function EmberScene({
   }, [visible])
 
   useEffect(() => {
+    externalMeteorIdRef.current = externalMeteorId
+  }, [externalMeteorId])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -71,6 +78,7 @@ export function EmberScene({
     let last = performance.now()
     let meteorStartedAt = -1
     let wasActive = false
+    let lastExternalMeteorId = externalMeteorIdRef.current
     let rainMix = rainActiveRef.current ? 1 : 0
     let snowMix = snowActiveRef.current ? 1 : 0
 
@@ -317,12 +325,13 @@ export function EmberScene({
 
       if (signal.scene === 'snow') {
         hasIgnited = true
-        for (let i = 0; i < 8; i++) {
-          spawnSpark(signal.index + Math.floor((Math.random() - 0.5) * 4), 0.92 + signal.strength * 0.20)
+        for (let i = 0; i < 14; i++) {
+          spawnSpark(signal.index + Math.floor((Math.random() - 0.5) * 6), 1.02 + signal.strength * 0.28)
         }
-        spawnSteam(signal.index, 0.24 + signal.strength * 0.14)
-        spawnLightningSteam(signal.index, 0.72 + signal.strength * 0.45)
-        spawnSmoke(signal.index, 0.26 + signal.strength * 0.18)
+        spawnSteam(signal.index, 0.34 + signal.strength * 0.20)
+        spawnLightningSteam(signal.index, 0.94 + signal.strength * 0.56)
+        spawnSmoke(signal.index, 0.42 + signal.strength * 0.24)
+        spawnSmoke(signal.index + (Math.random() < 0.5 ? -2 : 2), 0.28 + signal.strength * 0.18)
       } else if (signal.scene === 'ember') {
         // The Storm layer already preserves Ember's established strike heat.
         // This only guarantees the persistent fire simulation is awake.
@@ -413,9 +422,9 @@ export function EmberScene({
         const normalized = Math.abs(offset) / impactRadius
         const strength = Math.max(0, 1 - normalized * normalized)
 
-        pitchWorld.drifts[idx] = Math.max(0, pitchWorld.drifts[idx] - 3.8 * strength)
-        pitchWorld.water[idx] = Math.max(0, pitchWorld.water[idx] * (1 - strength * 0.76))
-        residue[idx] = Math.max(residue[idx], strength * 0.24)
+        pitchWorld.drifts[idx] = Math.max(0, pitchWorld.drifts[idx] - 9.2 * strength)
+        pitchWorld.water[idx] = Math.max(0, pitchWorld.water[idx] * (1 - strength * 0.82))
+        residue[idx] = Math.max(residue[idx], strength * 0.42)
       }
 
       targetY = surfaceYAt(targetX, width, height)
@@ -425,7 +434,7 @@ export function EmberScene({
         if (idx > 0 && idx < fire.length - 1) fire[idx] = Math.max(fire[idx], 0.85 - Math.abs(offset) * 0.12)
       }
 
-      fragments = Array.from({ length: 18 }, () => {
+      fragments = Array.from({ length: 24 }, () => {
         const angle = Math.PI * (1.08 + Math.random() * 0.84)
         const force = 1.6 + Math.random() * 4.8
         return {
@@ -485,7 +494,9 @@ export function EmberScene({
         }
 
         if (residue[i] > 0.20) {
-          heat = Math.max(heat, residue[i] * 0.16)
+          // Char remembers heat but is not an infinite fuel source. A burned
+          // patch can smoulder for a while, then cool into a visible scar.
+          heat = Math.max(heat, residue[i] * 0.045)
         }
 
         heat *= 1 - Math.min(0.32, moisture * 0.18)
@@ -514,7 +525,7 @@ export function EmberScene({
         totalHeat += fire[i]
 
         if (heat > 0.06) {
-          residue[i] = Math.min(1, residue[i] + heat * 0.0032 * scaled)
+          residue[i] = Math.min(1, residue[i] + heat * 0.00145 * scaled)
 
           const melt = Math.min(pitchWorld.drifts[i], heat * 0.176 * scaled)
           if (melt > 0) {
@@ -536,7 +547,7 @@ export function EmberScene({
             spawnSmoke(i, Math.max(heat, residue[i] * 0.8))
           }
         } else {
-          residue[i] = Math.max(0, residue[i] - 0.00018 * scaled)
+          residue[i] = Math.max(0, residue[i] - 0.000018 * scaled)
           if (residue[i] > 0.28 && Math.random() < 0.004 * scaled) {
             spawnSmoke(i, residue[i] * 0.7)
           }
@@ -833,6 +844,12 @@ export function EmberScene({
       const isActive = activeRef.current
       if (isActive && !wasActive) beginMeteor(time)
       wasActive = isActive
+
+      const externalId = externalMeteorIdRef.current
+      if (externalId > 0 && externalId !== lastExternalMeteorId) {
+        lastExternalMeteorId = externalId
+        beginMeteor(time)
+      }
 
       consumeWorldReset(time)
       consumeLightningStrike()

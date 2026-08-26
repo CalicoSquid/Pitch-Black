@@ -14,6 +14,46 @@ For a Git-connected Netlify site, deploy the repository/root folder as-is; Netli
 
 For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and upload the generated `dist` folder.
 
+## v1.35.0 weather breath
+
+- Alive Snow now develops as an actual front: a handful of flakes arrive first, then visible population and accumulation build progressively over roughly one to two minutes instead of switching on a pre-populated full-screen snow canvas.
+- Alive Snow now dissipates gradually as well, thinning to scattered final flakes while the accumulated terrain remains behind as evidence of the weather.
+- Alive Rain can now arrive in two natural ways: either a fast downpour or a slower building front. Both routes use drop population as well as opacity so a gradual start reads as light rain rather than a dim wall of rain.
+- Alive Rain always leaves with a long taper, progressively losing drops and sound before the final remnants disappear. Manual Snow/Rain remain responsive rather than inheriting the sleep-oriented Alive transition times.
+- Brightened the persistent Alive star field without increasing star count, keeping it restrained but comfortably visible from bedside distance.
+- Meteor timing and speed are intentionally unchanged in this pass.
+
+## v1.34.0 bedside controls
+
+- Restored the main dock as the single obvious control surface: Alive, Blackout, Snow, Rain, Ember, Moon, Storm, Fireflies, Clock, Sound, Fullscreen and More all live in one place.
+- Fullscreen is a first-class one-tap control again while double-click/double-tap remains a shortcut.
+- The top `this quiet world` wordmark is branding only. Settings now open from a dedicated More (`…`) button at the end of the dock, with the panel anchored above the controls.
+- Removed the floating `Alive •` status and the extra dot on the Alive button. The selected Alive button plus subdued manual controls provide the complete mode feedback.
+- Reworked first-visit guidance into comfortably readable, gentle onboarding that explains direct scene choice, Alive, and fullscreen without requiring discovery.
+- Mobile now keeps labels and horizontally scrolls the same dock model rather than collapsing controls into unlabeled icons.
+- Controls remain visible while settings are open, then auto-hide after inactivity; the desktop cursor disappears with them.
+- Removed the redundant `move or tap to wake controls` helper text.
+
+## v1.33.1 alive ambience
+
+- Alive now has a sparse persistent star field with independent slow twinkle, dimming naturally as fronts, rain, snow and storms move through. Stars are part of Alive itself rather than a new user-facing toggle.
+- Added a very quiet Alive-only nighttime audio bed when Sound is enabled: filtered night air plus restrained randomized cricket phrases during calm, clearing and early rain-front periods. Weather audio takes over naturally during rain, snow and storms.
+- Rebuilt the moon-veil event from separate soft organic cloud bodies, removing the rectangular compositor box that could become visible against pure black.
+- Shooting stars and meteor showers now travel much farther and more slowly, with longer trails. Their sky layer sits behind the terrain renderer, so low trajectories can continue naturally behind the horizon instead of simply terminating in mid-air.
+- Alive's first small event now arrives in roughly 12–26 seconds, with later micro-events roughly every 38–92 seconds.
+- The opening sequence now guarantees a real Rain or Snow phase within about 4.25 minutes. Later weather retains the slower overnight cadence.
+
+## v1.33.0 living world
+
+- Alive is now a complete autonomous state rather than an additive layer mode. Entering Alive clears manual atmosphere choices; touching Snow, Rain, Ember, Moon, Storm or Fireflies takes control back immediately.
+- Added persistent, restrained Alive feedback: a small live status and pulsing indicator while manual world controls visually step back. Clock, Sound and utility controls remain independent.
+- The Moon is now Alive's permanent visual anchor. Clouds and short moon-veils can obscure it, while occasional halos, firefly blooms, shooting stars and meteor showers create low-key activity between weather fronts.
+- Alive's first micro-event now arrives within seconds, later micro-events recur roughly every one to two minutes, and weather fronts arrive on a minutes-not-hours cadence.
+- Meteor showers are now distinct from rare actual impacts, so the sky can be active without constantly setting the terrain on fire.
+- Reworked long-term snow accumulation around multiple shallow local drift ceilings. Visible flakes contribute far less terrain, mature drifts compact toward low rolling banks, and older oversized snow profiles are gently repaired while snow is active.
+- Direct lightning strikes are now rarer than visible forks, but a ground hit in snow punches a broad crater, throws loose powder, leaves heat/char and a longer-lived glow, then gradually cools and can be reclaimed by later snow.
+- Meteor impacts now crater snow more decisively and leave a stronger but finite afterglow. Char remembers an impact without acting as permanent fuel.
+
 ## v1.32.0 quiet controls
 
 ### Alive overlay refinement
@@ -81,3 +121,8 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Clouds remain nearly black in ordinary darkness and lightning briefly exposes their folds/underside.
 - Short-landscape screens use a shallower ceiling profile to preserve sky composition.
 - Lightning bolt, thunder, wind and ground ecology behavior are unchanged.
+
+## v1.33.2 meteor tail hotfix
+
+- Meteor and shower tails now align opposite the actual screen-space trajectory in both directions.
+- Fixes left-moving meteors rendering their trails down/in front of the meteor head.

@@ -730,7 +730,7 @@
   border-radius: 50%;
   background: radial-gradient(circle, transparent 42%, rgba(206, 216, 224, .030) 54%, rgba(200, 211, 220, .018) 63%, transparent 72%);
   opacity: 0;
-  transition: opacity 80s ease;
+  transition: opacity 10s ease;
   pointer-events: none;
 }
 
@@ -748,7 +748,7 @@
   background: rgba(236, 241, 244, .82);
   box-shadow: 0 0 7px rgba(219, 229, 236, .26);
   opacity: 0;
-  z-index: 2;
+  z-index: 0;
   animation: alive-star-cross var(--alive-event-duration) cubic-bezier(.18,.72,.28,1) forwards;
 }
 
@@ -757,17 +757,17 @@
   position: absolute;
   right: 1px;
   top: 1px;
-  width: 64px;
+  width: clamp(92px, 10vw, 178px);
   height: 1px;
   transform-origin: right center;
-  transform: rotate(18deg) scaleX(var(--alive-star-dir));
-  background: linear-gradient(90deg, transparent, rgba(217, 227, 234, .20));
+  transform: rotate(var(--alive-tail-angle)) scaleX(var(--alive-star-dir));
+  background: linear-gradient(90deg, transparent, rgba(217, 227, 234, .25));
 }
 
 @keyframes alive-star-cross {
   0% { opacity: 0; transform: translate3d(0, 0, 0); }
-  10% { opacity: .82; }
-  72% { opacity: .64; }
+  7% { opacity: .82; }
+  82% { opacity: .60; }
   100% { opacity: 0; transform: translate3d(var(--alive-star-dx), var(--alive-star-dy), 0); }
 }
 
@@ -1007,4 +1007,393 @@
 
 .brand-whisper.has-active-utility .brand-menu-dots {
   color: rgba(255,255,255,.28);
+}
+
+
+/* v1.33 — Alive is a complete autonomous state, not an additive overlay mode. */
+.alive-status {
+  position: absolute;
+  left: 50%;
+  bottom: max(118px, calc(env(safe-area-inset-bottom) + 110px));
+  transform: translateX(-50%);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  color: rgba(255,255,255,.18);
+  font-size: 8px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  opacity: .58;
+  transition: opacity 500ms ease;
+}
+
+.alive-status.awake { opacity: .94; }
+
+.alive-status i,
+.control-dock .alive-control.alive-active::after {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(207, 226, 214, .72);
+  box-shadow: 0 0 8px rgba(183, 216, 195, .16);
+  animation: alive-live-pulse 3.8s ease-in-out infinite;
+}
+
+.control-dock .alive-control {
+  position: relative;
+}
+
+.control-dock .alive-control.alive-active::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+}
+
+.control-dock.alive-running .manual-world-control {
+  opacity: .30;
+}
+
+.control-dock.alive-running .manual-world-control:hover,
+.control-dock.alive-running .manual-world-control:focus-visible {
+  opacity: .78;
+}
+
+@keyframes alive-live-pulse {
+  0%, 100% { opacity: .40; transform: scale(.88); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+
+/* v1.33.1 — Alive always has a quiet night sky. Stars are ambience, not a
+   user-facing layer: sparse enough for OLED use, alive enough to prove the world is moving. */
+.alive-night-sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .90;
+  transition: opacity 12s ease;
+}
+
+.alive-night-sky[data-phase='rain-front'],
+.alive-night-sky[data-phase='cold-front'] { opacity: .42; }
+.alive-night-sky[data-phase='rain'] { opacity: .18; }
+.alive-night-sky[data-phase='storm'] { opacity: .035; }
+.alive-night-sky[data-phase='snow'] { opacity: .30; }
+.alive-night-sky[data-phase='clearing'] { opacity: .60; }
+
+.alive-night-sky i {
+  position: absolute;
+  left: var(--alive-star-left);
+  top: var(--alive-star-top);
+  width: var(--alive-star-size);
+  height: var(--alive-star-size);
+  border-radius: 50%;
+  background: rgba(225, 232, 236, var(--alive-star-opacity));
+  box-shadow: 0 0 3px rgba(213, 224, 230, .10);
+  opacity: .66;
+  animation: alive-star-twinkle var(--alive-star-twinkle) ease-in-out var(--alive-star-delay) infinite;
+}
+
+@keyframes alive-star-twinkle {
+  0%, 100% { opacity: .38; transform: scale(.88); }
+  48% { opacity: 1; transform: scale(1.05); }
+  66% { opacity: .64; transform: scale(.96); }
+}
+
+/* Passing high cloud is built from separate soft bodies. Keeping the blur on the
+   bodies instead of one filtered rectangle avoids the visible compositor box on black. */
+.alive-moon-veil {
+  position: absolute;
+  left: 50%;
+  top: 39.5%;
+  width: clamp(260px, 40vw, 470px);
+  height: clamp(104px, 16vw, 184px);
+  transform: translate(-88%, -50%);
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  animation: alive-moon-veil var(--alive-event-duration) ease-in-out forwards;
+}
+
+.alive-veil-cloud {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  background: rgba(3, 5, 7, .88);
+  box-shadow: 0 0 16px 8px rgba(3, 5, 7, .34);
+}
+.alive-veil-cloud.c1 { left: 6%;  top: 40%; width: 31%; height: 39%; transform: rotate(-5deg); }
+.alive-veil-cloud.c2 { left: 23%; top: 24%; width: 34%; height: 55%; transform: rotate(7deg); }
+.alive-veil-cloud.c3 { left: 45%; top: 35%; width: 30%; height: 43%; transform: rotate(-8deg); }
+.alive-veil-cloud.c4 { left: 63%; top: 28%; width: 28%; height: 50%; transform: rotate(5deg); }
+.alive-veil-cloud.c5 { left: 78%; top: 44%; width: 19%; height: 31%; transform: rotate(-4deg); }
+
+@keyframes alive-moon-veil {
+  0% { opacity: 0; transform: translate(-92%, -50%) scale(1.02); }
+  13% { opacity: .52; }
+  36% { opacity: .86; }
+  63% { opacity: .72; }
+  86% { opacity: .48; }
+  100% { opacity: 0; transform: translate(-8%, -47%) scale(1.07); }
+}
+
+.alive-meteor-shower {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.alive-meteor-shower-star {
+  position: absolute;
+  left: var(--alive-star-x);
+  top: var(--alive-star-y);
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: rgba(236, 241, 244, .76);
+  box-shadow: 0 0 6px rgba(219, 229, 236, .22);
+  opacity: 0;
+  animation: alive-star-cross var(--alive-star-duration) cubic-bezier(.18,.72,.28,1) var(--alive-star-delay) forwards;
+}
+
+.alive-meteor-shower-star::after {
+  content: '';
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: clamp(78px, 8vw, 142px);
+  height: 1px;
+  transform-origin: right center;
+  transform: rotate(var(--alive-tail-angle)) scaleX(var(--alive-star-dir));
+  background: linear-gradient(90deg, transparent, rgba(217, 227, 234, .22));
+}
+
+@media (max-width: 620px) {
+  .alive-status {
+    bottom: max(108px, calc(env(safe-area-inset-bottom) + 100px));
+  }
+  .alive-moon-veil { top: 37%; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .alive-status { bottom: max(82px, calc(env(safe-area-inset-bottom) + 76px)); }
+  .alive-moon-veil { top: 27%; width: clamp(180px, 58vh, 300px); height: clamp(72px, 24vh, 118px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alive-status i,
+  .control-dock .alive-control.alive-active::after,
+  .alive-night-sky i { animation: none; }
+  .alive-moon-veil,
+  .alive-meteor-shower { display: none; }
+}
+
+/* v1.34 — straightforward bedtime UX. Controls are obvious while awake and
+   disappear confidently when idle; the brand is branding again, not navigation. */
+.pitchblack.interface-asleep {
+  cursor: none;
+}
+
+.brand-whisper {
+  cursor: default;
+  pointer-events: none !important;
+  padding: 3px 6px;
+  color: rgba(255,255,255,.16);
+}
+
+.brand-whisper.visible {
+  pointer-events: none;
+}
+
+/* Alive communicates through the selected button state only. No floating
+   status label and no duplicate live dot competing with the terrain. */
+.alive-status {
+  display: none !important;
+}
+
+.control-dock .alive-control.alive-active::after {
+  display: none !important;
+  content: none;
+}
+
+.control-dock.alive-running .manual-world-control {
+  opacity: .42;
+}
+
+.control-dock.alive-running .manual-world-control:hover,
+.control-dock.alive-running .manual-world-control:focus-visible {
+  opacity: .88;
+}
+
+/* The utility panel now belongs to the dock's More button, so it opens above
+   the controls instead of dropping from an unrelated logo at the top. */
+.utility-panel {
+  top: auto;
+  bottom: max(92px, calc(env(safe-area-inset-bottom) + 82px));
+  transform: translate(-50%, 7px);
+  max-height: calc(100vh - 126px - env(safe-area-inset-top));
+}
+
+.utility-panel.visible {
+  transform: translate(-50%, 0);
+}
+
+/* Commit to one clear strip. Flex items never shrink into mystery icons;
+   smaller screens scroll the same model horizontally. */
+.control-dock {
+  width: max-content;
+  max-width: calc(100vw - 18px);
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.control-dock button {
+  flex: 0 0 auto;
+}
+
+.control-dock .more-control {
+  min-width: 48px;
+}
+
+/* First visit is gentle, not microscopic. It explains the two useful ideas
+   once: choose something directly, or hand the world to Alive. */
+.first-visit-whisper {
+  top: 46%;
+  gap: 10px;
+  width: min(88vw, 620px);
+  color: rgba(255,255,255,.42);
+}
+
+.first-visit-title {
+  font-size: clamp(18px, 2.2vw, 26px);
+  line-height: 1.2;
+  letter-spacing: .075em;
+  text-transform: none;
+  font-weight: 400;
+  color: rgba(255,255,255,.52);
+}
+
+.first-visit-hint {
+  max-width: 540px;
+  font-size: clamp(12px, 1.15vw, 14px);
+  line-height: 1.55;
+  letter-spacing: .025em;
+  text-transform: none;
+  text-align: center;
+  color: rgba(255,255,255,.30);
+}
+
+.first-visit-hint strong {
+  font-weight: 500;
+  color: rgba(255,255,255,.48);
+}
+
+.first-visit-secondary {
+  margin-top: 1px;
+  font-size: clamp(10px, .95vw, 12px);
+  line-height: 1.4;
+  letter-spacing: .04em;
+  text-transform: none;
+  color: rgba(255,255,255,.19);
+}
+
+/* Obsolete helper copy is intentionally gone from the DOM; keep legacy class
+   inert in case an old cached shell briefly overlaps a new stylesheet. */
+.hint {
+  display: none !important;
+}
+
+@media (max-width: 620px) {
+  .control-dock {
+    gap: 2px;
+    max-width: calc(100vw - 12px);
+    padding: 5px;
+  }
+
+  .control-dock button {
+    min-width: 54px;
+    height: 46px;
+    padding: 0 8px;
+  }
+
+  .control-dock button span {
+    display: block;
+    font-size: 7px;
+    letter-spacing: .055em;
+  }
+
+  .dock-divider {
+    margin: 0 1px;
+  }
+
+  .utility-panel {
+    top: auto;
+    bottom: max(88px, calc(env(safe-area-inset-bottom) + 78px));
+    width: min(420px, calc(100vw - 18px));
+    max-height: calc(100vh - 112px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .first-visit-whisper {
+    top: 43%;
+    width: min(90vw, 480px);
+  }
+
+  .first-visit-title {
+    font-size: clamp(17px, 5vw, 22px);
+  }
+
+  .first-visit-hint {
+    font-size: 12px;
+    max-width: 330px;
+  }
+
+  .first-visit-secondary {
+    font-size: 10px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .first-visit-whisper {
+    top: 38%;
+    gap: 6px;
+  }
+
+  .first-visit-title {
+    font-size: clamp(15px, 4vh, 20px);
+  }
+
+  .first-visit-hint,
+  .first-visit-secondary {
+    line-height: 1.25;
+  }
+
+  .utility-panel {
+    bottom: max(76px, calc(env(safe-area-inset-bottom) + 68px));
+    max-height: calc(100vh - 96px - env(safe-area-inset-top));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .utility-panel,
+  .control-dock,
+  .brand-whisper,
+  .first-visit-whisper {
+    transition-duration: 0ms;
+  }
+}
+
+.control-dock .more-glyph {
+  display: block;
+  margin-top: -2px;
+  font-size: 15px;
+  line-height: 15px;
+  font-weight: 400;
+  letter-spacing: .08em;
+  color: currentColor;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { fireflySignal } from '../world/fireflySignal'
+import { lightningGroundStrikeSignal } from '../world/lightningSignal'
 import { ensureWorld, pitchWorld, snowSurfaceYAtIndex, stormSignal } from '../world/worldState'
 
 type Flake = {
@@ -18,6 +19,7 @@ type Flake = {
   seed: number
   arms: number
   branch: number
+  presence: number
 }
 
 type WindState = {
@@ -41,15 +43,17 @@ type LoosePowder = {
 }
 
 
-export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed: number; active: boolean }) {
+export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean; speed: number; active: boolean; alive: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
+  const aliveRef = useRef(alive)
   const soundOnRef = useRef(soundOn)
   const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; source: AudioBufferSourceNode } | null>(null)
 
   useEffect(() => {
     activeRef.current = active
-  }, [active])
+    aliveRef.current = alive
+  }, [active, alive])
 
   useEffect(() => {
     soundOnRef.current = soundOn
@@ -114,6 +118,7 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
     let dpr = Math.min(window.devicePixelRatio || 1, 2)
     let flakes: Flake[] = []
     let loosePowder: LoosePowder[] = []
+    let lastLightningVersion = lightningGroundStrikeSignal.version
     let drifts = pitchWorld.drifts
     let driftSnapshot = new Float32Array(drifts.length)
     let idleCleared = false
@@ -128,8 +133,22 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
     let depositionCarry = 0
     let snowfallIntensity = 0.78
     let snowfallTarget = 0.78
+    let currentSnowfallMix = activeRef.current && !aliveRef.current ? 1 : 0
     let nextSnowfallShift = performance.now() + 12000
     const driftPatternPhase = Math.random() * Math.PI * 2
+
+    const snowDepthCeiling = () => Math.min(52, Math.max(28, height * 0.06))
+
+    const driftCapAt = (index: number, windShift = 0) => {
+      const sample = index - windShift
+      const broad = Math.sin(sample * 0.040 + driftPatternPhase) * 0.46
+      const middle = Math.sin(sample * 0.083 + driftPatternPhase * 1.43 + 1.15) * 0.28
+      const long = Math.sin(sample * 0.018 + driftPatternPhase * 0.67 + 2.2) * 0.26
+      const shaped = Math.max(0, Math.min(1, 0.50 + broad + middle + long))
+      const soft = shaped * shaped * (3 - 2 * shaped)
+      const ceiling = snowDepthCeiling()
+      return 7 + soft * (ceiling - 7)
+    }
 
 
     const createFlake = (randomY = false): Flake => {
@@ -150,6 +169,7 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
         seed: Math.random() * 1000,
         arms: 6,
         branch: 0.42 + Math.random() * 0.28,
+        presence: Math.random(),
       }
     }
 
@@ -172,16 +192,16 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
     const settle = (flake: Flake) => {
       const idx = Math.max(3, Math.min(drifts.length - 4, Math.floor(flake.x / 6)))
-      const maxDepth = Math.min(118, Math.max(58, height * 0.12))
-      const amount = flake.size * (0.42 + flake.depth * 0.22) * weatherMix
+      // Visible flakes should suggest accumulation, not secretly build mountains.
+      // Most long-term accumulation is handled by depositWorldSnow below.
+      const amount = flake.size * (0.034 + flake.depth * 0.022) * currentSnowfallMix
 
-      drifts[idx] = Math.min(maxDepth, drifts[idx] + amount)
-      drifts[idx - 1] = Math.min(maxDepth, drifts[idx - 1] + amount * 0.62)
-      drifts[idx + 1] = Math.min(maxDepth, drifts[idx + 1] + amount * 0.62)
-      drifts[idx - 2] = Math.min(maxDepth, drifts[idx - 2] + amount * 0.30)
-      drifts[idx + 2] = Math.min(maxDepth, drifts[idx + 2] + amount * 0.30)
-      drifts[idx - 3] = Math.min(maxDepth, drifts[idx - 3] + amount * 0.10)
-      drifts[idx + 3] = Math.min(maxDepth, drifts[idx + 3] + amount * 0.10)
+      for (let offset = -3; offset <= 3; offset++) {
+        const i = idx + offset
+        const falloff = offset === 0 ? 1 : offset === -1 || offset === 1 ? 0.62 : offset === -2 || offset === 2 ? 0.30 : 0.10
+        const cap = driftCapAt(i)
+        drifts[i] = Math.min(cap, drifts[i] + amount * falloff)
+      }
     }
 
     const updateWind = (time: number) => {
@@ -217,10 +237,15 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
       for (let i = 2; i < drifts.length - 2; i++) {
         // Five samples only: enough diffusion for rounded, pillow-like banks
         // without the expensive contour work that hurt earlier snow builds.
-        drifts[i] =
+        const smoothed =
           copy[i] * 0.78 +
           (copy[i - 1] + copy[i + 1]) * 0.08 +
           (copy[i - 2] + copy[i + 2]) * 0.03
+
+        // Fresh burns protect their little crater from immediately being ironed
+        // flat by the normal snow diffusion. As heat/char fades, snow can heal it.
+        const scarMemory = Math.min(0.92, pitchWorld.ember[i] * 0.48 + pitchWorld.char[i] * 0.92)
+        drifts[i] = smoothed * (1 - scarMemory) + copy[i] * scarMemory
 
         const rightSlope = drifts[i] - drifts[i + 1]
         if (rightSlope > 5.4) {
@@ -328,55 +353,97 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
       }
     }
 
-    const depositWorldSnow = (dt: number, simTime: number) => {
+    const reshapeMatureDrifts = () => {
+      if (frame % 12 !== 0) return
+      const currentWind = effectiveWind()
+      const windShift = currentWind * 6.0
+
+      for (let i = 3; i < drifts.length - 3; i++) {
+        const cap = driftCapAt(i, windShift)
+        const excess = drifts[i] - cap
+        if (excess <= 0) continue
+
+        // Snow compacts and redistributes once a drift is mature. The visible
+        // landscape therefore approaches several shallow banks instead of one
+        // ever-growing pillow across the whole screen. This also gently repairs
+        // oversized terrain saved by older builds.
+        drifts[i] -= Math.min(0.24, excess * 0.085)
+      }
+    }
+
+    const depositWorldSnow = (dt: number, simTime: number, snowfallMix: number) => {
       if (simTime > nextSnowfallShift) {
         snowfallTarget = 0.72 + Math.random() * 0.38
         nextSnowfallShift = simTime + 12000 + Math.random() * 22000
       }
       snowfallIntensity += (snowfallTarget - snowfallIntensity) * 0.0018
 
-      if (weatherMix <= 0.002) return
+      if (snowfallMix <= 0.002) return
 
       // Background deposition is intentionally decoupled from visible flakes.
       // It runs at ~11Hz over the small 6px terrain grid: cheap, predictable,
       // and fast enough that a few real minutes create an actual snow world.
-      depositionCarry += dt * weatherMix
-      const depositionIntervalMs = 88
-      const maxDepth = Math.min(118, Math.max(58, height * 0.12))
+      depositionCarry += dt * snowfallMix
+      const depositionIntervalMs = 92
 
       while (depositionCarry >= depositionIntervalMs) {
         depositionCarry -= depositionIntervalMs
 
         const currentWind = effectiveWind()
-        const windShift = currentWind * 7.5
+        const windShift = currentWind * 6.0
         const direction = currentWind >= 0 ? 1 : -1
-        const baseAmount = 0.021 + snowfallIntensity * 0.0105
+        const baseAmount = 0.0085 + snowfallIntensity * 0.0065
 
         for (let i = 3; i < drifts.length - 3; i++) {
           const sample = i - windShift
+          const cap = driftCapAt(i, windShift)
+          const room = Math.max(0, cap - drifts[i])
+          if (room <= 0.01) continue
 
-          // Two very low-frequency waves make large pillow-like banks rather
-          // than a uniform white strip or lots of tiny videogame bumps.
-          const broadA =
-            (Math.sin(sample * 0.052 + driftPatternPhase) + 1) * 0.5
-          const broadB =
-            (Math.sin(sample * 0.021 + driftPatternPhase * 1.71 + 1.4) + 1) * 0.5
-          const bankShape = 0.28 + broadA * 0.70 + broadB * 0.30
+          const broadA = (Math.sin(sample * 0.046 + driftPatternPhase + 0.4) + 1) * 0.5
+          const broadB = (Math.sin(sample * 0.091 + driftPatternPhase * 1.37 + 2.0) + 1) * 0.5
+          const bankShape = 0.62 + broadA * 0.28 + broadB * 0.18
 
-          // Small leeward preference means gusts slowly change where snow
-          // fattens up, while keeping the profile broad and stable.
           const upwind = Math.max(1, Math.min(drifts.length - 2, i - direction * 2))
           const downwind = Math.max(1, Math.min(drifts.length - 2, i + direction * 2))
           const shelterDelta = pitchWorld.ground[upwind] - pitchWorld.ground[downwind]
-          const shelter = Math.max(0.82, Math.min(1.18, 1 + shelterDelta * 0.018 * Math.abs(currentWind)))
+          const shelter = Math.max(0.86, Math.min(1.14, 1 + shelterDelta * 0.015 * Math.abs(currentWind)))
 
-          // Existing banks catch a touch more powder, which lets soft drifts
-          // emerge without making sharp runaway peaks.
-          const capture = 0.94 + Math.min(0.16, (drifts[i] / maxDepth) * 0.16)
-          const amount = baseAmount * bankShape * shelter * capture * snowfallIntensity
+          // Hot/scorched ground resists fresh powder. Once the scar cools, snow
+          // gradually wins and buries the history naturally.
+          const heatMemory = Math.min(1, pitchWorld.ember[i] * 0.74 + pitchWorld.char[i] * 0.82)
+          const thermalBlock = Math.max(0.05, 1 - heatMemory)
+          const roomFactor = Math.max(0.18, Math.min(1, room / Math.max(1, cap * 0.58)))
+          const amount = baseAmount * bankShape * shelter * snowfallIntensity * roomFactor * thermalBlock
 
-          drifts[i] = Math.min(maxDepth, drifts[i] + amount)
+          drifts[i] = Math.min(cap, drifts[i] + amount)
         }
+      }
+    }
+
+    const consumeLightningStrike = () => {
+      const signal = lightningGroundStrikeSignal
+      if (signal.version === lastLightningVersion) return
+      lastLightningVersion = signal.version
+      if (signal.scene !== 'snow') return
+
+      const centerY = snowSurfaceYAtIndex(signal.index, height) - 2
+      const count = 12 + Math.floor(signal.strength * 9)
+      for (let i = 0; i < count && loosePowder.length < 64; i++) {
+        const side = Math.random() < 0.5 ? -1 : 1
+        const maxLife = 68 + Math.random() * 82
+        loosePowder.push({
+          x: signal.x + (Math.random() - 0.5) * (10 + signal.strength * 8),
+          y: centerY - Math.random() * 3,
+          vx: side * (0.36 + Math.random() * 1.15) * (0.8 + signal.strength * 0.5),
+          vy: -(0.22 + Math.random() * 0.78 + signal.strength * 0.18),
+          life: maxLife,
+          maxLife,
+          alpha: 0.075 + Math.random() * 0.09,
+          size: 0.42 + Math.random() * 0.86,
+          phase: Math.random() * Math.PI * 2,
+          swirl: 0.045 + Math.random() * 0.09,
+        })
       }
     }
 
@@ -424,12 +491,15 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
     }
 
     const drawDrifts = (_time: number) => {
-      pitchWorld.wetness = Math.max(0, pitchWorld.wetness - 0.00025 * speed * weatherMix)
+      pitchWorld.wetness = Math.max(0, pitchWorld.wetness - 0.00025 * speed * currentSnowfallMix)
     }
 
     let lastFrameTime = performance.now()
     let simTime = performance.now()
-    let weatherMix = activeRef.current ? 1 : 0
+    let weatherMix = activeRef.current && !aliveRef.current ? 1 : 0
+    let wasActive = activeRef.current
+    let aliveRiseTau = 34_000 + Math.random() * 8_000
+    let aliveFallTau = 24_000 + Math.random() * 7_000
 
     const draw = (time: number) => {
       frame += 1
@@ -437,13 +507,42 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
       lastFrameTime = time
       simTime += dt * speed
 
-      const targetMix = activeRef.current ? 1 : 0
-      const blend = 1 - Math.exp(-dt / 900)
+      const nowActive = activeRef.current
+      if (nowActive && !wasActive) {
+        if (aliveRef.current) {
+          // Alive snow should arrive as weather rather than a switched canvas:
+          // first flakes, then a steadily thickening fall over roughly 1–2 minutes.
+          aliveRiseTau = 30_000 + Math.random() * 12_000
+          aliveFallTau = 23_000 + Math.random() * 8_000
+          for (let i = 0; i < flakes.length; i++) {
+            flakes[i].y = -18 - Math.random() * Math.min(150, height * 0.18)
+          }
+        }
+      }
+      wasActive = nowActive
+
+      const targetMix = nowActive ? 1 : 0
+      const transitionTau = aliveRef.current
+        ? (nowActive ? aliveRiseTau : aliveFallTau)
+        : 520
+      const blend = 1 - Math.exp(-dt / transitionTau)
       weatherMix += (targetMix - weatherMix) * blend
+
+      // Density is deliberately steeper than opacity in Alive: the beginning of
+      // a snow front is a handful of readable flakes, not a full blizzard at 8% alpha.
+      const snowfallMix = aliveRef.current
+        ? (nowActive
+          ? Math.pow(Math.max(0, weatherMix), 2.8)
+          : Math.pow(Math.max(0, weatherMix), 1.35))
+        : weatherMix
+      currentSnowfallMix = snowfallMix
+      const visualAlpha = aliveRef.current
+        ? (nowActive ? 0.58 + weatherMix * 0.42 : Math.sqrt(Math.max(0, weatherMix)))
+        : weatherMix
 
       const currentAudio = audioRef.current
       if (currentAudio) {
-        const targetGain = soundOnRef.current ? 0.035 * weatherMix : 0
+        const targetGain = soundOnRef.current ? 0.035 * snowfallMix : 0
         if (currentAudio.gain !== lastAudioGainNode) {
           lastAudioGainNode = currentAudio.gain
           lastAudioTargetGain = Number.NaN
@@ -468,7 +567,8 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
       idleCleared = false
       ctx.clearRect(0, 0, width, height)
-      ctx.globalAlpha = weatherMix
+      ctx.globalAlpha = visualAlpha
+      consumeLightningStrike()
       updateWind(simTime)
       const activeWind = effectiveWind()
 
@@ -485,6 +585,11 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
 
         const driftIdx = Math.max(0, Math.min(drifts.length - 1, Math.floor(f.x / 6)))
         const floor = snowSurfaceYAtIndex(driftIdx, height) - 1
+        const participating = f.presence <= snowfallMix
+        if (!participating) {
+          if (f.y >= floor) flakes[i] = createFlake(false)
+          continue
+        }
         const localHeat = pitchWorld.ember[driftIdx] || 0
         const heatZone = 10 + localHeat * 54
 
@@ -533,7 +638,8 @@ export function SnowScene({ soundOn, speed, active }: { soundOn: boolean; speed:
         drawFlake(f)
       }
 
-      depositWorldSnow(dt, simTime)
+      depositWorldSnow(dt, simTime, snowfallMix)
+      reshapeMatureDrifts()
       erodeDrifts()
       combDriftCrests()
       smoothDrifts()
