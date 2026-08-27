@@ -8,6 +8,7 @@ import {
   saveWorld,
   stormSignal,
   surfaceYAt,
+  worldBaseY,
   worldIndexAt,
 } from '../world/worldState'
 
@@ -92,6 +93,155 @@ function fbm2D(x: number, y: number, seed: number) {
   }
 
   return total / normalizer
+}
+
+
+
+function distantRidgeY(x: number, width: number, height: number, layer: 'far' | 'mid' | 'near') {
+  const nx = x / Math.max(1, width)
+
+  if (layer === 'far') {
+    const broad = fbm2D(nx * 1.22 + 2.4, 3.1, 143.7)
+    const detail = fbm2D(nx * 2.9 + 6.8, 1.9, 211.3)
+    return height * (0.648 + broad * 0.022 + detail * 0.006)
+  }
+
+  if (layer === 'mid') {
+    const broad = fbm2D(nx * 1.58 + 5.9, 2.5, 317.9)
+    const detail = fbm2D(nx * 4.4 + 1.2, 6.4, 401.6)
+    return height * (0.705 + broad * 0.026 + detail * 0.008)
+  }
+
+  const broad = fbm2D(nx * 1.92 + 8.7, 2.1, 517.3)
+  const detail = fbm2D(nx * 5.3 + 4.2, 4.6, 611.8)
+  return height * (0.762 + broad * 0.030 + detail * 0.009)
+}
+
+function drawConifer(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  baseY: number,
+  height: number,
+  width: number,
+  lean: number,
+  alpha: number,
+) {
+  const topX = x + lean * height * 0.10
+
+  ctx.save()
+  ctx.fillStyle = `rgba(0, 1, 2, ${alpha})`
+  ctx.beginPath()
+  ctx.moveTo(topX, baseY - height)
+  ctx.lineTo(x - width * 0.26, baseY - height * 0.76)
+  ctx.lineTo(x - width * 0.54, baseY - height * 0.55)
+  ctx.lineTo(x - width * 0.18, baseY - height * 0.58)
+  ctx.lineTo(x - width * 0.92, baseY - height * 0.22)
+  ctx.lineTo(x - width * 0.16, baseY - height * 0.18)
+  ctx.lineTo(x - width * 0.08, baseY)
+  ctx.lineTo(x + width * 0.08, baseY)
+  ctx.lineTo(x + width * 0.14, baseY - height * 0.18)
+  ctx.lineTo(x + width * 0.88, baseY - height * 0.22)
+  ctx.lineTo(x + width * 0.24, baseY - height * 0.58)
+  ctx.lineTo(x + width * 0.56, baseY - height * 0.53)
+  ctx.lineTo(x + width * 0.30, baseY - height * 0.77)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawDistantDepth(ctx: CanvasRenderingContext2D, width: number, height: number, power: number) {
+  const reveal = smoothStep(clamp01(power))
+  if (reveal < 0.002) return
+
+  const foregroundY = worldBaseY(height)
+  const landscapeFloor = Math.max(height * 0.79, foregroundY - 7)
+  const shortLandscape = width > height * 1.35 && height <= 520
+
+  ctx.save()
+
+  // Keep the reveal concentrated around the horizon so the eye reads newly
+  // discovered space, not a second generic lightning wash.
+  const horizonGlow = ctx.createLinearGradient(0, height * 0.47, 0, foregroundY)
+  horizonGlow.addColorStop(0, 'rgba(153, 170, 183, 0)')
+  horizonGlow.addColorStop(0.35, `rgba(153, 170, 183, ${0.028 * reveal})`)
+  horizonGlow.addColorStop(0.66, `rgba(176, 191, 202, ${0.110 * reveal})`)
+  horizonGlow.addColorStop(1, `rgba(144, 159, 171, ${0.022 * reveal})`)
+  ctx.fillStyle = horizonGlow
+  ctx.fillRect(0, height * 0.46, width, Math.max(1, foregroundY - height * 0.46))
+
+  const drawRidge = (layer: 'far' | 'mid' | 'near', step: number, fill: string) => {
+    ctx.beginPath()
+    ctx.moveTo(0, landscapeFloor)
+    for (let x = 0; x <= width + step; x += step) {
+      const px = Math.min(width, x)
+      ctx.lineTo(px, distantRidgeY(px, width, height, layer))
+    }
+    ctx.lineTo(width, landscapeFloor)
+    ctx.closePath()
+    ctx.fillStyle = fill
+    ctx.fill()
+  }
+
+  const farReveal = smoothStep(clamp01((reveal - 0.16) / 0.84))
+  const midReveal = smoothStep(clamp01((reveal - 0.06) / 0.94))
+
+  if (farReveal > 0.01) {
+    drawRidge('far', Math.max(12, width / 66), `rgba(28, 33, 37, ${0.16 * farReveal})`)
+  }
+  if (midReveal > 0.01) {
+    drawRidge('mid', Math.max(10, width / 78), `rgba(13, 16, 19, ${0.30 * midReveal})`)
+  }
+  drawRidge('near', Math.max(8, width / 92), `rgba(1, 2, 3, ${0.90 * reveal})`)
+
+  // Add a very subtle atmospheric shelf between the two most distant bands so the
+  // reveal feels like depth receding into darkness rather than one flat backdrop.
+  if (farReveal > 0.01) {
+    const haze = ctx.createLinearGradient(0, height * 0.58, 0, height * 0.78)
+    haze.addColorStop(0, `rgba(190, 200, 208, ${0.014 * farReveal})`)
+    haze.addColorStop(0.55, `rgba(145, 158, 170, ${0.010 * farReveal})`)
+    haze.addColorStop(1, 'rgba(145, 158, 170, 0)')
+    ctx.fillStyle = haze
+    ctx.fillRect(0, height * 0.56, width, foregroundY - height * 0.56)
+  }
+
+  // Trees are clustered and sparse, with long empty stretches. The shape/placement
+  // is deterministic so lightning reveals the same hidden landscape each time.
+  const clumpCount = Math.max(3, Math.min(6, Math.round(width / (shortLandscape ? 250 : 220))))
+  for (let c = 0; c < clumpCount; c++) {
+    const start = width * (0.06 + seededFrac(801.3 + c * 21.2) * 0.78)
+    const span = width * (0.08 + seededFrac(877.4 + c * 17.9) * (shortLandscape ? 0.12 : 0.16))
+    const clumpLayer: 'near' = 'near'
+    const count = 2 + Math.floor(seededFrac(992.4 + c * 9.6) * (clumpLayer === 'near' ? 4 : 3))
+
+    for (let i = 0; i < count; i++) {
+      const local = count === 1 ? 0.5 : i / Math.max(1, count - 1)
+      const offset = (seededFrac(1071.8 + c * 37.1 + i * 19.3) - 0.5) * span * 0.22
+      const x = Math.max(width * 0.03, Math.min(width * 0.97, start + span * local + offset))
+      const ridgeY = distantRidgeY(x, width, height, clumpLayer)
+      const heightScale = 1
+      const treeHeight = ((shortLandscape ? 8 : 11) + seededFrac(1148.3 + c * 23.8 + i * 15.6) * (shortLandscape ? 12 : 18)) * heightScale
+      const treeWidth = treeHeight * (0.18 + seededFrac(1234.6 + c * 18.4 + i * 10.1) * 0.10)
+      const lean = (seededFrac(1307.1 + c * 27.3 + i * 16.9) - 0.5) * 0.60
+      const alpha = 0.96 * reveal * (0.88 + seededFrac(1412.8 + c * 12.5 + i * 17.4) * 0.18)
+      const baseY = ridgeY
+      drawConifer(ctx, x, baseY, treeHeight, treeWidth, lean, alpha)
+    }
+  }
+
+  // A handful of isolated sentinels stop the treeline from reading as neat clusters.
+  const solitaryCount = shortLandscape ? 2 : 3
+  for (let i = 0; i < solitaryCount; i++) {
+    const x = width * (0.10 + seededFrac(1612.4 + i * 41.7) * 0.80)
+    const layer: 'near' = 'near'
+    const ridgeY = distantRidgeY(x, width, height, layer)
+    const treeHeight = (shortLandscape ? 15 : 21) * (0.86 + seededFrac(1755.7 + i * 15.3) * 0.28)
+    const treeWidth = treeHeight * (0.18 + seededFrac(1833.9 + i * 12.2) * 0.08)
+    const lean = (seededFrac(1884.2 + i * 19.4) - 0.5) * 0.46
+    const alpha = 0.92 * reveal
+    drawConifer(ctx, x, ridgeY, treeHeight, treeWidth, lean, alpha)
+  }
+
+  ctx.restore()
 }
 
 function createTintedCanvas(width: number, height: number) {
@@ -235,17 +385,20 @@ export function StormLayer({
   scene,
   soundOn,
   groundStrikeChance = 0.42,
+  depthRevealEventId = 0,
 }: {
   active: boolean
   scene: Scene
   soundOn: boolean
   groundStrikeChance?: number
+  depthRevealEventId?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
   const sceneRef = useRef(scene)
   const soundOnRef = useRef(soundOn)
   const groundStrikeChanceRef = useRef(groundStrikeChance)
+  const depthRevealEventIdRef = useRef(depthRevealEventId)
   const rumbleRef = useRef<{
     ctx: AudioContext
     deepGain: GainNode
@@ -274,6 +427,10 @@ export function StormLayer({
   useEffect(() => {
     groundStrikeChanceRef.current = Math.max(0, Math.min(1, groundStrikeChance))
   }, [groundStrikeChance])
+
+  useEffect(() => {
+    depthRevealEventIdRef.current = depthRevealEventId
+  }, [depthRevealEventId])
 
   useEffect(() => {
     if (!active || !soundOn) {
@@ -380,6 +537,11 @@ export function StormLayer({
     let nextDistantThunder = performance.now() + 3800 + Math.random() * 4800
     let flashStarted = -1
     let flashPower = 0
+    let depthRevealStarted = -1
+    let depthRevealPower = 0
+    let forcedVisualUntil = -1
+    let nextNaturalDepthReveal = performance.now() + between(42_000, 88_000)
+    let lastDepthRevealEventId = depthRevealEventIdRef.current
     let boltUntil = -1
     let boltPaths: BoltPath[] = []
     let canvasCleared = false
@@ -596,7 +758,12 @@ export function StormLayer({
           const melted = Math.min(pitchWorld.drifts[i], (18 + strength * 14) * crater)
           pitchWorld.drifts[i] = Math.max(0, pitchWorld.drifts[i] - melted)
           pitchWorld.water[i] = Math.min(11, pitchWorld.water[i] + melted * 0.10)
+          if (pitchWorld.waterOpen.length === pitchWorld.water.length) {
+            pitchWorld.waterOpen[i] = Math.max(pitchWorld.waterOpen[i], Math.min(1, crater * (0.72 + strength * 0.18)))
+          }
+          pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - crater * (0.72 + strength * 0.20))
         }
+        pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - 0.010 * strength)
 
         for (let offset = -7; offset <= 7; offset++) {
           const i = idx + offset
@@ -607,12 +774,30 @@ export function StormLayer({
           pitchWorld.char[i] = Math.max(pitchWorld.char[i], (0.18 + strength * 0.52) * heat)
         }
       } else if (strikeScene === 'rain') {
-        for (let offset = -4; offset <= 4; offset++) {
+        for (let offset = -10; offset <= 10; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.water.length - 2) continue
-          const falloff = Math.max(0, 1 - Math.abs(offset) / 5)
-          const evaporated = Math.min(pitchWorld.water[i], 0.72 * strength * falloff)
+          const falloff = Math.max(0, 1 - Math.abs(offset) / 11)
+          const boil = Math.pow(falloff, 1.35)
+          const evaporated = Math.min(pitchWorld.water[i], (1.20 + strength * 0.85) * boil)
           pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - evaporated)
+          pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - boil * (0.88 + strength * 0.22))
+          if (pitchWorld.waterOpen.length === pitchWorld.water.length) {
+            pitchWorld.waterOpen[i] = Math.max(pitchWorld.waterOpen[i], Math.min(1, boil * (0.82 + strength * 0.22)))
+          }
+        }
+        pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - 0.018 * strength)
+
+        // A direct strike can expose and ignite the ground beneath shallow water.
+        // The water still resists spread; EmberScene must keep boiling openings
+        // outward before the fire can travel across the floodplain.
+        for (let offset = -6; offset <= 6; offset++) {
+          const i = idx + offset
+          if (i <= 1 || i >= pitchWorld.ember.length - 2) continue
+          const falloff = Math.max(0, 1 - Math.abs(offset) / 7)
+          const heat = Math.pow(falloff, 1.28)
+          pitchWorld.ember[i] = Math.max(pitchWorld.ember[i], (0.88 + strength * 0.24) * heat)
+          pitchWorld.char[i] = Math.max(pitchWorld.char[i], (0.10 + strength * 0.24) * heat)
         }
       } else if (strikeScene === 'ember') {
         for (let offset = -3; offset <= 3; offset++) {
@@ -621,11 +806,28 @@ export function StormLayer({
           const falloff = Math.max(0, 1 - Math.abs(offset) / 4)
           pitchWorld.ember[i] = Math.max(pitchWorld.ember[i], (0.70 + strength * 0.18) * falloff)
           pitchWorld.char[i] = Math.max(pitchWorld.char[i], 0.08 * falloff)
+          if (pitchWorld.waterOpen.length === pitchWorld.water.length && pitchWorld.waterLevel > 0.025) {
+            pitchWorld.waterOpen[i] = Math.max(pitchWorld.waterOpen[i], falloff * 0.62)
+          }
         }
       }
 
       publishLightningGroundStrike(idx, x, strength, strikeScene)
       saveWorld()
+    }
+
+    const triggerDepthReveal = (time: number, ambient = false) => {
+      depthRevealStarted = time
+      depthRevealPower = ambient ? 0.82 + Math.random() * 0.16 : 0.72 + Math.random() * 0.22
+
+      if (!ambient) return
+
+      // Alive can reveal the landscape with lightning beyond the visible frame.
+      // Give the horizon a brief exposure without inventing an on-screen bolt.
+      flashStarted = time
+      flashPower = 0.74 + Math.random() * 0.14
+      forcedVisualUntil = time + 520
+      if (soundOnRef.current) distantThunder()
     }
 
     const strike = (time: number) => {
@@ -669,6 +871,12 @@ export function StormLayer({
       flashStarted = time
       flashPower = 0.92 + strength * 0.16
       boltUntil = time + 210
+      // Only an occasional strong strike exposes the hidden landscape. The
+      // cooldown prevents a burst of lightning from repeating the trick.
+      if (time >= nextNaturalDepthReveal && strength > 0.89 && Math.random() < 0.13) {
+        triggerDepthReveal(time)
+        nextNaturalDepthReveal = time + between(105_000, 195_000)
+      }
       if (grounded) {
         strikeWorld(targetX, strength)
         thunder(strength)
@@ -728,6 +936,12 @@ export function StormLayer({
       const tau = target > stormMix ? 2700 : 2200
       const blend = 1 - Math.exp(-dt / tau)
       stormMix += (target - stormMix) * blend
+
+      const requestedDepthReveal = depthRevealEventIdRef.current
+      if (requestedDepthReveal !== lastDepthRevealEventId) {
+        lastDepthRevealEventId = requestedDepthReveal
+        if (requestedDepthReveal > 0) triggerDepthReveal(time, true)
+      }
 
       if (activeRef.current && !wasActive) {
         activationTime = time
@@ -798,7 +1012,16 @@ export function StormLayer({
       if (time - lastCloudFrame < 40 && time > boltUntil) return
       lastCloudFrame = time
 
-      if (cloudCoverage < 0.003 && time > boltUntil) {
+      let depthReveal = 0
+      if (depthRevealStarted >= 0) {
+        const age = time - depthRevealStarted
+        const primary = age < 82 ? 1 - age / 82 : 0
+        const secondary = age > 96 && age < 228 ? 0.62 * (1 - (age - 96) / 132) : 0
+        const afterimage = age > 228 && age < 430 ? 0.16 * (1 - (age - 228) / 202) : 0
+        depthReveal = Math.max(primary, secondary, afterimage) * depthRevealPower
+      }
+
+      if (cloudCoverage < 0.003 && time > boltUntil && depthReveal < 0.002) {
         if (!canvasCleared) {
           ctx.clearRect(0, 0, width, height)
           canvasCleared = true
@@ -826,14 +1049,18 @@ export function StormLayer({
       if (mainLayer) drawDensityLayer(mainLayer, time, flash)
       ctx.globalAlpha = 1
 
+      const forcedVisualMix = time < forcedVisualUntil ? 1 : 0
+      const visualMix = Math.max(stormMix, forcedVisualMix)
       if (flash > 0) {
-        ctx.fillStyle = `rgba(205, 218, 229, ${0.085 * flash * stormMix})`
+        ctx.fillStyle = `rgba(205, 218, 229, ${0.085 * flash * visualMix})`
         ctx.fillRect(0, 0, width, height)
       }
+
+      if (depthReveal > 0.001) drawDistantDepth(ctx, width, height, depthReveal * visualMix)
       stormSignal.flash = flash * stormMix
 
       if (time < boltUntil && boltPaths.length > 0) {
-        const fade = Math.max(0, (boltUntil - time) / 210) * stormMix
+        const fade = Math.max(0, (boltUntil - time) / 210) * visualMix
         for (const path of boltPaths) {
           if (path.points.length < 2) continue
           ctx.beginPath()

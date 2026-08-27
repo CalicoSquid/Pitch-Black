@@ -1,6 +1,7 @@
 import {
   groundSurfaceYAtIndex,
   snowSurfaceYAtIndex,
+  standingWaterSurfaceY,
   pitchWorld,
   terrainClearanceLiftAtIndex,
   worldBaseY,
@@ -39,46 +40,53 @@ export function drawFrozenSkin(
   const ice = pitchWorld.ice
   if (ice.length < 3) return
 
+  const waterY = standingWaterSurfaceY(height)
+  if (!Number.isFinite(waterY)) return
+
   const brightness = Math.max(0.18, light)
+  const stepX = 6
 
-  // Ice in this world is intentionally not a new coloured material. It is a
-  // hair-thin glassy skin riding the existing terrain/snow contour. Short,
-  // deterministic breaks keep it from reading as a UI line on flat ground.
+  // Ice remains one perfectly level plane, but hot spots can boil clean openings
+  // through it. We render short level shelves with soft opacity falloff rather
+  // than bending the surface down toward the exposed ground.
   for (let i = 1; i < ice.length; i++) {
+    const x1 = Math.min(width, (i - 1) * stepX)
+    const x2 = Math.min(width, i * stepX)
+    if (x2 <= x1) continue
+
+    const open = Math.max(0, Math.min(1, ((pitchWorld.waterOpen[i - 1] || 0) + (pitchWorld.waterOpen[i] || 0)) * 0.5))
     const localSnow = (pitchWorld.drifts[i - 1] + pitchWorld.drifts[i]) * 0.5
-    const burial = Math.max(0, Math.min(1, 1 - Math.max(0, localSnow - 1.1) / 6.2))
-    const frozen = Math.min(1, (ice[i - 1] + ice[i]) * 0.5) * burial
-    if (frozen < 0.035) continue
+    const burial = Math.max(0, Math.min(1, 1 - Math.max(0, localSnow - 0.9) / 7.5))
+    const frozen = Math.min(1, (ice[i - 1] + ice[i]) * 0.5) * burial * (1 - open)
+    if (frozen < 0.025) continue
 
-    const seed = Math.sin(i * 19.173 + 1.87) * 43758.5453
-    const frac = seed - Math.floor(seed)
-    if (frozen < 0.28 && frac < 0.30) continue
+    const g1 = groundSurfaceYAtIndex(i - 1, height)
+    const g2 = groundSurfaceYAtIndex(i, height)
+    if (g1 <= waterY && g2 <= waterY) continue
 
-    const x1 = Math.min(width, (i - 1) * 6)
-    const x2 = Math.min(width, i * 6)
-    const y1 = snowSurfaceYAtIndex(i - 1, height) - 0.22
-    const y2 = snowSurfaceYAtIndex(i, height) - 0.22
-    const alpha = Math.min(0.15, (0.020 + frozen * 0.105) * brightness * (0.78 + frac * 0.32))
+    const fillAlpha = Math.min(0.13, (0.024 + frozen * 0.095) * brightness)
+    ctx.beginPath()
+    ctx.moveTo(x1, waterY)
+    ctx.lineTo(x2, waterY)
+    ctx.lineTo(x2, Math.max(g2, waterY))
+    ctx.lineTo(x1, Math.max(g1, waterY))
+    ctx.closePath()
+    ctx.fillStyle = `rgba(58, 76, 88, ${fillAlpha})`
+    ctx.fill()
 
     ctx.beginPath()
-    ctx.moveTo(x1, y1)
-    ctx.lineTo(x2, y2)
-    ctx.strokeStyle = `rgba(184, 211, 226, ${alpha})`
-    ctx.lineWidth = 0.72
-    ctx.lineCap = 'round'
+    ctx.moveTo(x1, waterY)
+    ctx.lineTo(x2, waterY)
+    ctx.strokeStyle = `rgba(192, 216, 228, ${Math.min(0.16, (0.030 + frozen * 0.11) * brightness)})`
+    ctx.lineWidth = 0.9
     ctx.stroke()
 
-    // Fully caught ice occasionally flashes a second pin-thin facet. This is
-    // static geometry, not sparkle animation: the surface should feel frozen,
-    // not glittery.
-    if (frozen > 0.68 && frac > 0.68) {
-      const midX = (x1 + x2) * 0.5
-      const midY = (y1 + y2) * 0.5
+    if (frozen > 0.44) {
       ctx.beginPath()
-      ctx.moveTo(x1 + (midX - x1) * 0.18, y1 + (midY - y1) * 0.18 - 0.22)
-      ctx.lineTo(midX + (x2 - midX) * 0.38, midY + (y2 - midY) * 0.38 - 0.22)
-      ctx.strokeStyle = `rgba(224, 237, 244, ${Math.min(0.095, frozen * 0.085 * brightness)})`
-      ctx.lineWidth = 0.38
+      ctx.moveTo(x1, waterY - 0.32)
+      ctx.lineTo(x2, waterY - 0.32)
+      ctx.strokeStyle = `rgba(228, 238, 244, ${Math.min(0.085, frozen * 0.065 * brightness)})`
+      ctx.lineWidth = 0.36
       ctx.stroke()
     }
   }
@@ -90,53 +98,59 @@ export function drawStandingWater(
   height: number,
   light = 1,
 ) {
-  const water = pitchWorld.water
-  if (water.length < 3) return
+  if (pitchWorld.water.length < 3) return
+
+  const waterY = standingWaterSurfaceY(height)
+  if (!Number.isFinite(waterY)) return
+
+  const fillPresence = Math.min(1, pitchWorld.waterLevel * 1.12)
+  if (fillPresence < 0.02) return
 
   const brightness = Math.max(0.18, light)
+  const stepX = 6
 
-  for (let i = 1; i < water.length - 1; i += 2) {
-    const amount = water[i]
-    if (amount < 0.16 || pitchWorld.drifts[i] > 6) continue
+  // A single shared level remains the visual rule. Local heat only punches a
+  // soft dry opening through the plane; it never deforms the water into a crater.
+  for (let i = 1; i < pitchWorld.water.length; i++) {
+    const x1 = Math.min(width, (i - 1) * stepX)
+    const x2 = Math.min(width, i * stepX)
+    if (x2 <= x1) continue
 
-    const frozen = Math.max(0, Math.min(1, pitchWorld.ice[i] || 0))
-    const liquid = 1 - frozen
-    const x = Math.min(width, i * 6)
-    const groundY = groundSurfaceYAtIndex(i, height)
-    const seed = Math.sin(i * 17.31) * 43758.5453
-    const jitter = (seed - Math.floor(seed) - 0.5) * 2.4
-    const radiusX = Math.min(11, 4.4 + amount * 0.72)
-    const radiusY = Math.min(2.3, 0.55 + amount * 0.13)
-    const centerY = groundY - 0.35 - radiusY * 0.32
+    const open = Math.max(0, Math.min(1, ((pitchWorld.waterOpen[i - 1] || 0) + (pitchWorld.waterOpen[i] || 0)) * 0.5))
+    const frozen = Math.max(0, Math.min(1, (pitchWorld.ice[i - 1] + pitchWorld.ice[i]) * 0.5))
+    const localSnow = (pitchWorld.drifts[i - 1] + pitchWorld.drifts[i]) * 0.5
+    const burial = Math.max(0, Math.min(1, 1 - Math.max(0, localSnow - 0.8) / 6.8))
+    const liquid = fillPresence * burial * (1 - frozen * 0.88) * (1 - open)
+    if (liquid < 0.018) continue
 
-    // The pool stays physically present while freezing; only its optical
-    // character changes from soft dark water to a flatter glassy surface.
+    const g1 = groundSurfaceYAtIndex(i - 1, height)
+    const g2 = groundSurfaceYAtIndex(i, height)
+    if (g1 <= waterY && g2 <= waterY) continue
+
+    const fillAlpha = Math.min(0.14, (0.042 + liquid * 0.078) * brightness)
     ctx.beginPath()
-    ctx.ellipse(x + jitter, centerY, radiusX, radiusY, jitter * 0.018, 0, Math.PI * 2)
-    const poolAlpha = Math.min(0.15, (0.038 + amount * 0.009) * brightness * (0.92 + frozen * 0.18))
-    ctx.fillStyle = frozen > 0.08
-      ? `rgba(58, 77, 89, ${poolAlpha})`
-      : `rgba(42, 60, 73, ${poolAlpha})`
+    ctx.moveTo(x1, waterY)
+    ctx.lineTo(x2, waterY)
+    ctx.lineTo(x2, Math.max(g2, waterY))
+    ctx.lineTo(x1, Math.max(g1, waterY))
+    ctx.closePath()
+    ctx.fillStyle = `rgba(38, 56, 69, ${fillAlpha})`
     ctx.fill()
 
     ctx.beginPath()
-    ctx.ellipse(x + jitter - radiusX * 0.08, centerY - radiusY * 0.28, radiusX * (0.62 + frozen * 0.12), Math.max(0.14, radiusY * (0.18 - frozen * 0.045)), jitter * 0.018, Math.PI * 1.08, Math.PI * 1.88)
-    ctx.strokeStyle = `rgba(176, 207, 224, ${Math.min(0.11, (0.018 + amount * 0.005 + frozen * 0.038) * brightness * (0.58 + liquid * 0.42))})`
-    ctx.lineWidth = 0.42 + frozen * 0.08
+    ctx.moveTo(x1, waterY)
+    ctx.lineTo(x2, waterY)
+    ctx.strokeStyle = `rgba(176, 205, 221, ${Math.min(0.14, (0.028 + liquid * 0.058) * brightness)})`
+    ctx.lineWidth = 0.72
     ctx.stroke()
 
-    if (frozen > 0.80 && amount > 1.15) {
-      const crackSeed = Math.sin(i * 7.91 + 0.73) * 951.1357
-      const crackFrac = crackSeed - Math.floor(crackSeed)
-      if (crackFrac > 0.63) {
-        ctx.beginPath()
-        ctx.moveTo(x + jitter - radiusX * 0.32, centerY - 0.04)
-        ctx.lineTo(x + jitter - radiusX * 0.08, centerY + radiusY * 0.10)
-        ctx.lineTo(x + jitter + radiusX * 0.18, centerY - radiusY * 0.12)
-        ctx.strokeStyle = `rgba(205, 223, 233, ${0.032 * brightness * frozen})`
-        ctx.lineWidth = 0.34
-        ctx.stroke()
-      }
+    if (liquid > 0.34) {
+      ctx.beginPath()
+      ctx.moveTo(x1, waterY - 0.22)
+      ctx.lineTo(x2, waterY - 0.22)
+      ctx.strokeStyle = `rgba(212, 227, 235, ${Math.min(0.065, liquid * 0.048 * brightness)})`
+      ctx.lineWidth = 0.34
+      ctx.stroke()
     }
   }
 }

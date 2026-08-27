@@ -30,6 +30,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
     let last = performance.now()
     let light = sceneRef.current === 'snow' ? 1 : 0.82
     let idleCleared = false
+    let materialTick = 0
     const terrainCache = createTerrainRenderCache()
 
     const resize = () => {
@@ -58,6 +59,40 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
       last = time
       const blend = 1 - Math.exp(-dt / 950)
       light += (targetLight() - light) * blend
+
+      // Standing water is aftermath, not a permanent terrain replacement. Even
+      // untouched water slowly drains/evaporates over real time; frozen water
+      // lingers longer. Local boiled-open patches level back in unless heat keeps
+      // them open, so a strike never leaves a permanent crater in the flood plane.
+      const dtSeconds = dt / 1000
+      const currentScene = sceneRef.current
+      if (currentScene !== 'rain' && pitchWorld.waterLevel > 0) {
+        const recessionPerSecond = currentScene === 'snow'
+          ? 1 / 5400
+          : currentScene === 'ember'
+            ? 1 / 3600
+            : 1 / 3000
+        pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - recessionPerSecond * dtSeconds)
+        pitchWorld.wetness = Math.max(0, pitchWorld.wetness - recessionPerSecond * dtSeconds * 0.55)
+      }
+
+      materialTick += dt
+      if (materialTick >= 240 && pitchWorld.waterOpen.length === pitchWorld.water.length) {
+        const tickSeconds = materialTick / 1000
+        materialTick = 0
+        const refillPerSecond = currentScene === 'rain' ? 0.045 : currentScene === 'snow' ? 0.012 : 0.006
+        const waterDecay = currentScene === 'rain' ? 0 : currentScene === 'snow' ? 1 / 6200 : 1 / 3600
+        for (let i = 0; i < pitchWorld.water.length; i++) {
+          if (pitchWorld.waterLevel > 0.025) {
+            pitchWorld.waterOpen[i] = Math.max(0, pitchWorld.waterOpen[i] - refillPerSecond * tickSeconds)
+          } else {
+            pitchWorld.waterOpen[i] = 0
+          }
+          if (waterDecay > 0) {
+            pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] * Math.exp(-waterDecay * tickSeconds))
+          }
+        }
+      }
 
       if (light <= 0.008) {
         if (!idleCleared) {

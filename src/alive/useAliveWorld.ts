@@ -14,7 +14,7 @@ export type AlivePhase =
 
 export type AliveSkyEvent = {
   id: number
-  kind: 'shooting-star' | 'meteor-shower' | 'meteor-impact' | 'distant-flash' | 'moon-veil'
+  kind: 'shooting-star' | 'meteor-shower' | 'meteor-impact' | 'distant-flash' | 'depth-flash' | 'moon-veil'
   startX?: number
   startY?: number
   travelX?: number
@@ -322,10 +322,14 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
 
       if (currentPhase === 'rain' || currentPhase === 'rain-front' || currentPhase === 'cold-front') {
         const roll = Math.random()
-        if (roll < 0.54) {
+        if (roll < 0.52) {
           emitSkyEvent({ kind: 'moon-veil', duration: between(16_000, 34_000) })
-        } else {
+        } else if (roll < 0.90) {
           emitSkyEvent({ kind: 'distant-flash', duration: between(1_100, 1_800) })
+        } else {
+          // Rare off-screen lightning can expose the same hidden landscape as a
+          // strong Storm strike. No badge, no special announcement: it simply happens.
+          emitSkyEvent({ kind: 'depth-flash', duration: between(900, 1_350) })
         }
         scheduleMicro()
         return

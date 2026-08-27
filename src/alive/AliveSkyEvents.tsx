@@ -26,7 +26,7 @@ function tailAngle(travelX: number, travelY: number) {
 }
 
 export function AliveSkyEvents({ event }: AliveSkyEventsProps) {
-  if (!event || event.kind === 'meteor-impact') return null
+  if (!event || event.kind === 'meteor-impact' || event.kind === 'depth-flash') return null
 
   if (event.kind === 'distant-flash') {
     return (

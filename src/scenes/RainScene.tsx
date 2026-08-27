@@ -185,6 +185,13 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       const frozenAtImpact = Math.max(0, Math.min(1, pitchWorld.ice[idx] || 0))
       const y = surfaceYAt(drop.x, width, height)
 
+      if (pitchWorld.waterOpen.length === pitchWorld.water.length) {
+        const refill = 0.010 + drop.speed * 0.0012
+        pitchWorld.waterOpen[idx] = Math.max(0, pitchWorld.waterOpen[idx] - refill)
+        pitchWorld.waterOpen[idx - 1] = Math.max(0, pitchWorld.waterOpen[idx - 1] - refill * 0.28)
+        pitchWorld.waterOpen[idx + 1] = Math.max(0, pitchWorld.waterOpen[idx + 1] - refill * 0.28)
+      }
+
       if (frozenAtImpact > 0.015) {
         const localThaw = Math.min(frozenAtImpact, 0.012 + drop.speed * 0.0016)
         pitchWorld.ice[idx] = Math.max(0, pitchWorld.ice[idx] - localThaw)
@@ -205,6 +212,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         pitchWorld.water[idx] = Math.min(9, pitchWorld.water[idx] + collection)
         pitchWorld.water[idx - 1] = Math.min(9, pitchWorld.water[idx - 1] + collection * 0.32)
         pitchWorld.water[idx + 1] = Math.min(9, pitchWorld.water[idx + 1] + collection * 0.32)
+        pitchWorld.waterLevel = Math.min(1.08, pitchWorld.waterLevel + collection * 0.0018)
       }
 
       const pooled = Math.min(1, pitchWorld.water[idx] / 2.4)
@@ -458,6 +466,10 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           }
         }
         pitchWorld.wetness = Math.min(1, pitchWorld.wetness + 0.00042 * scaledDt * rainDensity)
+        // A prolonged rain builds a visible shared water table across the low
+        // ground. This is intentionally simple and scene-readable rather than
+        // a literal fluid simulation.
+        pitchWorld.waterLevel = Math.min(1.08, pitchWorld.waterLevel + (0.00024 + intensity * 0.00024) * scaledDt * rainDensity)
 
         // Rain reverses the cold skin gradually rather than toggling it off.
         // Heavy rain clears it in roughly half a minute; a thin arriving front
@@ -465,9 +477,13 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         if (pitchWorld.ice.length === pitchWorld.drifts.length) {
           const thawRate = (0.00020 + intensity * 0.00034) * scaledDt * rainDensity
           for (let i = 1; i < pitchWorld.ice.length - 1; i++) {
-            if (pitchWorld.ice[i] <= 0.001) continue
-            const exposed = Math.max(0.35, 1 - pitchWorld.drifts[i] / 18)
-            pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - thawRate * exposed)
+            if (pitchWorld.ice[i] > 0.001) {
+              const exposed = Math.max(0.35, 1 - pitchWorld.drifts[i] / 18)
+              pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - thawRate * exposed)
+            }
+            if (pitchWorld.waterOpen.length === pitchWorld.water.length && pitchWorld.waterOpen[i] > 0.001) {
+              pitchWorld.waterOpen[i] = Math.max(0, pitchWorld.waterOpen[i] - 0.0011 * scaledDt * rainDensity)
+            }
           }
         }
       }

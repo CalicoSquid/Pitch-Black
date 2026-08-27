@@ -157,3 +157,12 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 
 - Meteor and shower tails now align opposite the actual screen-space trajectory in both directions.
 - Fixes left-moving meteors rendering their trails down/in front of the meteor head.
+
+## v1.42.0 — Ember reclaims the ground
+
+- Promoted the approved lightning-depth landscape from experiment to normal world behavior.
+- Removed the temporary developer depth-flash button and its styling.
+- Storm now reveals the hidden ridge only on an occasional sufficiently strong lightning strike, with a long cooldown so bursts cannot repeat the effect.
+- Alive can also produce a rare off-screen distant lightning reveal during wet/front weather, without requiring a visible bolt.
+- Keeps the approved near-ridge tree silhouettes against lit sky, with only faint atmospheric terrain beyond.
+- No changes to the accepted landscape artwork, scene controls, weather durations, or terrain physics.

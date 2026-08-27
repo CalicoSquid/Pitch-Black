@@ -647,6 +647,7 @@ function App() {
           scene={scene}
           soundOn={soundOn}
           groundStrikeChance={aliveOn ? 0.14 : 0.42}
+          depthRevealEventId={aliveOn && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
         />
         <AliveAmbience active={aliveOn} soundOn={soundOn} phase={alivePhase} />
       </div>

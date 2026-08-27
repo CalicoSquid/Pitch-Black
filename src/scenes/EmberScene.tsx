@@ -3,11 +3,12 @@ import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { lightningGroundStrikeSignal } from '../world/lightningSignal'
 import {
   ensureWorld,
+  groundSurfaceYAtIndex,
   pitchWorld,
   saveWorld,
   snowSurfaceYAtIndex,
+  standingWaterSurfaceY,
   worldResetSignal,
-  surfaceYAt,
   worldIndexAt,
 } from '../world/worldState'
 
@@ -87,6 +88,7 @@ export function EmberScene({
     let startX = 0
     let startY = 0
     let impacted = false
+    let emberPurgeActive = false
     let hasIgnited = pitchWorld.ember.some((value) => value > 0.02) || pitchWorld.char.some((value) => value > 0.03)
     let impactAt = 0
     let impactIndex = 0
@@ -236,9 +238,26 @@ export function EmberScene({
       if (fireSnapshot.length !== fire.length) fireSnapshot = new Float32Array(fire.length)
     }
 
+    const emberSurfaceYAtIndex = (index: number) => {
+      const i = Math.max(0, Math.min(pitchWorld.drifts.length - 1, index))
+      return groundSurfaceYAtIndex(i, height) - pitchWorld.drifts[i]
+    }
+
+    const emberSurfaceYAtX = (x: number) => emberSurfaceYAtIndex(worldIndexAt(x, width))
+
+    const fireSurfaceYAtIndex = (index: number) => emberPurgeActive
+      ? emberSurfaceYAtIndex(index)
+      : snowSurfaceYAtIndex(index, height)
+
+    const steamSurfaceYAtIndex = (index: number) => {
+      const drySurface = emberSurfaceYAtIndex(index)
+      const waterSurface = standingWaterSurfaceY(height)
+      return Number.isFinite(waterSurface) ? Math.min(drySurface, waterSurface) : drySurface
+    }
+
     const chooseTrajectory = () => {
       targetX = width * (0.28 + Math.random() * 0.44)
-      targetY = surfaceYAt(targetX, width, height)
+      targetY = emberSurfaceYAtX(targetX)
 
       const fromLeft = Math.random() > 0.5
       const horizontalDistance = width * (0.28 + Math.random() * 0.18)
@@ -250,7 +269,7 @@ export function EmberScene({
     const spawnSteam = (index: number, amount: number) => {
       if (amount <= 0.010) return
       const x = Math.min(width, index * 6) + (Math.random() - 0.5) * 8
-      const y = snowSurfaceYAtIndex(index, height) - 2
+      const y = steamSurfaceYAtIndex(index) - 2
       const count = Math.min(4, Math.max(1, Math.round(amount * 12)))
       for (let i = 0; i < count; i++) {
         steam.push({
@@ -273,7 +292,7 @@ export function EmberScene({
 
     const spawnLightningSteam = (index: number, strength: number) => {
       const x = Math.min(width, index * 6)
-      const y = snowSurfaceYAtIndex(index, height) - 2
+      const y = steamSurfaceYAtIndex(index) - 2
       const count = 5 + Math.floor(strength * 4)
       for (let i = 0; i < count; i++) {
         const spread = 7 + strength * 8
@@ -300,6 +319,7 @@ export function EmberScene({
       hasIgnited = false
       meteorStartedAt = -1
       impacted = false
+      emberPurgeActive = false
       impactAt = 0
       impactIndex = 0
       trail.length = 0
@@ -337,14 +357,20 @@ export function EmberScene({
         // This only guarantees the persistent fire simulation is awake.
         hasIgnited = true
       } else if (signal.scene === 'rain') {
-        spawnLightningSteam(signal.index, signal.strength)
+        hasIgnited = true
+        spawnLightningSteam(signal.index, 1.10 + signal.strength * 0.72)
+        spawnSteam(signal.index, 0.70 + signal.strength * 0.45)
+        spawnSmoke(signal.index, 0.30 + signal.strength * 0.18)
+        for (let i = 0; i < 7; i++) {
+          spawnSpark(signal.index + Math.floor((Math.random() - 0.5) * 5), 0.78 + signal.strength * 0.20)
+        }
       }
     }
 
     const spawnSmoke = (index: number, strength: number) => {
       if (strength <= 0.12) return
       const x = Math.min(width, index * 6) + (Math.random() - 0.5) * 6
-      const y = snowSurfaceYAtIndex(index, height) - 4
+      const y = fireSurfaceYAtIndex(index) - 4
       smoke.push({
         x,
         y,
@@ -363,7 +389,7 @@ export function EmberScene({
     const spawnSpark = (index: number, strength: number, count = 1) => {
       if (strength < 0.28) return
       const x = Math.min(width, index * 6) + (Math.random() - 0.5) * 6
-      const y = snowSurfaceYAtIndex(index, height) - 2
+      const y = fireSurfaceYAtIndex(index) - 2
       for (let i = 0; i < count; i++) {
         const lift = Math.max(0, strength - 0.35)
         sparks.push({
@@ -412,6 +438,7 @@ export function EmberScene({
       if (impacted) return
       impacted = true
       hasIgnited = true
+      emberPurgeActive = true
       impactAt = time
       impactIndex = worldIndexAt(targetX, width)
 
@@ -423,11 +450,28 @@ export function EmberScene({
         const strength = Math.max(0, 1 - normalized * normalized)
 
         pitchWorld.drifts[idx] = Math.max(0, pitchWorld.drifts[idx] - 9.2 * strength)
-        pitchWorld.water[idx] = Math.max(0, pitchWorld.water[idx] * (1 - strength * 0.82))
+        const evaporated = pitchWorld.water[idx] * strength * 0.94
+        pitchWorld.water[idx] = Math.max(0, pitchWorld.water[idx] - evaporated)
+        pitchWorld.ice[idx] = Math.max(0, pitchWorld.ice[idx] - strength * 1.10)
+        if (evaporated > 0.02 || pitchWorld.waterLevel > 0.025) {
+          spawnSteam(idx, 0.72 + strength * 1.20 + evaporated * 0.28)
+        }
         residue[idx] = Math.max(residue[idx], strength * 0.42)
       }
 
-      targetY = surfaceYAt(targetX, width, height)
+      // Ember is a world-transforming event, not a local hydrology interaction.
+      // Remove any previous lightning openings so the flood plane remains level,
+      // then flash-boil enough of it to make the impact feel violent without
+      // carving a geometric notch into the water surface.
+      if (pitchWorld.waterOpen.length === pitchWorld.water.length) pitchWorld.waterOpen.fill(0)
+      if (pitchWorld.waterLevel > 0.025) {
+        spawnLightningSteam(impactIndex, 1.70)
+        spawnLightningSteam(Math.max(1, impactIndex - 4), 1.18)
+        spawnLightningSteam(Math.min(pitchWorld.water.length - 2, impactIndex + 4), 1.18)
+      }
+      pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - 0.085)
+
+      targetY = emberSurfaceYAtX(targetX)
 
       for (let offset = -2; offset <= 2; offset++) {
         const idx = impactIndex + offset
@@ -481,8 +525,9 @@ export function EmberScene({
         const neighbor = Math.max(previous[i - 1], previous[i + 1])
         const randomBias = 0.97 + seeded(i) * 0.035
         const snow = pitchWorld.drifts[i]
-        const water = pitchWorld.water[i]
-        const moisture = Math.min(0.82, snow * 0.018 + water * 0.070)
+        // Once Ember lands, standing water/ice becomes fuel for steam rather than
+        // a brake on the scene. Snow keeps its established resistance/melt behaviour.
+        const moisture = Math.min(0.55, snow * 0.018)
 
         let heat = here * Math.pow(0.9965, scaled)
         const weatherSuppression = rainMix * 0.105 + snowMix * 0.058
@@ -533,16 +578,22 @@ export function EmberScene({
             spawnSteam(i, melt)
           }
 
-          const thaw = Math.min(pitchWorld.ice[i] || 0, heat * 0.0048 * scaled)
+          const thaw = Math.min(pitchWorld.ice[i] || 0, heat * 0.020 * scaled)
           if (thaw > 0) {
             pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - thaw)
-            spawnSteam(i, thaw * 0.85)
+            if (Math.random() < Math.min(0.38, 0.08 + thaw * 5.5)) spawnSteam(i, thaw * 2.2)
           }
 
-          const evap = Math.min(pitchWorld.water[i], heat * 0.038 * scaled)
+          const evap = Math.min(pitchWorld.water[i], heat * 0.115 * scaled)
           if (evap > 0) {
             pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - evap)
-            spawnSteam(i, evap * 1.35)
+            if (Math.random() < Math.min(0.36, 0.07 + evap * 1.7)) spawnSteam(i, evap * 2.0)
+          }
+
+          // The advancing fire front visibly hisses through the flood/ice while
+          // the shared water level drops as one coherent plane.
+          if (pitchWorld.waterLevel > 0.025 && Math.random() < Math.min(0.065, heat * 0.050 * scaled)) {
+            spawnSteam(i, 0.20 + heat * pitchWorld.waterLevel * 0.95)
           }
 
           if (heat > 0.34 && Math.random() < 0.0195 * scaled) spawnSpark(i, heat)
@@ -563,10 +614,34 @@ export function EmberScene({
       pitchWorld.ember = fire
       pitchWorld.char = residue
 
-      pitchWorld.wetness = Math.max(
-        0,
-        pitchWorld.wetness - 0.0005 * scaled * Math.max(0.15, 1 - rainMix)
-      )
+      const heatCoverage = Math.min(1, totalHeat / Math.max(1, fire.length * 0.20))
+
+      if (emberPurgeActive) {
+        // Ember deliberately returns the material state to dry terrain quickly.
+        // The flood remains perfectly level while it falls away, so there are no
+        // local water craters; steam along the fire front carries the transition.
+        const purgeRate = (0.00135 + heatCoverage * 0.00090) * scaled * Math.max(0.62, 1 - rainMix * 0.40)
+        pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - purgeRate)
+        pitchWorld.wetness = Math.max(0, pitchWorld.wetness - (0.0015 + heatCoverage * 0.0012) * scaled)
+
+        for (let i = 1; i < pitchWorld.ice.length - 1; i++) {
+          pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - (0.0048 + heatCoverage * 0.0030) * scaled)
+          pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - (0.030 + heatCoverage * 0.055) * scaled)
+        }
+
+        if (pitchWorld.waterOpen.length === pitchWorld.water.length) pitchWorld.waterOpen.fill(0)
+
+        if (pitchWorld.waterLevel <= 0.025) {
+          pitchWorld.waterLevel = 0
+          pitchWorld.water.fill(0)
+          pitchWorld.ice.fill(0)
+          pitchWorld.waterOpen.fill(0)
+          pitchWorld.wetness = 0
+          emberPurgeActive = false
+        }
+      } else {
+        pitchWorld.wetness = Math.max(0, pitchWorld.wetness - 0.0005 * scaled * Math.max(0.15, 1 - rainMix))
+      }
 
       if (fireGain && audioCtx) {
         const level = soundOnRef.current ? Math.min(0.085, 0.018 + totalHeat / fire.length * 0.18) : 0
@@ -674,7 +749,7 @@ export function EmberScene({
         if (heat < 0.02 && char < 0.03) continue
 
         const x = Math.min(width, i * 6)
-        const surface = snowSurfaceYAtIndex(i, height)
+        const surface = fireSurfaceYAtIndex(i)
 
         if (char > 0.04) {
           ctx.beginPath()
