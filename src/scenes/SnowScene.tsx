@@ -499,7 +499,8 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let weatherMix = activeRef.current && !aliveRef.current ? 1 : 0
     let wasActive = activeRef.current
     let aliveRiseTau = 34_000 + Math.random() * 8_000
-    let aliveFallTau = 24_000 + Math.random() * 7_000
+    let aliveFallTau = 48_000 + Math.random() * 12_000
+    let audioWeatherMix = weatherMix
 
     const draw = (time: number) => {
       frame += 1
@@ -513,7 +514,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           // Alive snow should arrive as weather rather than a switched canvas:
           // first flakes, then a steadily thickening fall over roughly 1–2 minutes.
           aliveRiseTau = 30_000 + Math.random() * 12_000
-          aliveFallTau = 23_000 + Math.random() * 8_000
+          aliveFallTau = 46_000 + Math.random() * 15_000
           for (let i = 0; i < flakes.length; i++) {
             flakes[i].y = -18 - Math.random() * Math.min(150, height * 0.18)
           }
@@ -540,15 +541,29 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         ? (nowActive ? 0.58 + weatherMix * 0.42 : Math.sqrt(Math.max(0, weatherMix)))
         : weatherMix
 
+      // Audio gets its own release envelope. Visually, the last flakes can become
+      // very sparse while the hush of the snowfall still hangs in the room for a
+      // while; tying gain directly to particle population made the scene sound as
+      // though someone had switched it off.
+      const audioTarget = nowActive ? 1 : 0
+      const audioTau = aliveRef.current
+        ? (nowActive ? Math.max(5_000, aliveRiseTau * 0.72) : 62_000)
+        : 520
+      const audioBlend = 1 - Math.exp(-dt / audioTau)
+      audioWeatherMix += (audioTarget - audioWeatherMix) * audioBlend
+      const audioDensity = aliveRef.current
+        ? (nowActive ? Math.max(snowfallMix, audioWeatherMix * 0.58) : Math.pow(Math.max(0, audioWeatherMix), 0.82))
+        : weatherMix
+
       const currentAudio = audioRef.current
       if (currentAudio) {
-        const targetGain = soundOnRef.current ? 0.035 * snowfallMix : 0
+        const targetGain = soundOnRef.current ? 0.035 * audioDensity : 0
         if (currentAudio.gain !== lastAudioGainNode) {
           lastAudioGainNode = currentAudio.gain
           lastAudioTargetGain = Number.NaN
         }
-        if (targetGain !== lastAudioTargetGain) {
-          currentAudio.gain.gain.setTargetAtTime(targetGain, currentAudio.ctx.currentTime, 0.18)
+        if (Math.abs(targetGain - lastAudioTargetGain) > 0.00002 || Number.isNaN(lastAudioTargetGain)) {
+          currentAudio.gain.gain.setTargetAtTime(targetGain, currentAudio.ctx.currentTime, 0.7)
           lastAudioTargetGain = targetGain
         }
       } else {

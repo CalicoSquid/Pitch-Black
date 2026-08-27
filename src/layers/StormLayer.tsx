@@ -488,35 +488,49 @@ export function StormLayer({
 
       const bank = getThunderBank(audioCtx)
       const buffer = bank.strike[Math.random() < 0.5 ? 0 : 1]
-      const delay = 1.35 + (1 - strength) * 1.65 + Math.random() * 0.95
-      const rate = 0.94 + Math.random() * 0.10
+      // A visible terrain hit reads as very close. Keep the sound attached to the
+      // impact instead of waiting several seconds as though the bolt were miles away.
+      const delay = 0.10 + (1 - strength) * 0.16 + Math.random() * 0.10
+      const startTime = audioCtx.currentTime + delay
+      const rate = 0.90 + Math.random() * 0.08
 
-      const clapBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.24), audioCtx.sampleRate)
-      const clapData = clapBuffer.getChannelData(0)
-      for (let i = 0; i < clapData.length; i++) {
+      // Close-strike pressure wave. Deliberately low-passed: the previous short,
+      // bright band-pass transient sounded like a ruler being slapped on a desk.
+      const boomDuration = 0.72
+      const boomBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * boomDuration), audioCtx.sampleRate)
+      const boomData = boomBuffer.getChannelData(0)
+      let low = 0
+      for (let i = 0; i < boomData.length; i++) {
         const t = i / audioCtx.sampleRate
-        const envelope = Math.exp(-t / 0.040)
-        clapData[i] = (Math.random() * 2 - 1) * envelope
+        const white = Math.random() * 2 - 1
+        low = low * 0.955 + white * 0.045
+        const attack = Math.min(1, t / 0.028)
+        const decay = Math.exp(-t / (0.22 + strength * 0.09))
+        boomData[i] = low * attack * decay
       }
-      const clapSource = audioCtx.createBufferSource()
-      const clapFilter = audioCtx.createBiquadFilter()
-      const clapGain = audioCtx.createGain()
-      clapSource.buffer = clapBuffer
-      clapFilter.type = 'bandpass'
-      clapFilter.frequency.value = 1240 + strength * 260
-      clapFilter.Q.value = 0.68
-      clapGain.gain.value = 0.022 + strength * 0.020
-      clapSource.connect(clapFilter).connect(clapGain).connect(getPitchAudioOutput(audioCtx))
-      clapSource.start(audioCtx.currentTime + delay)
 
+      const boomSource = audioCtx.createBufferSource()
+      const boomFilter = audioCtx.createBiquadFilter()
+      const boomGain = audioCtx.createGain()
+      boomSource.buffer = boomBuffer
+      boomFilter.type = 'lowpass'
+      boomFilter.frequency.value = 150 + strength * 55
+      boomFilter.Q.value = 0.58
+      boomGain.gain.setValueAtTime(0.0001, startTime)
+      boomGain.gain.exponentialRampToValueAtTime(0.055 + strength * 0.025, startTime + 0.030)
+      boomGain.gain.exponentialRampToValueAtTime(0.0001, startTime + boomDuration)
+      boomSource.connect(boomFilter).connect(boomGain).connect(getPitchAudioOutput(audioCtx))
+      boomSource.start(startTime)
+
+      // The broader thunder body arrives with the pressure wave and then rolls away.
       playThunderBuffer(
         audioCtx,
         buffer,
-        delay + 0.045,
-        0.082 + strength * 0.034,
-        0.016 + strength * 0.010,
+        delay + 0.025,
+        0.090 + strength * 0.038,
+        0.009 + strength * 0.006,
         rate,
-        235 + strength * 55,
+        225 + strength * 50,
       )
 
       if (strength > 0.78 && Math.random() < 0.44) {

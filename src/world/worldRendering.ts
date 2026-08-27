@@ -42,18 +42,29 @@ export function drawStandingWater(
 
   for (let i = 1; i < water.length - 1; i += 2) {
     const amount = water[i]
-    if (amount < 0.12 || pitchWorld.drifts[i] > 6) continue
+    if (amount < 0.16 || pitchWorld.drifts[i] > 6) continue
 
     const x = Math.min(width, i * 6)
     const groundY = groundSurfaceYAtIndex(i, height)
-    const visibleDepth = Math.min(12, 2.2 + amount * 0.9)
-    const poolWidth = 14
+    const seed = Math.sin(i * 17.31) * 43758.5453
+    const jitter = (seed - Math.floor(seed) - 0.5) * 2.4
+    const radiusX = Math.min(11, 4.4 + amount * 0.72)
+    const radiusY = Math.min(2.3, 0.55 + amount * 0.13)
+    const centerY = groundY - 0.35 - radiusY * 0.32
 
-    ctx.fillStyle = `rgba(42, 60, 73, ${Math.min(0.16, (0.05 + amount * 0.011) * brightness)})`
-    ctx.fillRect(x - 4, groundY - visibleDepth, poolWidth, visibleDepth)
+    // Standing water used to be literal fillRect() blocks. Against OLED-black
+    // terrain those highlights read as little white cubes. Keep the same cheap
+    // renderer, but make each remnant a shallow irregular-looking pool instead.
+    ctx.beginPath()
+    ctx.ellipse(x + jitter, centerY, radiusX, radiusY, jitter * 0.018, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(42, 60, 73, ${Math.min(0.13, (0.038 + amount * 0.009) * brightness)})`
+    ctx.fill()
 
-    ctx.fillStyle = `rgba(166, 194, 211, ${Math.min(0.10, (0.025 + amount * 0.007) * brightness)})`
-    ctx.fillRect(x - 3, groundY - visibleDepth, poolWidth - 2, 0.7)
+    ctx.beginPath()
+    ctx.ellipse(x + jitter - radiusX * 0.08, centerY - radiusY * 0.28, radiusX * 0.62, Math.max(0.16, radiusY * 0.18), jitter * 0.018, Math.PI * 1.08, Math.PI * 1.88)
+    ctx.strokeStyle = `rgba(166, 194, 211, ${Math.min(0.075, (0.018 + amount * 0.005) * brightness)})`
+    ctx.lineWidth = 0.45
+    ctx.stroke()
   }
 }
 

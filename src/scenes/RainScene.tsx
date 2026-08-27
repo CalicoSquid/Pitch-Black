@@ -340,7 +340,8 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let weatherMix = activeRef.current && !aliveRef.current ? 1 : 0
     let wasActive = activeRef.current
     let aliveRiseTau = 8_000
-    let aliveFallTau = 21_000 + Math.random() * 7_000
+    let aliveFallTau = 36_000 + Math.random() * 10_000
+    let audioWeatherMix = weatherMix
     let aliveArrival: 'sudden' | 'gradual' = 'gradual'
     const draw = (time: number) => {
       frame += 1
@@ -356,7 +357,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         aliveRiseTau = aliveArrival === 'sudden'
           ? 1_200 + Math.random() * 1_000
           : 9_000 + Math.random() * 7_000
-        aliveFallTau = 20_000 + Math.random() * 8_000
+        aliveFallTau = 34_000 + Math.random() * 12_000
         if (aliveArrival === 'gradual') {
           for (let i = 0; i < drops.length; i++) {
             drops[i].y = -20 - Math.random() * 150
@@ -381,15 +382,27 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         ? (nowActive ? 0.60 + weatherMix * 0.40 : Math.sqrt(Math.max(0, weatherMix)))
         : weatherMix
 
+      // Rain can arrive quickly, but the sound should almost always recede into
+      // distance rather than being switched off with the particle population.
+      const audioTarget = nowActive ? 1 : 0
+      const audioTau = aliveRef.current
+        ? (nowActive ? Math.max(1_000, aliveRiseTau * 0.78) : 48_000)
+        : 520
+      const audioBlend = 1 - Math.exp(-dt / audioTau)
+      audioWeatherMix += (audioTarget - audioWeatherMix) * audioBlend
+      const audioDensity = aliveRef.current
+        ? (nowActive ? Math.max(rainDensity, audioWeatherMix * 0.62) : Math.pow(Math.max(0, audioWeatherMix), 0.84))
+        : weatherMix
+
       const currentAudio = audioRef.current
       if (currentAudio) {
-        const targetGain = soundOnRef.current ? 0.045 * rainDensity : 0
+        const targetGain = soundOnRef.current ? 0.045 * audioDensity : 0
         if (currentAudio.gain !== lastAudioGainNode) {
           lastAudioGainNode = currentAudio.gain
           lastAudioTargetGain = Number.NaN
         }
-        if (targetGain !== lastAudioTargetGain) {
-          currentAudio.gain.gain.setTargetAtTime(targetGain, currentAudio.ctx.currentTime, 0.18)
+        if (Math.abs(targetGain - lastAudioTargetGain) > 0.00002 || Number.isNaN(lastAudioTargetGain)) {
+          currentAudio.gain.gain.setTargetAtTime(targetGain, currentAudio.ctx.currentTime, 0.65)
           lastAudioTargetGain = targetGain
         }
       } else {

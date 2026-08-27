@@ -14,6 +14,19 @@ For a Git-connected Netlify site, deploy the repository/root folder as-is; Netli
 
 For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and upload the generated `dist` folder.
 
+## v1.35.2 thunder body
+
+- Removed the short bright band-pass “clap” transient from direct lightning strikes; it was reading as a ruler/desk snap rather than thunder on small speakers.
+- Direct terrain strikes now produce a low-passed pressure-wave boom almost immediately after impact, feeding straight into the existing rolling thunder body.
+- Close-strike timing now matches the apparent distance of a bolt visibly hitting the world, while distant/in-cloud thunder behaviour is intentionally unchanged.
+- No visual, Alive pacing, weather, meteor, terrain or UI behaviour changed in this hotfix.
+
+## v1.35.1 soft departures
+
+- Alive snow and rain now keep separate long-release audio envelopes so weather sound recedes gradually instead of audibly switching off as a scene advances.
+- Extended Alive visual departure tails as well: snow now takes roughly 46–61 seconds to thin away and rain roughly 34–46 seconds, while manual scene changes stay responsive.
+- Replaced the old rectangular standing-water renderer with shallow elliptical pools and restrained curved highlights. The little pale “cubes” along wet terrain were literal `fillRect()` puddles.
+
 ## v1.35.0 weather breath
 
 - Alive Snow now develops as an actual front: a handful of flakes arrive first, then visible population and accumulation build progressively over roughly one to two minutes instead of switching on a pre-populated full-screen snow canvas.
