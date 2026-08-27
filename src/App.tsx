@@ -524,7 +524,9 @@ function App() {
       // Alive owns the complete world. Clear manual atmosphere choices so there
       // is never a hidden additive state waiting underneath it.
       setLayers({ moon: false, storm: false, fireflies: false })
-      setScene('calm')
+      // Alive resumes its own persisted wall-clock timeline. The hook restores
+      // whichever phase should be happening now, so do not force a fresh calm
+      // world here.
       setAliveOn(true)
     }
 

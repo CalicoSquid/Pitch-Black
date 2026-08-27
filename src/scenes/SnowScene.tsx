@@ -490,8 +490,31 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       ctx.restore()
     }
 
-    const drawDrifts = (_time: number) => {
-      pitchWorld.wetness = Math.max(0, pitchWorld.wetness - 0.00025 * speed * currentSnowfallMix)
+    const updateFreeze = (dt: number, snowfallMix: number) => {
+      if (snowfallMix <= 0.004 || pitchWorld.ice.length < 3) return
+
+      const scaledDt = (dt / 16.67) * speed
+      const surfaceWetness = pitchWorld.wetness
+
+      for (let i = 1; i < pitchWorld.ice.length - 1; i++) {
+        const pooled = Math.min(1, pitchWorld.water[i] / 2.8)
+        const heatBlock = Math.min(0.96, pitchWorld.ember[i] * 0.92 + pitchWorld.char[i] * 0.24)
+        const coldTarget = Math.min(1, surfaceWetness * 0.86 + pooled * 0.68) * (1 - heatBlock)
+        if (coldTarget <= pitchWorld.ice[i] + 0.001) continue
+
+        // The first flakes catch the pre-existing wet sheen rather than creating
+        // a new visible material from nowhere. A soaked surface freezes in tens
+        // of seconds; shallow puddles catch slightly faster.
+        const freezeRate = (0.00052 + pooled * 0.00034) * scaledDt * snowfallMix
+        pitchWorld.ice[i] = Math.min(coldTarget, pitchWorld.ice[i] + freezeRate)
+      }
+
+      // Some of the global wet sheen is now bound into the frozen skin. This is
+      // deliberately slow so the transition reads as wet -> glassy -> snow.
+      pitchWorld.wetness = Math.max(
+        0,
+        pitchWorld.wetness - 0.00018 * scaledDt * snowfallMix
+      )
     }
 
     let lastFrameTime = performance.now()
@@ -658,7 +681,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       erodeDrifts()
       combDriftCrests()
       smoothDrifts()
-      drawDrifts(simTime)
+      updateFreeze(dt, snowfallMix)
 
       let powderWrite = 0
       const powderWind = effectiveWind()

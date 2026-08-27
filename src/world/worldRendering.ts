@@ -1,5 +1,6 @@
 import {
   groundSurfaceYAtIndex,
+  snowSurfaceYAtIndex,
   pitchWorld,
   terrainClearanceLiftAtIndex,
   worldBaseY,
@@ -29,6 +30,60 @@ export function invalidateTerrainRenderCache(cache: TerrainRenderCache) {
   cache.gradientHeight = -1
 }
 
+export function drawFrozenSkin(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  light = 1,
+) {
+  const ice = pitchWorld.ice
+  if (ice.length < 3) return
+
+  const brightness = Math.max(0.18, light)
+
+  // Ice in this world is intentionally not a new coloured material. It is a
+  // hair-thin glassy skin riding the existing terrain/snow contour. Short,
+  // deterministic breaks keep it from reading as a UI line on flat ground.
+  for (let i = 1; i < ice.length; i++) {
+    const localSnow = (pitchWorld.drifts[i - 1] + pitchWorld.drifts[i]) * 0.5
+    const burial = Math.max(0, Math.min(1, 1 - Math.max(0, localSnow - 1.1) / 6.2))
+    const frozen = Math.min(1, (ice[i - 1] + ice[i]) * 0.5) * burial
+    if (frozen < 0.035) continue
+
+    const seed = Math.sin(i * 19.173 + 1.87) * 43758.5453
+    const frac = seed - Math.floor(seed)
+    if (frozen < 0.28 && frac < 0.30) continue
+
+    const x1 = Math.min(width, (i - 1) * 6)
+    const x2 = Math.min(width, i * 6)
+    const y1 = snowSurfaceYAtIndex(i - 1, height) - 0.22
+    const y2 = snowSurfaceYAtIndex(i, height) - 0.22
+    const alpha = Math.min(0.15, (0.020 + frozen * 0.105) * brightness * (0.78 + frac * 0.32))
+
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.strokeStyle = `rgba(184, 211, 226, ${alpha})`
+    ctx.lineWidth = 0.72
+    ctx.lineCap = 'round'
+    ctx.stroke()
+
+    // Fully caught ice occasionally flashes a second pin-thin facet. This is
+    // static geometry, not sparkle animation: the surface should feel frozen,
+    // not glittery.
+    if (frozen > 0.68 && frac > 0.68) {
+      const midX = (x1 + x2) * 0.5
+      const midY = (y1 + y2) * 0.5
+      ctx.beginPath()
+      ctx.moveTo(x1 + (midX - x1) * 0.18, y1 + (midY - y1) * 0.18 - 0.22)
+      ctx.lineTo(midX + (x2 - midX) * 0.38, midY + (y2 - midY) * 0.38 - 0.22)
+      ctx.strokeStyle = `rgba(224, 237, 244, ${Math.min(0.095, frozen * 0.085 * brightness)})`
+      ctx.lineWidth = 0.38
+      ctx.stroke()
+    }
+  }
+}
+
 export function drawStandingWater(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -44,6 +99,8 @@ export function drawStandingWater(
     const amount = water[i]
     if (amount < 0.16 || pitchWorld.drifts[i] > 6) continue
 
+    const frozen = Math.max(0, Math.min(1, pitchWorld.ice[i] || 0))
+    const liquid = 1 - frozen
     const x = Math.min(width, i * 6)
     const groundY = groundSurfaceYAtIndex(i, height)
     const seed = Math.sin(i * 17.31) * 43758.5453
@@ -52,19 +109,35 @@ export function drawStandingWater(
     const radiusY = Math.min(2.3, 0.55 + amount * 0.13)
     const centerY = groundY - 0.35 - radiusY * 0.32
 
-    // Standing water used to be literal fillRect() blocks. Against OLED-black
-    // terrain those highlights read as little white cubes. Keep the same cheap
-    // renderer, but make each remnant a shallow irregular-looking pool instead.
+    // The pool stays physically present while freezing; only its optical
+    // character changes from soft dark water to a flatter glassy surface.
     ctx.beginPath()
     ctx.ellipse(x + jitter, centerY, radiusX, radiusY, jitter * 0.018, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(42, 60, 73, ${Math.min(0.13, (0.038 + amount * 0.009) * brightness)})`
+    const poolAlpha = Math.min(0.15, (0.038 + amount * 0.009) * brightness * (0.92 + frozen * 0.18))
+    ctx.fillStyle = frozen > 0.08
+      ? `rgba(58, 77, 89, ${poolAlpha})`
+      : `rgba(42, 60, 73, ${poolAlpha})`
     ctx.fill()
 
     ctx.beginPath()
-    ctx.ellipse(x + jitter - radiusX * 0.08, centerY - radiusY * 0.28, radiusX * 0.62, Math.max(0.16, radiusY * 0.18), jitter * 0.018, Math.PI * 1.08, Math.PI * 1.88)
-    ctx.strokeStyle = `rgba(166, 194, 211, ${Math.min(0.075, (0.018 + amount * 0.005) * brightness)})`
-    ctx.lineWidth = 0.45
+    ctx.ellipse(x + jitter - radiusX * 0.08, centerY - radiusY * 0.28, radiusX * (0.62 + frozen * 0.12), Math.max(0.14, radiusY * (0.18 - frozen * 0.045)), jitter * 0.018, Math.PI * 1.08, Math.PI * 1.88)
+    ctx.strokeStyle = `rgba(176, 207, 224, ${Math.min(0.11, (0.018 + amount * 0.005 + frozen * 0.038) * brightness * (0.58 + liquid * 0.42))})`
+    ctx.lineWidth = 0.42 + frozen * 0.08
     ctx.stroke()
+
+    if (frozen > 0.80 && amount > 1.15) {
+      const crackSeed = Math.sin(i * 7.91 + 0.73) * 951.1357
+      const crackFrac = crackSeed - Math.floor(crackSeed)
+      if (crackFrac > 0.63) {
+        ctx.beginPath()
+        ctx.moveTo(x + jitter - radiusX * 0.32, centerY - 0.04)
+        ctx.lineTo(x + jitter - radiusX * 0.08, centerY + radiusY * 0.10)
+        ctx.lineTo(x + jitter + radiusX * 0.18, centerY - radiusY * 0.12)
+        ctx.strokeStyle = `rgba(205, 223, 233, ${0.032 * brightness * frozen})`
+        ctx.lineWidth = 0.34
+        ctx.stroke()
+      }
+    }
   }
 }
 

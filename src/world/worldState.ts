@@ -18,6 +18,7 @@ export type PitchWorld = {
   ground: Float32Array
   drifts: Float32Array
   water: Float32Array
+  ice: Float32Array
   ember: Float32Array
   char: Float32Array
   width: number
@@ -37,6 +38,7 @@ export const pitchWorld: PitchWorld = {
   ground: new Float32Array(1),
   drifts: new Float32Array(1),
   water: new Float32Array(1),
+  ice: new Float32Array(1),
   ember: new Float32Array(1),
   char: new Float32Array(1),
   width: 0,
@@ -53,6 +55,7 @@ function loadWorld() {
       ground?: number[]
       drifts?: number[]
       water?: number[]
+      ice?: number[]
       ember?: number[]
       char?: number[]
       width?: number
@@ -71,6 +74,9 @@ function loadWorld() {
       pitchWorld.drifts = Float32Array.from(saved.drifts)
       pitchWorld.water = Array.isArray(saved.water) && saved.water.length === saved.drifts.length
         ? Float32Array.from(saved.water)
+        : new Float32Array(saved.drifts.length)
+      pitchWorld.ice = Array.isArray(saved.ice) && saved.ice.length === saved.drifts.length
+        ? Float32Array.from(saved.ice)
         : new Float32Array(saved.drifts.length)
       pitchWorld.ember = Array.isArray(saved.ember) && saved.ember.length === saved.drifts.length
         ? Float32Array.from(saved.ember)
@@ -91,6 +97,7 @@ function loadWorld() {
 export function resetWorld() {
   pitchWorld.drifts.fill(0)
   pitchWorld.water.fill(0)
+  pitchWorld.ice.fill(0)
   pitchWorld.ember.fill(0)
   pitchWorld.char.fill(0)
   pitchWorld.wetness = 0
@@ -105,6 +112,7 @@ export function saveWorld() {
       ground: Array.from(pitchWorld.ground),
       drifts: Array.from(pitchWorld.drifts),
       water: Array.from(pitchWorld.water),
+      ice: Array.from(pitchWorld.ice),
       ember: Array.from(pitchWorld.ember),
       char: Array.from(pitchWorld.char),
       width: pitchWorld.width,
@@ -139,6 +147,8 @@ export function ensureWorld(width: number, height: number) {
   const sameShape =
     pitchWorld.ground.length === targetLength &&
     pitchWorld.drifts.length === targetLength &&
+    pitchWorld.water.length === targetLength &&
+    pitchWorld.ice.length === targetLength &&
     pitchWorld.ember.length === targetLength &&
     pitchWorld.char.length === targetLength &&
     pitchWorld.width === width &&
@@ -154,6 +164,7 @@ export function ensureWorld(width: number, height: number) {
   let nextGround: Float32Array
   let nextSnow: Float32Array
   let nextWater: Float32Array
+  let nextIce: Float32Array
   let nextEmber: Float32Array
   let nextChar: Float32Array
 
@@ -161,12 +172,14 @@ export function ensureWorld(width: number, height: number) {
     nextGround = resampleArray(pitchWorld.ground, targetLength)
     nextSnow = resampleArray(pitchWorld.drifts, targetLength)
     nextWater = resampleArray(pitchWorld.water, targetLength)
+    nextIce = resampleArray(pitchWorld.ice, targetLength)
     nextEmber = resampleArray(pitchWorld.ember, targetLength)
     nextChar = resampleArray(pitchWorld.char, targetLength)
   } else {
     nextGround = new Float32Array(targetLength)
     nextSnow = new Float32Array(targetLength)
     nextWater = new Float32Array(targetLength)
+    nextIce = new Float32Array(targetLength)
     nextEmber = new Float32Array(targetLength)
     nextChar = new Float32Array(targetLength)
 
@@ -185,6 +198,7 @@ export function ensureWorld(width: number, height: number) {
   pitchWorld.ground = nextGround
   pitchWorld.drifts = nextSnow
   pitchWorld.water = nextWater
+  pitchWorld.ice = nextIce
   pitchWorld.ember = nextEmber
   pitchWorld.char = nextChar
   pitchWorld.width = width

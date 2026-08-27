@@ -14,6 +14,24 @@ For a Git-connected Netlify site, deploy the repository/root folder as-is; Netli
 
 For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and upload the generated `dist` folder.
 
+## v1.37.0 freeze / thaw
+
+- Added a restrained frozen-surface state to the persistent terrain. Ice is not invented by Snow on dry ground: it forms from wetness and standing water left by Rain.
+- Rain -> Snow now reads as a material transition: the wet terrain sheen gradually tightens into a broken glass-thin frozen skin, while deeper pools flatten and harden locally.
+- Fresh snow gradually buries the frozen skin, so ice is most readable during the transition rather than becoming a permanent bright terrain outline.
+- Rain now thaws ice progressively instead of switching it off. Early drops make far fewer liquid ripples and splashes; normal puddle behaviour returns as the surface loosens.
+- Ember heat locally thaws frozen patches and can release a little steam before continuing to evaporate the underlying water.
+- Ice state is persisted with the rest of the world and resampled safely across viewport changes. Existing saved worlds remain compatible.
+- No snow particle design, accumulation ceiling, Rain/Snow/Ember pacing, Alive scheduling, audio balance or control layout was changed in this pass.
+
+## v1.36.0 continuous alive
+
+- Alive now keeps a small persistent wall-clock timeline instead of restarting from Calm every time it is enabled.
+- Toggling Alive off and straight back on resumes the same weather phase, including Snow, Rain or Storm.
+- Time away now matters: if Alive is re-enabled minutes, hours or days later, missed phase boundaries are advanced to the present and the world resumes wherever its autonomous weather should now be.
+- The same catch-up runs when a backgrounded/sleeping browser returns, so throttled timers no longer freeze Alive's overnight progression.
+- No weather visuals, phase durations, transition probabilities, terrain physics, audio balance, micro-event probabilities or UI layout were changed in this pass.
+
 ## v1.35.2 thunder body
 
 - Removed the short bright band-pass “clap” transient from direct lightning strikes; it was reading as a ruler/desk snap rather than thunder on small speakers.
@@ -91,7 +109,7 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - The first proper weather front now arrives roughly 8–20 minutes after activation and is guaranteed to be Rain or Snow rather than another Calm phase.
 - Once the opening ramp is over, Alive returns to slow nighttime pacing: Calm periods run roughly 15–50 minutes.
 - Later Calm → Calm chaining was reduced from 50% to 25%; Rain and Snow fronts are now substantially more likely after a completed calm period.
-- Toggling Alive off and back on still intentionally starts a fresh future from the current physical world rather than resuming an abandoned scheduler timeline.
+- At v1.30.0, toggling Alive off and back on intentionally started a fresh future; v1.36.0 later replaced that behavior with a persistent wall-clock Alive timeline.
 
 ## v1.29.0 alive world
 

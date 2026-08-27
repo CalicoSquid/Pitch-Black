@@ -182,7 +182,15 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     const impact = (drop: RainDrop) => {
       const idx = Math.max(1, Math.min(pitchWorld.drifts.length - 2, Math.floor((drop.x / width) * (pitchWorld.drifts.length - 1))))
       const snowDepth = pitchWorld.drifts[idx]
+      const frozenAtImpact = Math.max(0, Math.min(1, pitchWorld.ice[idx] || 0))
       const y = surfaceYAt(drop.x, width, height)
+
+      if (frozenAtImpact > 0.015) {
+        const localThaw = Math.min(frozenAtImpact, 0.012 + drop.speed * 0.0016)
+        pitchWorld.ice[idx] = Math.max(0, pitchWorld.ice[idx] - localThaw)
+        pitchWorld.ice[idx - 1] = Math.max(0, pitchWorld.ice[idx - 1] - localThaw * 0.28)
+        pitchWorld.ice[idx + 1] = Math.max(0, pitchWorld.ice[idx + 1] - localThaw * 0.28)
+      }
 
       if (snowDepth > 1.2) {
         const melt = (0.415 + drop.speed * 0.0317) * Math.max(1, speed * 0.78)
@@ -201,8 +209,10 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
       const pooled = Math.min(1, pitchWorld.water[idx] / 2.4)
       const exposedGround = Math.max(0, 1 - remainingSnow / 7)
-      const watery = Math.min(1, 0.05 + pooled * 0.82 + exposedGround * 0.42)
-      const rippleChance = 0.08 + watery * 0.84
+      const frozenNow = Math.max(0, Math.min(1, pitchWorld.ice[idx] || 0))
+      const liquidResponse = Math.max(0.10, 1 - frozenNow * 0.90)
+      const watery = Math.min(1, (0.05 + pooled * 0.82 + exposedGround * 0.42) * liquidResponse)
+      const rippleChance = (0.08 + watery * 0.84) * (0.18 + liquidResponse * 0.82)
       if (Math.random() < rippleChance) {
         ripples.push({
           x: drop.x,
@@ -214,7 +224,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         })
       }
 
-      if (Math.random() < 0.42 + watery * 0.42) {
+      if (Math.random() < (0.30 + watery * 0.48) * (0.42 + liquidResponse * 0.58)) {
         splashes.push({
           x: drop.x,
           y,
@@ -448,6 +458,18 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           }
         }
         pitchWorld.wetness = Math.min(1, pitchWorld.wetness + 0.00042 * scaledDt * rainDensity)
+
+        // Rain reverses the cold skin gradually rather than toggling it off.
+        // Heavy rain clears it in roughly half a minute; a thin arriving front
+        // takes longer, so the first drops can visibly strike a hard surface.
+        if (pitchWorld.ice.length === pitchWorld.drifts.length) {
+          const thawRate = (0.00020 + intensity * 0.00034) * scaledDt * rainDensity
+          for (let i = 1; i < pitchWorld.ice.length - 1; i++) {
+            if (pitchWorld.ice[i] <= 0.001) continue
+            const exposed = Math.max(0.35, 1 - pitchWorld.drifts[i] / 18)
+            pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - thawRate * exposed)
+          }
+        }
       }
 
       if (frame % 8 === 0 && pitchWorld.water.length > 2) {

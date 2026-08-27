@@ -29,13 +29,156 @@ type UseAliveWorldOptions = {
   setScene: Dispatch<SetStateAction<Scene>>
 }
 
+type AliveTimeline = {
+  version: 1
+  phase: AlivePhase
+  nextPhase: AlivePhase
+  phaseEndsAt: number
+  weatherSpeed: number
+}
+
 const SECOND = 1_000
 const MINUTE = 60_000
+const ALIVE_TIMELINE_STORAGE_KEY = 'this-quiet-world-alive-timeline-v1'
 const EMPTY_ALIVE_LAYERS: LayerState = { moon: false, storm: false, fireflies: false }
-const MOONLIT_ALIVE_LAYERS: LayerState = { moon: true, storm: false, fireflies: false }
 
 function between(min: number, max: number) {
   return min + Math.random() * (max - min)
+}
+
+function isAlivePhase(value: unknown): value is AlivePhase {
+  return value === 'calm'
+    || value === 'rain-front'
+    || value === 'rain'
+    || value === 'storm'
+    || value === 'clearing'
+    || value === 'cold-front'
+    || value === 'snow'
+}
+
+function chooseNextFromCalm() {
+  const roll = Math.random()
+  if (roll < 0.42) return 'rain-front' as const
+  if (roll < 0.72) return 'cold-front' as const
+  return 'calm' as const
+}
+
+function makeTimeline(phase: AlivePhase, enteredAt: number, opening = false): AliveTimeline {
+  if (phase === 'calm') {
+    return {
+      version: 1,
+      phase,
+      // A brand-new world still proves Alive is running fairly quickly. Once
+      // established, later calm periods return to the slower overnight cadence.
+      nextPhase: opening ? (Math.random() < 0.56 ? 'rain-front' : 'cold-front') : chooseNextFromCalm(),
+      phaseEndsAt: enteredAt + between(opening ? 1.8 : 7, opening ? 3.0 : 18) * MINUTE,
+      weatherSpeed: 1,
+    }
+  }
+
+  if (phase === 'rain-front') {
+    return {
+      version: 1,
+      phase,
+      nextPhase: 'rain',
+      phaseEndsAt: enteredAt + between(0.55, 1.15) * MINUTE,
+      weatherSpeed: 1,
+    }
+  }
+
+  if (phase === 'rain') {
+    return {
+      version: 1,
+      phase,
+      nextPhase: Math.random() < 0.34 ? 'storm' : 'clearing',
+      phaseEndsAt: enteredAt + between(8, 18) * MINUTE,
+      weatherSpeed: between(0.78, 1.02),
+    }
+  }
+
+  if (phase === 'storm') {
+    return {
+      version: 1,
+      phase,
+      nextPhase: 'clearing',
+      phaseEndsAt: enteredAt + between(6, 13) * MINUTE,
+      weatherSpeed: between(0.98, 1.12),
+    }
+  }
+
+  if (phase === 'clearing') {
+    return {
+      version: 1,
+      phase,
+      nextPhase: 'calm',
+      phaseEndsAt: enteredAt + between(3, 7) * MINUTE,
+      weatherSpeed: 1,
+    }
+  }
+
+  if (phase === 'cold-front') {
+    return {
+      version: 1,
+      phase,
+      nextPhase: 'snow',
+      phaseEndsAt: enteredAt + between(0.65, 1.25) * MINUTE,
+      weatherSpeed: 1,
+    }
+  }
+
+  return {
+    version: 1,
+    phase,
+    nextPhase: 'clearing',
+    phaseEndsAt: enteredAt + between(9, 21) * MINUTE,
+    weatherSpeed: between(0.82, 1.02),
+  }
+}
+
+function readTimeline(): AliveTimeline | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(ALIVE_TIMELINE_STORAGE_KEY)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as Partial<AliveTimeline>
+    if (saved.version !== 1) return null
+    if (!isAlivePhase(saved.phase) || !isAlivePhase(saved.nextPhase)) return null
+    if (typeof saved.phaseEndsAt !== 'number' || !Number.isFinite(saved.phaseEndsAt)) return null
+    if (typeof saved.weatherSpeed !== 'number' || !Number.isFinite(saved.weatherSpeed)) return null
+    return saved as AliveTimeline
+  } catch {
+    return null
+  }
+}
+
+function saveTimeline(timeline: AliveTimeline) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(ALIVE_TIMELINE_STORAGE_KEY, JSON.stringify(timeline))
+  } catch {
+    // Alive still works as a normal in-session scheduler when storage is blocked.
+  }
+}
+
+function resolveTimelineToNow(timeline: AliveTimeline, now: number) {
+  let resolved = timeline
+  let transitions = 0
+
+  // Advance by scheduled wall-clock boundaries rather than pretending all missed
+  // frames ran. A night/day away therefore moves Alive through the same kind of
+  // weather sequence it would have had if the screen had stayed open.
+  while (resolved.phaseEndsAt <= now && transitions < 4096) {
+    resolved = makeTimeline(resolved.nextPhase, resolved.phaseEndsAt)
+    transitions += 1
+  }
+
+  // Defensive fallback for an absurdly old/corrupt-but-valid timestamp. In normal
+  // use even weeks away are comfortably below the guard.
+  if (resolved.phaseEndsAt <= now) resolved = makeTimeline('calm', now)
+
+  saveTimeline(resolved)
+  return resolved
 }
 
 function averageSnowDepth() {
@@ -65,6 +208,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
 
   const aliveLayersRef = useRef<LayerState>(EMPTY_ALIVE_LAYERS)
   const phaseRef = useRef<AlivePhase>('calm')
+  const timelineRef = useRef<AliveTimeline | null>(null)
   const eventIdRef = useRef(0)
 
   const patchAliveLayers = (patch: Partial<LayerState>) => {
@@ -101,79 +245,62 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       microTimer = window.setTimeout(runMicroEvent, delay)
     }
 
-    const schedulePhase = (next: AlivePhase, minMinutes: number, maxMinutes: number) => {
-      window.clearTimeout(phaseTimer)
-      phaseTimer = window.setTimeout(() => enterPhase(next), between(minMinutes, maxMinutes) * MINUTE)
-    }
-
-    const chooseNextFromCalm = () => {
-      const roll = Math.random()
-      if (roll < 0.42) return 'rain-front' as const
-      if (roll < 0.72) return 'cold-front' as const
-      return 'calm' as const
-    }
-
-    function enterPhase(next: AlivePhase) {
+    const applyTimeline = (timeline: AliveTimeline, enteringLive = false) => {
       if (disposed) return
-      phaseRef.current = next
-      setPhase(next)
+      timelineRef.current = timeline
+      phaseRef.current = timeline.phase
+      setPhase(timeline.phase)
+      setWeatherSpeed(timeline.weatherSpeed)
       setMoonHalo(false)
       setFireflyMultiplier(1)
 
-      if (next === 'calm') {
+      if (timeline.phase === 'calm') {
         setScene('calm')
-        setWeatherSpeed(1)
         patchAliveLayers({ storm: false, fireflies: false })
-        schedulePhase(chooseNextFromCalm(), 7, 18)
-        return
-      }
-
-      if (next === 'rain-front') {
+      } else if (timeline.phase === 'rain-front') {
         setScene('calm')
-        setWeatherSpeed(1)
         patchAliveLayers({ storm: false, fireflies: false })
-        emitSkyEvent({ kind: 'moon-veil', duration: between(18_000, 32_000) })
-        schedulePhase('rain', 0.55, 1.15)
-        return
-      }
-
-      if (next === 'rain') {
+        // A front that is already underway when Alive resumes should still look
+        // like a front rather than a mysterious calm pause.
+        if (enteringLive) emitSkyEvent({ kind: 'moon-veil', duration: between(18_000, 32_000) })
+      } else if (timeline.phase === 'rain') {
         setScene('rain')
-        setWeatherSpeed(between(0.78, 1.02))
         patchAliveLayers({ storm: false, fireflies: false })
-        schedulePhase(Math.random() < 0.34 ? 'storm' : 'clearing', 8, 18)
-        return
-      }
-
-      if (next === 'storm') {
+      } else if (timeline.phase === 'storm') {
         setScene('rain')
-        setWeatherSpeed(between(0.98, 1.12))
         patchAliveLayers({ storm: true, fireflies: false })
-        schedulePhase('clearing', 6, 13)
-        return
-      }
-
-      if (next === 'clearing') {
+      } else if (timeline.phase === 'clearing') {
         setScene('calm')
-        setWeatherSpeed(1)
         patchAliveLayers({ storm: false, fireflies: false })
-        schedulePhase('calm', 3, 7)
-        return
-      }
-
-      if (next === 'cold-front') {
+      } else if (timeline.phase === 'cold-front') {
         setScene('calm')
-        setWeatherSpeed(1)
         patchAliveLayers({ storm: false, fireflies: false })
-        emitSkyEvent({ kind: 'moon-veil', duration: between(20_000, 38_000) })
-        schedulePhase('snow', 0.65, 1.25)
-        return
+        if (enteringLive) emitSkyEvent({ kind: 'moon-veil', duration: between(20_000, 38_000) })
+      } else {
+        setScene('snow')
+        patchAliveLayers({ storm: false, fireflies: false })
       }
+    }
 
-      setScene('snow')
-      setWeatherSpeed(between(0.82, 1.02))
-      patchAliveLayers({ storm: false, fireflies: false })
-      schedulePhase('clearing', 9, 21)
+    const scheduleCurrentPhaseEnd = () => {
+      window.clearTimeout(phaseTimer)
+      const current = timelineRef.current
+      if (!current) return
+      const delay = Math.max(0, current.phaseEndsAt - Date.now())
+      phaseTimer = window.setTimeout(syncTimelineToNow, delay)
+    }
+
+    function syncTimelineToNow() {
+      if (disposed) return
+      const current = timelineRef.current
+      if (!current) return
+      const resolved = resolveTimelineToNow(current, Date.now())
+      const changed = resolved.phase !== current.phase
+        || resolved.phaseEndsAt !== current.phaseEndsAt
+        || resolved.nextPhase !== current.nextPhase
+
+      if (changed) applyTimeline(resolved, true)
+      scheduleCurrentPhaseEnd()
     }
 
     function runMicroEvent() {
@@ -245,22 +372,30 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       scheduleMicro()
     }
 
-    phaseRef.current = 'calm'
-    setPhase('calm')
-    setWeatherSpeed(1)
-    aliveLayersRef.current = MOONLIT_ALIVE_LAYERS
-    setAliveLayers(MOONLIT_ALIVE_LAYERS)
-    setScene('calm')
-    // The first real weather movement is guaranteed early. Alive must prove that it
-    // is running before a new user has had time to decide the screen is frozen.
-    schedulePhase(Math.random() < 0.56 ? 'rain-front' : 'cold-front', 1.8, 3.0)
+    const now = Date.now()
+    const savedTimeline = readTimeline()
+    const timeline = savedTimeline
+      ? resolveTimelineToNow(savedTimeline, now)
+      : makeTimeline('calm', now, true)
+
+    if (!savedTimeline) saveTimeline(timeline)
+    applyTimeline(timeline, savedTimeline !== null)
+    scheduleCurrentPhaseEnd()
     scheduleMicro(true)
+
+    const syncAfterVisibilityChange = () => {
+      if (document.visibilityState === 'visible') syncTimelineToNow()
+    }
+    window.addEventListener('pageshow', syncTimelineToNow)
+    document.addEventListener('visibilitychange', syncAfterVisibilityChange)
 
     return () => {
       disposed = true
       window.clearTimeout(phaseTimer)
       window.clearTimeout(microTimer)
       window.clearTimeout(microEndTimer)
+      window.removeEventListener('pageshow', syncTimelineToNow)
+      document.removeEventListener('visibilitychange', syncAfterVisibilityChange)
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)

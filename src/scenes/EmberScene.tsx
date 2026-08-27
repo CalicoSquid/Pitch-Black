@@ -533,6 +533,12 @@ export function EmberScene({
             spawnSteam(i, melt)
           }
 
+          const thaw = Math.min(pitchWorld.ice[i] || 0, heat * 0.0048 * scaled)
+          if (thaw > 0) {
+            pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - thaw)
+            spawnSteam(i, thaw * 0.85)
+          }
+
           const evap = Math.min(pitchWorld.water[i], heat * 0.038 * scaled)
           if (evap > 0) {
             pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - evap)

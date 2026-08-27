@@ -3,6 +3,7 @@ import type { Scene } from '../types'
 import { ensureWorld, pitchWorld } from '../world/worldState'
 import {
   createTerrainRenderCache,
+  drawFrozenSkin,
   drawStandingWater,
   drawTerrain,
   invalidateTerrainRenderCache,
@@ -70,6 +71,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
       idleCleared = false
       ctx.clearRect(0, 0, width, height)
       drawTerrain(ctx, width, height, light, time, pitchWorld.wetness, terrainCache)
+      drawFrozenSkin(ctx, width, height, Math.max(0.20, light))
       drawStandingWater(ctx, width, height, Math.max(0.20, light))
 
       raf = requestAnimationFrame(draw)
