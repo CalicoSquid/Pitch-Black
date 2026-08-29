@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
-import { standingWaterSurfaceY, worldBaseY } from '../world/worldState'
+import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 
 export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star'
 
@@ -254,103 +254,180 @@ type MeteorPoint = {
   y: number
 }
 
-function meteorPointAt(width: number, height: number, flightTime: number): MeteorPoint {
-  const horizon = worldBaseY(height) + 18
-  const flightDuration = 5_250
-  const p = flightTime / flightDuration
-  const sx = -width * 0.18
-  const sy = height * 0.115
-  const ex = width * 0.86
-  const ey = horizon
-  const acceleration = height * 0.095
+type MeteorVector = {
+  x: number
+  y: number
+}
 
-  // Linear horizontal momentum plus constant downward acceleration. The
-  // endpoint stays behind the horizon by subtracting the acceleration term
-  // from initial vertical velocity rather than easing toward a destination.
+const GREAT_METEOR_FLIGHT_MS = 4_700
+const GREAT_METEOR_TRAIL_MS = 4_850
+
+function meteorTerrainYAt(x: number, width: number, height: number) {
+  const surface = surfaceYAt(x, width, height)
+  return Number.isFinite(surface) ? surface : worldBaseY(height)
+}
+
+function clipMeteorToSky(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const step = Math.max(6, Math.round(width / 220))
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(width, 0)
+  for (let x = width; x >= 0; x -= step) {
+    ctx.lineTo(x, meteorTerrainYAt(x, width, height))
+  }
+  ctx.lineTo(0, meteorTerrainYAt(0, width, height))
+  ctx.closePath()
+  ctx.clip()
+}
+
+function meteorPointAt(width: number, height: number, flightTime: number): MeteorPoint {
+  const burialDepth = Math.max(44, height * 0.058)
+  const horizon = worldBaseY(height) + burialDepth
+  const p = flightTime / GREAT_METEOR_FLIGHT_MS
+  const sx = -width * 0.15
+  const sy = height * 0.12
+  const ex = width * 0.84
+  const ey = horizon
+  const acceleration = height * 0.082
+
+  // Forward momentum stays constant while gravity pulls the bolide decisively
+  // down through the live horizon. The endpoint is intentionally well behind
+  // the world so there is no possible visible skim or stop above the terrain.
   return {
     x: sx + (ex - sx) * p,
     y: sy + (ey - sy - acceleration) * p + acceleration * p * p,
   }
 }
 
+function meteorVelocityAt(width: number, height: number, flightTime: number): MeteorVector {
+  const burialDepth = Math.max(44, height * 0.058)
+  const horizon = worldBaseY(height) + burialDepth
+  const p = flightTime / GREAT_METEOR_FLIGHT_MS
+  const sx = -width * 0.15
+  const sy = height * 0.12
+  const ex = width * 0.84
+  const ey = horizon
+  const acceleration = height * 0.082
+  const dxdp = ex - sx
+  const dydp = ey - sy - acceleration + 2 * acceleration * p
+  return {
+    x: dxdp / GREAT_METEOR_FLIGHT_MS,
+    y: dydp / GREAT_METEOR_FLIGHT_MS,
+  }
+}
+
+function meteorOffsetAt(sampleTime: number, age: number, height: number) {
+  const ageSeconds = age / 1000
+  const spread = Math.pow(clamp01(age / GREAT_METEOR_TRAIL_MS), 0.88)
+  const swirl = Math.sin(sampleTime * 0.0021 + 1.8) * 0.46 + Math.sin(sampleTime * 0.0068 + 0.7) * 0.15
+  const lift = 0.22 + Math.sin(sampleTime * 0.0013 + 0.35) * 0.06 + Math.sin(sampleTime * 0.0049) * 0.02
+  return {
+    x: swirl * Math.pow(ageSeconds, 1.12) * 0.60,
+    y: -Math.pow(ageSeconds, 1.14) * lift * 0.66 - spread * height * 0.00072,
+  }
+}
+
+function meteorRenderedPointAt(width: number, height: number, sampleTime: number, age: number): MeteorPoint {
+  const point = meteorPointAt(width, height, sampleTime)
+  const offset = meteorOffsetAt(sampleTime, age, height)
+  return {
+    x: point.x + offset.x,
+    y: point.y + offset.y,
+  }
+}
+
 function drawGreatMeteor(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number) {
-  const start = 1_350
-  const flightDuration = 5_250
-  const trailLife = 4_700
+  const start = 1_250
+  const flightDuration = GREAT_METEOR_FLIGHT_MS
+  const trailLife = GREAT_METEOR_TRAIL_MS
   const t = elapsed - start
   if (t < 0 || t > flightDuration + trailLife) return
 
-  const horizonY = worldBaseY(height)
   const headVisible = t <= flightDuration
-  const sampleSpacing = 54
+  const sampleSpacing = 20
   const youngestSample = Math.min(t, flightDuration)
   const oldestSample = Math.max(0, youngestSample - trailLife)
 
   ctx.save()
+  // This is the important physical rule for the event: the meteor exists only
+  // in the sky. Snow, standing water and permanent ground all occlude it using
+  // the same live world surface the weather systems use.
+  clipMeteorToSky(ctx, width, height)
   ctx.globalCompositeOperation = 'screen'
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
-  // The trail is previous positions, each with its own age. Older atmosphere
-  // widens, cools and dies independently; it is never resized from the head.
-  let previous: MeteorPoint | null = null
-  let previousAge = 0
+  const samples: Array<{ age: number; point: MeteorPoint }> = []
   for (let sampleTime = oldestSample; sampleTime <= youngestSample + 0.01; sampleTime += sampleSpacing) {
-    const point = meteorPointAt(width, height, sampleTime)
     const age = t - sampleTime
-    const life = clamp01(1 - age / trailLife)
-    const young = clamp01(1 - age / 900)
-    const drift = Math.pow(age / 1000, 1.18)
-    point.x += Math.sin(sampleTime * 0.0021 + 1.8) * drift * 0.46
-    point.y -= drift * (0.22 + Math.sin(sampleTime * 0.0013) * 0.06)
+    samples.push({
+      age,
+      point: meteorRenderedPointAt(width, height, sampleTime, age),
+    })
+  }
 
-    if (previous) {
-      const segmentLife = (life + clamp01(1 - previousAge / trailLife)) * 0.5
-      const widthPx = 0.62 + Math.pow(1 - segmentLife, 0.72) * 4.8 + young * 0.55
-      const alpha = Math.pow(segmentLife, 1.32) * (0.12 + young * 0.53)
-      const cool = clamp01(age / trailLife)
-      const r = Math.round(238 - cool * 93)
-      const g = Math.round(247 - cool * 48)
-      const b = Math.round(255 - cool * 8)
-      ctx.beginPath()
-      ctx.moveTo(previous.x, previous.y)
-      ctx.lineTo(point.x, point.y)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`
-      ctx.lineWidth = widthPx
+  const tracePath = (maxAge: number) => {
+    let first = 0
+    while (first < samples.length && samples[first].age > maxAge) first++
+    if (samples.length - first < 2) return null
+
+    ctx.beginPath()
+    ctx.moveTo(samples[first].point.x, samples[first].point.y)
+    for (let i = first + 1; i < samples.length - 1; i++) {
+      const current = samples[i].point
+      const next = samples[i + 1].point
+      ctx.quadraticCurveTo(current.x, current.y, (current.x + next.x) * 0.5, (current.y + next.y) * 0.5)
+    }
+    const last = samples[samples.length - 1].point
+    ctx.lineTo(last.x, last.y)
+    return { start: samples[first].point, end: last }
+  }
+
+  if (samples.length >= 2) {
+    // Three continuous strokes are enough: soft atmosphere, luminous body and
+    // a short hot front. No stitched per-segment styling is visible anymore.
+    const wakePath = tracePath(trailLife)
+    if (wakePath) {
+      const gradient = ctx.createLinearGradient(wakePath.start.x, wakePath.start.y, wakePath.end.x, wakePath.end.y)
+      gradient.addColorStop(0, 'rgba(148,174,198,0.006)')
+      gradient.addColorStop(0.50, 'rgba(174,199,220,0.032)')
+      gradient.addColorStop(1, 'rgba(211,225,236,0.105)')
+      ctx.strokeStyle = gradient
+      ctx.lineWidth = 8.8
       ctx.stroke()
     }
 
-    previous = point
-    previousAge = age
-  }
-
-  // A much finer hot core persists only close to the current trajectory,
-  // keeping the bolide brilliant without turning the head into a glowing ball.
-  if (t <= flightDuration) {
-    const hotTailMs = 760
-    const hotStart = Math.max(0, t - hotTailMs)
-    ctx.beginPath()
-    let began = false
-    for (let sampleTime = hotStart; sampleTime <= t; sampleTime += 42) {
-      const point = meteorPointAt(width, height, sampleTime)
-      if (!began) {
-        ctx.moveTo(point.x, point.y)
-        began = true
-      } else {
-        ctx.lineTo(point.x, point.y)
-      }
+    const bodyPath = tracePath(3_500)
+    if (bodyPath) {
+      const gradient = ctx.createLinearGradient(bodyPath.start.x, bodyPath.start.y, bodyPath.end.x, bodyPath.end.y)
+      gradient.addColorStop(0, 'rgba(194,211,225,0.020)')
+      gradient.addColorStop(0.48, 'rgba(221,231,238,0.18)')
+      gradient.addColorStop(0.80, 'rgba(248,231,207,0.46)')
+      gradient.addColorStop(1, 'rgba(255,238,207,0.76)')
+      ctx.strokeStyle = gradient
+      ctx.lineWidth = 3.4
+      ctx.stroke()
     }
-    ctx.strokeStyle = 'rgba(239,248,255,0.58)'
-    ctx.lineWidth = 1.05
-    ctx.stroke()
+
+    const hotPath = headVisible ? tracePath(1_050) : null
+    if (hotPath) {
+      const gradient = ctx.createLinearGradient(hotPath.start.x, hotPath.start.y, hotPath.end.x, hotPath.end.y)
+      gradient.addColorStop(0, 'rgba(246,223,196,0.035)')
+      gradient.addColorStop(0.54, 'rgba(255,219,165,0.28)')
+      gradient.addColorStop(1, 'rgba(255,246,222,0.94)')
+      ctx.strokeStyle = gradient
+      ctx.lineWidth = 4.6
+      ctx.stroke()
+    }
   }
 
-  // Sparse fragments inherit the parent trajectory and then gently separate.
-  const fragmentTimes = [2_920, 3_710, 4_360]
+  // Fragmentation stays subordinate to the main body: a few tiny pieces peel
+  // away, enough to imply violence without turning the event into particles.
+  const fragmentTimes = [2_780, 3_540, 4_020]
   for (let i = 0; i < fragmentTimes.length; i++) {
     const born = fragmentTimes[i]
     const age = t - born
-    if (age < 0 || age > 2_050) continue
+    if (age < 0 || age > 1_420) continue
 
     const base = meteorPointAt(width, height, Math.min(born + age * 0.90, flightDuration))
     const before = meteorPointAt(width, height, Math.max(0, born - 80))
@@ -360,59 +437,138 @@ function drawGreatMeteor(ctx: CanvasRenderingContext2D, width: number, height: n
     const mag = Math.max(1, Math.hypot(dx, dy))
     const nx = -dy / mag
     const ny = dx / mag
-    const side = i === 1 ? -1 : 1
-    const separation = (age / 1000) * (3.2 + i * 1.7) * side
-    const gravity = Math.pow(age / 1000, 2) * height * (0.0030 + i * 0.0007)
+    const side = i % 2 === 0 ? 1 : -1
+    const separation = (age / 1000) * (1.7 + i * 0.95) * side
+    const gravity = Math.pow(age / 1000, 2) * height * (0.0020 + i * 0.00035)
     const fx = base.x + nx * separation
     const fy = base.y + ny * separation + gravity
-    const fragLife = clamp01(1 - age / 2_050)
+    const fragLife = clamp01(1 - age / 1_420)
 
-    const tailMs = Math.min(360, age)
-    if (tailMs > 40) {
+    const tailMs = Math.min(190, age)
+    if (tailMs > 30) {
       const tailBase = meteorPointAt(width, height, Math.max(0, born + (age - tailMs) * 0.90))
       ctx.beginPath()
       ctx.moveTo(tailBase.x + nx * separation * 0.48, tailBase.y + ny * separation * 0.48)
       ctx.lineTo(fx, fy)
-      ctx.strokeStyle = `rgba(178,218,244,${0.19 * fragLife})`
-      ctx.lineWidth = 0.58 + i * 0.08
+      ctx.strokeStyle = `rgba(233,224,213,${0.085 * fragLife})`
+      ctx.lineWidth = 0.40 + i * 0.04
       ctx.stroke()
     }
 
+    const halo = ctx.createRadialGradient(fx, fy, 0, fx, fy, 3.3 + i * 0.22)
+    halo.addColorStop(0, `rgba(255,229,199,${0.085 * fragLife})`)
+    halo.addColorStop(1, 'rgba(188,220,242,0)')
+    ctx.fillStyle = halo
     ctx.beginPath()
-    ctx.arc(fx, fy, 0.62 + i * 0.10, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(244,249,252,${0.54 * fragLife})`
+    ctx.arc(fx, fy, 3.3 + i * 0.22, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(fx, fy, 0.54 + i * 0.04, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(250,241,230,${0.40 * fragLife})`
     ctx.fill()
   }
 
-  if (headVisible) {
-    const head = meteorPointAt(width, height, t)
-    if (head.y < horizonY + 5) {
-      const phase = clamp01(t / flightDuration)
-      const burn = 0.78 + Math.sin(Math.min(1, phase * 1.18) * Math.PI) * 0.22
-
-      const glow = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 8.5)
-      glow.addColorStop(0, `rgba(255,252,246,${0.44 * burn})`)
-      glow.addColorStop(0.28, `rgba(210,239,255,${0.18 * burn})`)
-      glow.addColorStop(1, 'rgba(159,211,247,0)')
-      ctx.fillStyle = glow
+  // The ionized train is aftermath only. It hangs where the bolide passed and
+  // slowly diffuses while the head is already hidden behind the landscape.
+  const trainAfter = t - flightDuration
+  if (trainAfter > 0) {
+    const trainFade = clamp01(1 - trainAfter / 1_900)
+    if (trainFade > 0) {
       ctx.beginPath()
-      ctx.arc(head.x, head.y, 8.5, 0, Math.PI * 2)
-      ctx.fill()
-
-      ctx.beginPath()
-      ctx.arc(head.x, head.y, 1.55 + burn * 0.36, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(255,253,249,0.98)'
-      ctx.fill()
+      let began = false
+      const trainStart = Math.max(0, flightDuration - 1_850)
+      for (let sampleTime = trainStart; sampleTime <= flightDuration; sampleTime += 56) {
+        const age = trainAfter + (flightDuration - sampleTime)
+        const point = meteorRenderedPointAt(width, height, sampleTime, age)
+        const wobble = Math.sin(sampleTime * 0.0055 + trainAfter * 0.004) * (1.0 + trainAfter / 500)
+        if (!began) {
+          ctx.moveTo(point.x + wobble * 0.18, point.y - wobble * 0.05)
+          began = true
+        } else {
+          ctx.lineTo(point.x + wobble * 0.18, point.y - wobble * 0.05)
+        }
+      }
+      ctx.strokeStyle = `rgba(197,211,224,${0.082 * trainFade})`
+      ctx.lineWidth = 2.7 + (1 - trainFade) * 2.5
+      ctx.stroke()
     }
   }
 
-  // A restrained exposure lift follows peak burn, not the object's endpoint.
-  const flash = Math.max(0, 1 - Math.abs(t - 3_650) / 1_080)
+  if (headVisible) {
+    const head = meteorRenderedPointAt(width, height, t, 0)
+    const velocity = meteorVelocityAt(width, height, t)
+    const mag = Math.max(0.0001, Math.hypot(velocity.x, velocity.y))
+    const dirX = velocity.x / mag
+    const dirY = velocity.y / mag
+    const phase = clamp01(t / flightDuration)
+    const burn = 0.80 + Math.sin(Math.min(1, phase * 1.12) * Math.PI) * 0.20
+
+    // A very broad, barely-there bloom gives the fireball atmospheric scale.
+    const atmosphereGlow = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 74)
+    atmosphereGlow.addColorStop(0, `rgba(255,208,151,${0.044 * burn})`)
+    atmosphereGlow.addColorStop(0.34, `rgba(235,195,158,${0.020 * burn})`)
+    atmosphereGlow.addColorStop(1, 'rgba(196,214,230,0)')
+    ctx.fillStyle = atmosphereGlow
+    ctx.beginPath()
+    ctx.arc(head.x, head.y, 74, 0, Math.PI * 2)
+    ctx.fill()
+
+    // The head is deliberately substantial: a short incandescent shoulder
+    // joins the trail into a compact fireball rather than a dot-on-a-line.
+    ctx.beginPath()
+    ctx.moveTo(head.x - dirX * 34, head.y - dirY * 34)
+    ctx.lineTo(head.x, head.y)
+    ctx.strokeStyle = `rgba(255,218,163,${0.34 * burn})`
+    ctx.lineWidth = 5.2
+    ctx.stroke()
+
+    const glow = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 27)
+    glow.addColorStop(0, `rgba(255,254,244,${0.90 * burn})`)
+    glow.addColorStop(0.12, `rgba(255,239,207,${0.72 * burn})`)
+    glow.addColorStop(0.30, `rgba(255,211,151,${0.42 * burn})`)
+    glow.addColorStop(0.58, `rgba(241,185,129,${0.16 * burn})`)
+    glow.addColorStop(0.82, `rgba(194,218,237,${0.055 * burn})`)
+    glow.addColorStop(1, 'rgba(159,211,247,0)')
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(head.x, head.y, 27, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(head.x, head.y, 5.1 + burn * 0.9, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,238,208,0.98)'
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(head.x, head.y, 2.3 + burn * 0.35, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,251,0.99)'
+    ctx.fill()
+  }
+
+  // A tiny glow sits just above the place where the bolide disappears. Because
+  // the entire event is sky-clipped, this cannot paint over the foreground.
+  const horizonMoment = flightDuration - 370
+  const horizonFlash = clamp01(1 - Math.abs(t - horizonMoment) / 420)
+  if (horizonFlash > 0) {
+    const impact = meteorPointAt(width, height, horizonMoment)
+    const terrainY = meteorTerrainYAt(impact.x, width, height)
+    const glow = ctx.createRadialGradient(impact.x, terrainY - 2, 0, impact.x, terrainY - 2, width * 0.082)
+    glow.addColorStop(0, `rgba(241,207,169,${0.048 * horizonFlash})`)
+    glow.addColorStop(0.38, `rgba(163,181,199,${0.014 * horizonFlash})`)
+    glow.addColorStop(1, 'rgba(132,154,176,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(impact.x - width * 0.082, terrainY - height * 0.055, width * 0.164, height * 0.07)
+  }
+
+  // Peak burn still lifts the world by only a few percent: enough for scale,
+  // never enough to turn the rare event into a flash effect.
+  const flash = Math.max(0, 1 - Math.abs(t - 3_420) / 980)
   if (flash > 0) {
-    const g = ctx.createLinearGradient(0, height * 0.54, 0, height)
-    g.addColorStop(0, 'rgba(164,192,214,0)')
-    g.addColorStop(1, `rgba(164,192,214,${0.022 * flash})`)
-    ctx.fillStyle = g
+    const gradient = ctx.createLinearGradient(0, height * 0.54, 0, height)
+    gradient.addColorStop(0, 'rgba(176,188,197,0)')
+    gradient.addColorStop(1, `rgba(183,190,194,${0.027 * flash})`)
+    ctx.fillStyle = gradient
     ctx.fillRect(0, height * 0.52, width, height * 0.48)
   }
 

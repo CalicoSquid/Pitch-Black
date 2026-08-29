@@ -190,6 +190,33 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Retained a restrained cold exposure lift and moved the distant boom timing to several seconds after the bolide disappears behind the horizon.
 - Distant Storm, Impossible Star, Fog, Alive scheduling, weather, water/ice, lightning depth, and Ember interactions are unchanged.
 
+
+## v1.50.0 — Rare events production pass
+
+- Removed the five temporary rare-event developer toggles and all App-level test state/callback plumbing.
+- Removed the developer-control CSS; the reusable rare-event canvas layers remain as production Alive renderers only.
+- Kept the approved Aurora and Great Meteor hero-event visuals and their independent persistent rarity schedules unchanged.
+- Kept Distant Storm, Impossible Star and contextual post-rain Fog integrated as non-interrupting Alive micro-events.
+- Retained event completion/cleanup behavior, persistent wall-clock scheduling, missed-sighting behavior, and rare overlap rules.
+- Cleaned stale rare-event lab comments and bumped the PWA cache/version for a clean production deploy.
+
+## v1.49.3 — Great Meteor physical rework
+
+- Great Meteor is now clipped against the live terrain/snow/water surface, so the head, fragments and trail are progressively occluded and the bolide genuinely disappears behind the world instead of shining through semi-transparent terrain.
+- Deepened and slightly accelerated the terminal trajectory so it commits below the horizon with no possible visible skim or stop.
+- Simplified the hero read to three smooth continuous strokes: a diffuse atmospheric wake, luminous body and short hot front, eliminating visible stitched trail segmentation.
+- Enlarged the warm-white fireball, strengthened the incandescent shoulder joining head to trail, and added an extremely restrained atmospheric bloom for scale.
+- Reduced fragment prominence and kept the lingering ionized train, subtle horizon glow, restrained world exposure lift and delayed boom.
+- Aurora, Alive rarity scheduling, Distant Storm, Fog, Impossible Star and all five DEV toggles are unchanged.
+
+## v1.49.2 — Great Meteor smoothing pass
+
+- Refined Great Meteor again after live testing: the trail now reads as a smoother continuous bolide streak rather than visibly segmented stitched segments.
+- Enlarged and brightened the meteor head so it feels more like a substantial rare-event body instead of a small pinhead.
+- Added restrained warmth near the hottest front of the meteor and immediate leading trail while keeping the overall effect elegant and minimal.
+- Softened wake drift/turbulence, reduced fragment prominence, and preserved the lingering ionized train, restrained exposure lift, horizon exit acknowledgement and delayed boom.
+- No changes to Aurora, Alive rarity scheduling, Fog / Distant Storm / Impossible Star behavior, or the DEV toggles.
+
 ## v1.49.0 — Rare events enter Alive
 
 - Promoted Aurora and Great Meteor into Alive as independent persistent wall-clock hero events while keeping their v1.48 renderers unchanged. Aurora now lands on a randomized roughly 6–10 hour cadence and Great Meteor roughly 3–6 hours.
@@ -199,3 +226,13 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Ground Fog is now contextual rather than clock-random: after local Rain/Storm clears, sufficiently wet terrain has a chance to develop the existing low fog a few seconds later.
 - The three subtle rare events share one slot so Distant Storm, Fog and Impossible Star do not visually stack on one another. Existing normal Alive micro-events remain unchanged.
 - Retained all five temporary DEV toggles for direct testing and the next visual-polish pass.
+
+
+## v1.49.1 — Great Meteor polish
+
+- Refined Great Meteor so it reads more like a rare bolide than a standard shooting star: brighter heavier head, hotter near-core, broader atmospheric wake, and a more irregular turbulent trail.
+- Reworked the meteor trail into layered history-based passes: a diffuse outer train plus a brighter inner spine with slight variation instead of one clean uniform stroke.
+- Added a brief lingering ionized train after the meteor itself is gone, helping the event leave a subtle atmospheric aftermath.
+- Tweaked fragmentation toward smaller shedding sparks with soft halos and short-lived diverging tails, keeping the effect restrained rather than explosive.
+- Added a tiny horizon acknowledgement flash at disappearance to imply physical scale without turning the event into a dramatic explosion.
+- Aurora, event rarity logic, Alive integration, Fog, Distant Storm, Impossible Star, and all DEV toggles are unchanged.

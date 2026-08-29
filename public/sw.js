@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.49.0-rare-events-alive'
+const CACHE_NAME = 'this-quiet-world-v1.50.0-rare-events-production'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {
