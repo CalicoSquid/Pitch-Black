@@ -18,6 +18,7 @@ import { useIdleControls } from './hooks/useIdleControls'
 import { FirefliesLayer } from './layers/FirefliesLayer'
 import { GlobalMoon } from './layers/GlobalMoon'
 import { StormLayer } from './layers/StormLayer'
+import { RareGroundEventLayer, RareSkyEventLayer, type RareEventKind, type RareEventState } from './layers/RareEventLayers'
 import { EmberScene } from './scenes/EmberScene'
 import { RainScene } from './scenes/RainScene'
 import { SnowScene } from './scenes/SnowScene'
@@ -179,14 +180,39 @@ function App() {
   })
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEventLike | null>(null)
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared'>('idle')
+  const [devRareEvent, setDevRareEvent] = useState<RareEventState | null>(null)
+  const rareEventIdRef = useRef(0)
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
   const shareStatusTimerRef = useRef<number | null>(null)
   const lastWorldTapRef = useRef<{ at: number; x: number; y: number } | null>(null)
   const controlsVisible = useIdleControls(4200)
-  const { phase: alivePhase, weatherSpeed, fireflyMultiplier, moonHalo, skyEvent, aliveLayers } = useAliveWorld({
+  const {
+    phase: alivePhase,
+    weatherSpeed,
+    fireflyMultiplier,
+    moonHalo,
+    skyEvent,
+    aliveLayers,
+    rareEvents: aliveRareEvents,
+    completeRareEvent: completeAliveRareEvent,
+  } = useAliveWorld({
     enabled: aliveOn,
     setScene,
   })
+
+  const toggleDevRareEvent = useCallback((kind: RareEventKind) => {
+    unlockPitchAudio()
+    setDevRareEvent((current) => {
+      if (current?.kind === kind) return null
+      rareEventIdRef.current += 1
+      return { kind, id: rareEventIdRef.current }
+    })
+    if (kind === 'ground-fog' && scene === 'black') setScene('calm')
+  }, [scene])
+
+  const completeDevRareEvent = useCallback((kind: RareEventKind, id: number) => {
+    setDevRareEvent((current) => current?.kind === kind && current.id === id ? null : current)
+  }, [])
 
   const dismissFirstVisit = useCallback(() => {
     setFirstVisit(false)
@@ -625,9 +651,26 @@ function App() {
     >
       <div className="scene-layer">
         {aliveOn && <AliveNightSky phase={alivePhase} />}
+        {aliveOn && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
+          <RareSkyEventLayer
+            key={`alive-rare-sky-${event.kind}-${event.id}`}
+            event={event}
+            soundOn={soundOn}
+            onComplete={completeAliveRareEvent}
+          />
+        ))}
+        <RareSkyEventLayer event={devRareEvent} soundOn={soundOn} onComplete={completeDevRareEvent} />
         <GlobalMoon visible={displayLayers.moon} halo={aliveOn && moonHalo} />
         <div className={`world-weather-layer ${scene === 'black' ? 'world-hidden' : ''}`}>
           <WorldBaseScene scene={scene} />
+          {aliveOn && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (
+            <RareGroundEventLayer
+              key={`alive-rare-ground-${event.kind}-${event.id}`}
+              event={event}
+              onComplete={completeAliveRareEvent}
+            />
+          ))}
+          <RareGroundEventLayer event={devRareEvent} onComplete={completeDevRareEvent} />
           <SnowScene active={scene === 'snow'} alive={aliveOn} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
           <RainScene active={scene === 'rain'} alive={aliveOn} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
           <EmberScene
@@ -650,6 +693,25 @@ function App() {
           depthRevealEventId={aliveOn && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
         />
         <AliveAmbience active={aliveOn} soundOn={soundOn} phase={alivePhase} />
+      </div>
+
+      <div className="dev-rare-event-panel" role="group" aria-label="Rare event developer controls" onPointerDown={(event) => event.stopPropagation()}>
+        {([
+          ['aurora', 'AURORA'],
+          ['great-meteor', 'GREAT METEOR'],
+          ['distant-storm', 'DISTANT STORM'],
+          ['ground-fog', 'FOG'],
+          ['impossible-star', 'IMPOSSIBLE STAR'],
+        ] as Array<[RareEventKind, string]>).map(([kind, label]) => (
+          <button
+            key={kind}
+            type="button"
+            className={devRareEvent?.kind === kind ? 'active' : ''}
+            onClick={() => toggleDevRareEvent(kind)}
+          >
+            DEV · {label}
+          </button>
+        ))}
       </div>
 
       {showClock && <ClockDisplay awake={controlsVisible} />}

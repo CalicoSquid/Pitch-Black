@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { LayerState, Scene } from '../types'
+import type { RareEventKind, RareEventState } from '../layers/RareEventLayers'
 import { pitchWorld } from '../world/worldState'
 
 export type AlivePhase =
@@ -37,13 +38,33 @@ type AliveTimeline = {
   weatherSpeed: number
 }
 
+type AliveHeroSchedule = {
+  version: 1
+  auroraNextAt: number
+  greatMeteorNextAt: number
+}
+
 const SECOND = 1_000
 const MINUTE = 60_000
+const HOUR = 60 * MINUTE
 const ALIVE_TIMELINE_STORAGE_KEY = 'this-quiet-world-alive-timeline-v1'
+const ALIVE_HERO_STORAGE_KEY = 'this-quiet-world-alive-hero-events-v1'
 const EMPTY_ALIVE_LAYERS: LayerState = { moon: false, storm: false, fireflies: false }
 
 function between(min: number, max: number) {
   return min + Math.random() * (max - min)
+}
+
+function nextAuroraAt(from: number) {
+  return from + between(6, 10) * HOUR
+}
+
+function nextGreatMeteorAt(from: number) {
+  return from + between(3, 6) * HOUR
+}
+
+function isAliveRareMicroKind(kind: RareEventKind) {
+  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star'
 }
 
 function isAlivePhase(value: unknown): value is AlivePhase {
@@ -181,6 +202,65 @@ function resolveTimelineToNow(timeline: AliveTimeline, now: number) {
   return resolved
 }
 
+function readHeroSchedule(): AliveHeroSchedule | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(ALIVE_HERO_STORAGE_KEY)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as Partial<AliveHeroSchedule>
+    if (saved.version !== 1) return null
+    if (typeof saved.auroraNextAt !== 'number' || !Number.isFinite(saved.auroraNextAt)) return null
+    if (typeof saved.greatMeteorNextAt !== 'number' || !Number.isFinite(saved.greatMeteorNextAt)) return null
+    return saved as AliveHeroSchedule
+  } catch {
+    return null
+  }
+}
+
+function saveHeroSchedule(schedule: AliveHeroSchedule) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(ALIVE_HERO_STORAGE_KEY, JSON.stringify(schedule))
+  } catch {
+    // Hero events still schedule normally for the current session if storage is blocked.
+  }
+}
+
+function makeHeroSchedule(now: number): AliveHeroSchedule {
+  return {
+    version: 1,
+    auroraNextAt: nextAuroraAt(now),
+    greatMeteorNextAt: nextGreatMeteorAt(now),
+  }
+}
+
+function resolveHeroScheduleToNow(schedule: AliveHeroSchedule, now: number) {
+  let auroraNextAt = schedule.auroraNextAt
+  let greatMeteorNextAt = schedule.greatMeteorNextAt
+  let guard = 0
+
+  // Hero sightings that happened while nobody was watching stay missed. Advance
+  // their wall-clock schedule rather than replaying a backlog when the tab returns.
+  while (auroraNextAt <= now && guard < 1024) {
+    auroraNextAt = nextAuroraAt(auroraNextAt)
+    guard += 1
+  }
+
+  guard = 0
+  while (greatMeteorNextAt <= now && guard < 2048) {
+    greatMeteorNextAt = nextGreatMeteorAt(greatMeteorNextAt)
+    guard += 1
+  }
+
+  const resolved = (auroraNextAt <= now || greatMeteorNextAt <= now)
+    ? makeHeroSchedule(now)
+    : { version: 1 as const, auroraNextAt, greatMeteorNextAt }
+
+  saveHeroSchedule(resolved)
+  return resolved
+}
+
 function averageSnowDepth() {
   const snow = pitchWorld.drifts
   if (snow.length < 3) return 0
@@ -205,11 +285,15 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
   const [moonHalo, setMoonHalo] = useState(false)
   const [skyEvent, setSkyEvent] = useState<AliveSkyEvent | null>(null)
   const [aliveLayers, setAliveLayers] = useState<LayerState>(EMPTY_ALIVE_LAYERS)
+  const [rareEvents, setRareEvents] = useState<RareEventState[]>([])
 
   const aliveLayersRef = useRef<LayerState>(EMPTY_ALIVE_LAYERS)
+  const rareEventsRef = useRef<RareEventState[]>([])
   const phaseRef = useRef<AlivePhase>('calm')
   const timelineRef = useRef<AliveTimeline | null>(null)
+  const heroScheduleRef = useRef<AliveHeroSchedule | null>(null)
   const eventIdRef = useRef(0)
+  const rareEventIdRef = useRef(0)
 
   const patchAliveLayers = (patch: Partial<LayerState>) => {
     setAliveLayers((current) => {
@@ -219,24 +303,55 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     })
   }
 
+  const completeRareEvent = useCallback((kind: RareEventKind, id: number) => {
+    setRareEvents((current) => {
+      const next = current.filter((event) => !(event.kind === kind && event.id === id))
+      rareEventsRef.current = next
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     if (!enabled) {
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS
+      rareEventsRef.current = []
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)
       setFireflyMultiplier(1)
       setSkyEvent(null)
+      setRareEvents([])
       return
     }
 
     let phaseTimer = 0
     let microTimer = 0
     let microEndTimer = 0
+    let auroraTimer = 0
+    let greatMeteorTimer = 0
+    let distantStormTimer = 0
+    let impossibleStarTimer = 0
+    let fogTimer = 0
     let disposed = false
 
     const emitSkyEvent = (event: Omit<AliveSkyEvent, 'id'>) => {
       eventIdRef.current += 1
       setSkyEvent({ ...event, id: eventIdRef.current })
+    }
+
+    const emitRareEvent = (kind: RareEventKind) => {
+      if (isAliveRareMicroKind(kind) && rareEventsRef.current.some((event) => isAliveRareMicroKind(event.kind))) {
+        return false
+      }
+      if (!isAliveRareMicroKind(kind) && rareEventsRef.current.some((event) => event.kind === kind)) {
+        return false
+      }
+
+      rareEventIdRef.current += 1
+      const event = { kind, id: rareEventIdRef.current }
+      const next = [...rareEventsRef.current, event]
+      rareEventsRef.current = next
+      setRareEvents(next)
+      return true
     }
 
     const scheduleMicro = (first = false) => {
@@ -245,8 +360,32 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       microTimer = window.setTimeout(runMicroEvent, delay)
     }
 
+    const scheduleDistantStorm = (retry = false) => {
+      window.clearTimeout(distantStormTimer)
+      const delay = retry ? between(3, 7) * MINUTE : between(20, 45) * MINUTE
+      distantStormTimer = window.setTimeout(runDistantStorm, delay)
+    }
+
+    const scheduleImpossibleStar = (retry = false) => {
+      window.clearTimeout(impossibleStarTimer)
+      const delay = retry ? between(3, 7) * MINUTE : between(15, 35) * MINUTE
+      impossibleStarTimer = window.setTimeout(runImpossibleStar, delay)
+    }
+
+    const scheduleFogAfterRain = () => {
+      window.clearTimeout(fogTimer)
+      if (Math.random() >= 0.64 || pitchWorld.wetness < 0.16) return
+      fogTimer = window.setTimeout(() => {
+        if (disposed) return
+        if ((phaseRef.current === 'clearing' || phaseRef.current === 'calm') && pitchWorld.wetness >= 0.10) {
+          emitRareEvent('ground-fog')
+        }
+      }, between(10, 38) * SECOND)
+    }
+
     const applyTimeline = (timeline: AliveTimeline, enteringLive = false) => {
       if (disposed) return
+      const previousPhase = phaseRef.current
       timelineRef.current = timeline
       phaseRef.current = timeline.phase
       setPhase(timeline.phase)
@@ -272,6 +411,9 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       } else if (timeline.phase === 'clearing') {
         setScene('calm')
         patchAliveLayers({ storm: false, fireflies: false })
+        if (enteringLive && (previousPhase === 'rain' || previousPhase === 'storm')) {
+          scheduleFogAfterRain()
+        }
       } else if (timeline.phase === 'cold-front') {
         setScene('calm')
         patchAliveLayers({ storm: false, fireflies: false })
@@ -376,6 +518,60 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       scheduleMicro()
     }
 
+    function runDistantStorm() {
+      if (disposed) return
+      const currentPhase = phaseRef.current
+      const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
+      if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent('distant-storm')) {
+        scheduleDistantStorm(true)
+        return
+      }
+      scheduleDistantStorm()
+    }
+
+    function runImpossibleStar() {
+      if (disposed) return
+      const currentPhase = phaseRef.current
+      const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front'
+      if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent('impossible-star')) {
+        scheduleImpossibleStar(true)
+        return
+      }
+      scheduleImpossibleStar()
+    }
+
+    const scheduleHeroTimers = () => {
+      window.clearTimeout(auroraTimer)
+      window.clearTimeout(greatMeteorTimer)
+      const schedule = heroScheduleRef.current
+      if (!schedule) return
+      auroraTimer = window.setTimeout(() => runHeroEvent('aurora'), Math.max(0, schedule.auroraNextAt - Date.now()))
+      greatMeteorTimer = window.setTimeout(() => runHeroEvent('great-meteor'), Math.max(0, schedule.greatMeteorNextAt - Date.now()))
+    }
+
+    function runHeroEvent(kind: 'aurora' | 'great-meteor') {
+      if (disposed) return
+      const schedule = heroScheduleRef.current
+      if (!schedule) return
+      const now = Date.now()
+
+      // A backgrounded tab does not bank a hero event for later. The world keeps
+      // living; if nobody saw that scheduled sighting, it simply becomes a missed one.
+      if (document.visibilityState !== 'visible') {
+        heroScheduleRef.current = resolveHeroScheduleToNow(schedule, now + 1)
+        scheduleHeroTimers()
+        return
+      }
+
+      emitRareEvent(kind)
+      const next = kind === 'aurora'
+        ? { ...schedule, auroraNextAt: nextAuroraAt(now) }
+        : { ...schedule, greatMeteorNextAt: nextGreatMeteorAt(now) }
+      heroScheduleRef.current = next
+      saveHeroSchedule(next)
+      scheduleHeroTimers()
+    }
+
     const now = Date.now()
     const savedTimeline = readTimeline()
     const timeline = savedTimeline
@@ -386,11 +582,27 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     applyTimeline(timeline, savedTimeline !== null)
     scheduleCurrentPhaseEnd()
     scheduleMicro(true)
+    scheduleDistantStorm()
+    scheduleImpossibleStar()
+
+    const savedHeroSchedule = readHeroSchedule()
+    const heroSchedule = savedHeroSchedule
+      ? resolveHeroScheduleToNow(savedHeroSchedule, now)
+      : makeHeroSchedule(now)
+    heroScheduleRef.current = heroSchedule
+    if (!savedHeroSchedule) saveHeroSchedule(heroSchedule)
+    scheduleHeroTimers()
 
     const syncAfterVisibilityChange = () => {
-      if (document.visibilityState === 'visible') syncTimelineToNow()
+      if (document.visibilityState !== 'visible') return
+      syncTimelineToNow()
+      const currentHeroSchedule = heroScheduleRef.current
+      if (currentHeroSchedule) {
+        heroScheduleRef.current = resolveHeroScheduleToNow(currentHeroSchedule, Date.now())
+        scheduleHeroTimers()
+      }
     }
-    window.addEventListener('pageshow', syncTimelineToNow)
+    window.addEventListener('pageshow', syncAfterVisibilityChange)
     document.addEventListener('visibilitychange', syncAfterVisibilityChange)
 
     return () => {
@@ -398,15 +610,31 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       window.clearTimeout(phaseTimer)
       window.clearTimeout(microTimer)
       window.clearTimeout(microEndTimer)
-      window.removeEventListener('pageshow', syncTimelineToNow)
+      window.clearTimeout(auroraTimer)
+      window.clearTimeout(greatMeteorTimer)
+      window.clearTimeout(distantStormTimer)
+      window.clearTimeout(impossibleStarTimer)
+      window.clearTimeout(fogTimer)
+      window.removeEventListener('pageshow', syncAfterVisibilityChange)
       document.removeEventListener('visibilitychange', syncAfterVisibilityChange)
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS
+      rareEventsRef.current = []
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)
       setFireflyMultiplier(1)
       setSkyEvent(null)
+      setRareEvents([])
     }
   }, [enabled, setScene])
 
-  return { phase, weatherSpeed, fireflyMultiplier, moonHalo, skyEvent, aliveLayers }
+  return {
+    phase,
+    weatherSpeed,
+    fireflyMultiplier,
+    moonHalo,
+    skyEvent,
+    aliveLayers,
+    rareEvents,
+    completeRareEvent,
+  }
 }

@@ -166,3 +166,36 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Alive can also produce a rare off-screen distant lightning reveal during wet/front weather, without requiring a visible bolt.
 - Keeps the approved near-ridge tree silhouettes against lit sky, with only faint atmospheric terrain beyond.
 - No changes to the accepted landscape artwork, scene controls, weather durations, or terrain physics.
+
+
+## v1.47.0 — Hero rare events refinement
+
+- Branched cleanly from the pre-animal v1.42.0 baseline; no stag/animal experiment code is present.
+- Added a temporary five-button rare-event developer panel with true start/stop toggles.
+- Added a slow desaturated Northern Lights / aurora performance.
+- Added a Great Meteor / bolide with fragmentation, brief cold world illumination and delayed low boom when sound is enabled.
+- Added a distant off-screen storm using the approved hidden-ridge silhouette language, with repeated horizon flashes and distant rain curtain hints but no local storm.
+- Added low ground/water-hugging fog that drifts laterally and respects the current world floor.
+- Added the Impossible Star: slow satellite-like travel, a dead stop, direction change, then impossible acceleration away.
+- No production rarity scheduling yet; this build exists only to judge which events deserve to enter the real world.
+
+
+## v1.48.0 — Hero event rebuild
+
+- Replaced the rejected ribbon/path aurora renderer with one continuous low-resolution luminous field: noise-warped vertical folds, organic density variation, slow breathing motion, and restrained green with rare violet/magenta variation.
+- Removed individually readable aurora ribbons, centre spines, and tentacle-like polygon geometry entirely.
+- Rebuilt Great Meteor as a momentum-driven bolide with a history-derived trail whose older samples independently fade, widen, cool, and drift.
+- Replaced the attached tail polygon and eased destination motion; the meteor now begins offscreen, maintains forward motion, and disappears behind the horizon with no possible visible stopping state.
+- Reworked fragmentation as a few inherited-velocity fragments that peel subtly from the trajectory instead of fixed decorative streaks.
+- Retained a restrained cold exposure lift and moved the distant boom timing to several seconds after the bolide disappears behind the horizon.
+- Distant Storm, Impossible Star, Fog, Alive scheduling, weather, water/ice, lightning depth, and Ember interactions are unchanged.
+
+## v1.49.0 — Rare events enter Alive
+
+- Promoted Aurora and Great Meteor into Alive as independent persistent wall-clock hero events while keeping their v1.48 renderers unchanged. Aurora now lands on a randomized roughly 6–10 hour cadence and Great Meteor roughly 3–6 hours.
+- Hero schedules persist across sessions and advance while the app is closed/backgrounded. Missed sightings are not replayed on return; the world simply schedules the next one.
+- Aurora and Great Meteor do not interrupt weather and may, extremely rarely, overlap naturally with one another.
+- Promoted Distant Storm and Impossible Star into a separate restrained Alive micro-event cadence. Distant Storm retries around incompatible local rain/storm conditions; Impossible Star waits for a suitably clear phase.
+- Ground Fog is now contextual rather than clock-random: after local Rain/Storm clears, sufficiently wet terrain has a chance to develop the existing low fog a few seconds later.
+- The three subtle rare events share one slot so Distant Storm, Fog and Impossible Star do not visually stack on one another. Existing normal Alive micro-events remain unchanged.
+- Retained all five temporary DEV toggles for direct testing and the next visual-polish pass.

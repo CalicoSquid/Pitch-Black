@@ -1400,3 +1400,60 @@
 
 
 
+
+/* v1.46 rare-event lab — temporary test controls and reusable event layers. */
+.rare-sky-event-canvas {
+  z-index: 0;
+}
+
+.rare-ground-event-canvas {
+  z-index: 1;
+}
+
+.dev-rare-event-panel {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  gap: 5px;
+  max-width: calc(100vw - 16px);
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 999px;
+  background: rgba(0,0,0,.78);
+  pointer-events: auto;
+  scrollbar-width: none;
+}
+
+.dev-rare-event-panel::-webkit-scrollbar { display: none; }
+
+.dev-rare-event-panel button {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 999px;
+  padding: 7px 10px 6px;
+  background: rgba(255,255,255,.055);
+  color: rgba(255,255,255,.64);
+  font: inherit;
+  font-size: 8px;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dev-rare-event-panel button:hover,
+.dev-rare-event-panel button:focus-visible {
+  outline: none;
+  background: rgba(255,255,255,.11);
+  color: rgba(255,255,255,.88);
+}
+
+.dev-rare-event-panel button.active {
+  background: rgba(238,242,244,.94);
+  color: rgba(0,0,0,.88);
+  border-color: rgba(255,255,255,.96);
+}
