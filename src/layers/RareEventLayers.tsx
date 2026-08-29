@@ -224,7 +224,6 @@ function drawAurora(
   height: number,
   elapsed: number,
 ) {
-  const duration = 94_000
   const fadeIn = smoothStep(elapsed / 18_000)
   const sustainOut = 1 - smoothStep((elapsed - 78_000) / 16_000)
   const strength = clamp01(fadeIn * sustainOut)

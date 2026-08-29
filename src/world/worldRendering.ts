@@ -1,6 +1,5 @@
 import {
   groundSurfaceYAtIndex,
-  snowSurfaceYAtIndex,
   standingWaterSurfaceY,
   pitchWorld,
   terrainClearanceLiftAtIndex,
