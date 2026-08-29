@@ -35,9 +35,19 @@ export function drawFrozenSkin(
   width: number,
   height: number,
   light = 1,
+  groundYCache?: Float64Array,
 ) {
   const ice = pitchWorld.ice
   if (ice.length < 3) return
+
+  let hasVisibleIce = false
+  for (let i = 1; i < ice.length - 1; i++) {
+    if (ice[i] > 0.025) {
+      hasVisibleIce = true
+      break
+    }
+  }
+  if (!hasVisibleIce) return
 
   const waterY = standingWaterSurfaceY(height)
   if (!Number.isFinite(waterY)) return
@@ -45,22 +55,20 @@ export function drawFrozenSkin(
   const brightness = Math.max(0.18, light)
   const stepX = 6
 
-  // Ice remains one perfectly level plane, but hot spots can boil clean openings
-  // through it. We render short level shelves with soft opacity falloff rather
-  // than bending the surface down toward the exposed ground.
+  // Ice remains one perfectly level plane. Heat thaws the material over time;
+  // it never punches a local geometric hole through the surface.
   for (let i = 1; i < ice.length; i++) {
     const x1 = Math.min(width, (i - 1) * stepX)
     const x2 = Math.min(width, i * stepX)
     if (x2 <= x1) continue
 
-    const open = Math.max(0, Math.min(1, ((pitchWorld.waterOpen[i - 1] || 0) + (pitchWorld.waterOpen[i] || 0)) * 0.5))
     const localSnow = (pitchWorld.drifts[i - 1] + pitchWorld.drifts[i]) * 0.5
     const burial = Math.max(0, Math.min(1, 1 - Math.max(0, localSnow - 0.9) / 7.5))
-    const frozen = Math.min(1, (ice[i - 1] + ice[i]) * 0.5) * burial * (1 - open)
+    const frozen = Math.min(1, (ice[i - 1] + ice[i]) * 0.5) * burial
     if (frozen < 0.025) continue
 
-    const g1 = groundSurfaceYAtIndex(i - 1, height)
-    const g2 = groundSurfaceYAtIndex(i, height)
+    const g1 = groundYCache?.[i - 1] ?? groundSurfaceYAtIndex(i - 1, height)
+    const g2 = groundYCache?.[i] ?? groundSurfaceYAtIndex(i, height)
     if (g1 <= waterY && g2 <= waterY) continue
 
     const fillAlpha = Math.min(0.13, (0.024 + frozen * 0.095) * brightness)
@@ -96,6 +104,7 @@ export function drawStandingWater(
   width: number,
   height: number,
   light = 1,
+  groundYCache?: Float64Array,
 ) {
   if (pitchWorld.water.length < 3) return
 
@@ -108,22 +117,21 @@ export function drawStandingWater(
   const brightness = Math.max(0.18, light)
   const stepX = 6
 
-  // A single shared level remains the visual rule. Local heat only punches a
-  // soft dry opening through the plane; it never deforms the water into a crater.
+  // A single shared level remains the visual rule. Local heat is expressed as
+  // steam/recession, never as a cutout or crater in the water plane.
   for (let i = 1; i < pitchWorld.water.length; i++) {
     const x1 = Math.min(width, (i - 1) * stepX)
     const x2 = Math.min(width, i * stepX)
     if (x2 <= x1) continue
 
-    const open = Math.max(0, Math.min(1, ((pitchWorld.waterOpen[i - 1] || 0) + (pitchWorld.waterOpen[i] || 0)) * 0.5))
     const frozen = Math.max(0, Math.min(1, (pitchWorld.ice[i - 1] + pitchWorld.ice[i]) * 0.5))
     const localSnow = (pitchWorld.drifts[i - 1] + pitchWorld.drifts[i]) * 0.5
     const burial = Math.max(0, Math.min(1, 1 - Math.max(0, localSnow - 0.8) / 6.8))
-    const liquid = fillPresence * burial * (1 - frozen * 0.88) * (1 - open)
+    const liquid = fillPresence * burial * (1 - frozen * 0.88)
     if (liquid < 0.018) continue
 
-    const g1 = groundSurfaceYAtIndex(i - 1, height)
-    const g2 = groundSurfaceYAtIndex(i, height)
+    const g1 = groundYCache?.[i - 1] ?? groundSurfaceYAtIndex(i - 1, height)
+    const g2 = groundYCache?.[i] ?? groundSurfaceYAtIndex(i, height)
     if (g1 <= waterY && g2 <= waterY) continue
 
     const fillAlpha = Math.min(0.14, (0.042 + liquid * 0.078) * brightness)

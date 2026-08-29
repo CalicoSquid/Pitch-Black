@@ -115,7 +115,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let raf = 0
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 2)
+    let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
     let flakes: Flake[] = []
     let loosePowder: LoosePowder[] = []
     let lastLightningVersion = lightningGroundStrikeSignal.version
@@ -176,7 +176,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     const resetCanvas = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 2)
+      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
@@ -524,6 +524,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let aliveRiseTau = 34_000 + Math.random() * 8_000
     let aliveFallTau = 48_000 + Math.random() * 12_000
     let audioWeatherMix = weatherMix
+    let freezeCarry = 0
 
     const draw = (time: number) => {
       frame += 1
@@ -681,7 +682,11 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       erodeDrifts()
       combDriftCrests()
       smoothDrifts()
-      updateFreeze(dt, snowfallMix)
+      freezeCarry += dt
+      if (freezeCarry >= 48) {
+        updateFreeze(Math.min(82, freezeCarry), snowfallMix)
+        freezeCarry = 0
+      }
 
       let powderWrite = 0
       const powderWind = effectiveWind()

@@ -191,6 +191,45 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Distant Storm, Impossible Star, Fog, Alive scheduling, weather, water/ice, lightning depth, and Ember interactions are unchanged.
 
 
+## v1.53.0 — Owl
+
+- Added Owl as a small Alive rare event: only two dim warm eyes appear just above the live terrain, blink twice with slight asymmetry, shift almost imperceptibly, then fade away. No owl body or silhouette is drawn.
+- Added one restrained low, breathy owl call near the end of the sighting when sound is enabled; the visual remains complete when sound is off.
+- Owl is scheduled independently at roughly 45–90 minute intervals, retries quietly when conditions are unsuitable, avoids active Storm and hero-event moments, and shares the existing subtle rare-event slot to prevent stacking.
+- Added the non-persistent `?test=owl` QA hook, replaying the production Owl sequence every 15 seconds while normal Alive scheduling is suspended.
+- No changes to Aurora, Great Meteor, Fog, Distant Storm, Impossible Star, weather timing, terrain physics, or the v1.52 performance optimizations.
+
+## v1.52.0 — Surface coherence + performance pass
+
+- Removed the legacy `waterOpen` local-hole state from the world model and render path. Lightning can still melt snow, boil moisture, ignite briefly and throw steam/sparks, but standing water and ice now remain one coherent level plane with no geometric strike cutouts.
+- Lightning no longer locally deletes the frozen skin; heat response is communicated through steam, global recession/thaw and the existing fire suppression behavior instead of missing grid shelves.
+- Capped the persistent world-base/material renderer at ~30 fps while keeping precipitation and hero-meteor motion independent, halving a large amount of repeated terrain/water/ice canvas work without changing world timing.
+- Reused the terrain renderer's cached ground surface for water/ice rendering instead of recomputing the same terrain geometry for every surface segment.
+- Reduced Snow/Rain high-DPI canvas caps from 2x to 1.5x; on 2x displays this cuts their backing-pixel workload by roughly 44% while preserving the soft precipitation look.
+- Moved Rain terrain/ice evolution to a real-time-correct ~30 Hz material tick and Snow freezing to a ~20 Hz material tick, eliminating redundant whole-world simulation passes at high refresh rates.
+- Persistent Ember simulation/rendering now uses a ~30 Hz organic-material cadence while meteor flight and fresh impact motion stay display-rate; completely dormant Ember state exits its render hot path immediately.
+- Storm now uses a lightweight idle heartbeat when fully absent instead of running gust/cloud bookkeeping every animation frame.
+- Aurora, Distant Storm, Impossible Star and Fog rendering are capped at ~30 fps where appropriate; Great Meteor remains display-rate. Fog's expensive density field keeps its existing slower update cadence.
+- Reduced Rain/firefly collision scanning to one third of drops per frame with compensated probability, preserving the same stochastic interaction while removing repeated N×M checks.
+- Visual QA URL hooks remain available and no accepted scene/event timing or art direction was intentionally changed.
+
+## v1.51.1 — Visual QA URL hooks
+
+- Added non-persistent URL-only visual test hooks with no visible developer UI: `?test=fog`, `?test=storm`, and `?test=moon-veil`.
+- Fog test mode forces a calm visible terrain and automatically restarts the production fog every 90 seconds for repeated inspection.
+- Storm test mode forces the real Storm layer and Moon on together for cloud-form, movement, occlusion and lightning testing.
+- Moon Veil test mode forces the Moon on and replays the actual Alive Moon Veil every 30 seconds.
+- Test parameters do not alter saved preferences or production Alive scheduling; removing the query parameter restores normal behavior.
+
+## v1.51.0 — Organic fog and clouds
+
+- Rebuilt contextual Ground Fog as a slowly evolving low-resolution density field instead of overlapping translucent banks/ellipses.
+- Fog now uses warped multi-scale noise, irregular openings and gentle vertical shear, then clips against the live terrain / snow / water surface so it genuinely hugs the world.
+- Reworked Storm cloud generation into continuous atmospheric ceilings with long irregular fronts, torn undersides and sparse hanging wisps rather than rounded cloud-body construction.
+- Preserved Storm gathering/clearing timing, Moon occlusion, lightning reveal, thunder, wind, terrain strikes and Alive behavior.
+- Replaced Alive's passing Moon Veil micro-event (previously five CSS ellipses) with a single procedural cloud-density field.
+- Removed stale unused radial-gradient cloud CSS so production cloud rendering no longer contains the old overlapping-ellipse approach.
+
 ## v1.50.0 — Rare events production pass
 
 - Removed the five temporary rare-event developer toggles and all App-level test state/callback plumbing.

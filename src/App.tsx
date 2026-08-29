@@ -5,6 +5,7 @@ import { AliveSkyEvents } from './alive/AliveSkyEvents'
 import { AliveNightSky } from './alive/AliveNightSky'
 import { AliveAmbience } from './alive/AliveAmbience'
 import { useAliveWorld } from './alive/useAliveWorld'
+import type { AliveSkyEvent } from './alive/useAliveWorld'
 import type { LayerKey, LayerState, Scene } from './types'
 import {
   fadePitchAudioToSilence,
@@ -19,6 +20,7 @@ import { FirefliesLayer } from './layers/FirefliesLayer'
 import { GlobalMoon } from './layers/GlobalMoon'
 import { StormLayer } from './layers/StormLayer'
 import { RareGroundEventLayer, RareSkyEventLayer } from './layers/RareEventLayers'
+import type { RareEventState } from './layers/RareEventLayers'
 import { EmberScene } from './scenes/EmberScene'
 import { RainScene } from './scenes/RainScene'
 import { SnowScene } from './scenes/SnowScene'
@@ -51,6 +53,8 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl'
+
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
 const SLEEP_FADE_MS = 60_000
@@ -63,6 +67,12 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
   volume: 1,
   aliveOn: false,
   layers: { moon: false, storm: false, fireflies: false },
+}
+
+function readVisualTestMode(): VisualTestMode | null {
+  if (typeof window === 'undefined') return null
+  const test = new URLSearchParams(window.location.search).get('test')
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' ? test : null
 }
 
 function readSharedWorld(): Partial<PitchPreferences> | null {
@@ -156,12 +166,14 @@ function formatSleepRemaining(milliseconds: number) {
 }
 
 function App() {
+  const testMode = readVisualTestMode()
   const [initialPreferences] = useState(loadPreferences)
   const [scene, setScene] = useState<Scene>(initialPreferences.scene)
   const [showClock, setShowClock] = useState(initialPreferences.showClock)
   const [soundOn, setSoundOn] = useState(initialPreferences.soundOn)
   const [volume, setVolume] = useState(initialPreferences.volume)
   const [aliveOn, setAliveOn] = useState(initialPreferences.aliveOn)
+  const aliveRuntimeOn = aliveOn && testMode === null
   const [layers, setLayers] = useState<LayerState>(initialPreferences.layers)
   const [showUtilities, setShowUtilities] = useState(false)
   const [fullscreenOn, setFullscreenOn] = useState(false)
@@ -171,6 +183,7 @@ function App() {
   const [keepAwake, setKeepAwake] = useState(false)
   const [wakeLockSupported] = useState(() => typeof navigator !== 'undefined' && 'wakeLock' in navigator)
   const [firstVisit, setFirstVisit] = useState(() => {
+    if (testMode) return false
     if (typeof window === 'undefined') return false
     try {
       return window.localStorage.getItem(FIRST_VISIT_STORAGE_KEY) !== '1'
@@ -180,6 +193,7 @@ function App() {
   })
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEventLike | null>(null)
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared'>('idle')
+  const [testEventId, setTestEventId] = useState(51_100)
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
   const shareStatusTimerRef = useRef<number | null>(null)
   const lastWorldTapRef = useRef<{ at: number; x: number; y: number } | null>(null)
@@ -194,9 +208,16 @@ function App() {
     rareEvents: aliveRareEvents,
     completeRareEvent: completeAliveRareEvent,
   } = useAliveWorld({
-    enabled: aliveOn,
+    enabled: aliveRuntimeOn,
     setScene,
   })
+
+  useEffect(() => {
+    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl') return
+    const interval = testMode === 'fog' ? 90_000 : testMode === 'owl' ? 15_000 : 30_000
+    const timer = window.setInterval(() => setTestEventId((id) => id + 1), interval)
+    return () => window.clearInterval(timer)
+  }, [testMode])
 
   const dismissFirstVisit = useCallback(() => {
     setFirstVisit(false)
@@ -613,29 +634,48 @@ function App() {
     void goFullscreen()
   }
 
-  const displayLayers: LayerState = aliveOn
+  const normalDisplayLayers: LayerState = aliveRuntimeOn
     ? aliveLayers
     : layers
+  const displayLayers: LayerState = testMode === 'fog'
+    ? { moon: false, storm: false, fireflies: false }
+    : testMode === 'storm'
+      ? { moon: true, storm: true, fireflies: false }
+    : testMode === 'moon-veil'
+      ? { moon: true, storm: false, fireflies: false }
+    : testMode === 'owl'
+      ? { moon: false, storm: false, fireflies: false }
+      : normalDisplayLayers
+  const displayScene: Scene = testMode === 'fog' || testMode === 'owl' ? 'calm' : scene
+  const testFogEvent: RareEventState | null = testMode === 'fog'
+    ? { kind: 'ground-fog', id: testEventId }
+    : null
+  const testOwlEvent: RareEventState | null = testMode === 'owl'
+    ? { kind: 'owl', id: testEventId }
+    : null
+  const testMoonVeilEvent: AliveSkyEvent | null = testMode === 'moon-veil'
+    ? { id: testEventId, kind: 'moon-veil', duration: 26_000 }
+    : null
   const sleepTimerActive = sleepTimerEndAt !== null
-  const blackoutActive = !aliveOn && scene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
+  const blackoutActive = !aliveRuntimeOn && displayScene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
   const interfaceAwake = controlsVisible || showUtilities || firstVisit
 
   return (
     <main
       className={`pitchblack ${interfaceAwake ? 'interface-awake' : 'interface-asleep'}`}
-      data-scene={scene}
+      data-scene={displayScene}
       data-layer-moon={displayLayers.moon ? 'on' : 'off'}
       data-layer-storm={displayLayers.storm ? 'on' : 'off'}
       data-layer-fireflies={displayLayers.fireflies ? 'on' : 'off'}
-      data-alive={aliveOn ? 'on' : 'off'}
+      data-alive={aliveRuntimeOn ? 'on' : 'off'}
       data-alive-phase={alivePhase}
       onPointerDown={handleWorldPointerDown}
       onDoubleClick={handleWorldDoubleClick}
       onPointerUp={handleWorldPointerUp}
     >
       <div className="scene-layer">
-        {aliveOn && <AliveNightSky phase={alivePhase} />}
-        {aliveOn && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
+        {aliveRuntimeOn && <AliveNightSky phase={alivePhase} />}
+        {aliveRuntimeOn && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
           <RareSkyEventLayer
             key={`alive-rare-sky-${event.kind}-${event.id}`}
             event={event}
@@ -643,38 +683,46 @@ function App() {
             onComplete={completeAliveRareEvent}
           />
         ))}
-        <GlobalMoon visible={displayLayers.moon} halo={aliveOn && moonHalo} />
-        <div className={`world-weather-layer ${scene === 'black' ? 'world-hidden' : ''}`}>
-          <WorldBaseScene scene={scene} />
-          {aliveOn && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (
+        {testOwlEvent && (
+          <RareSkyEventLayer
+            key={`test-owl-${testOwlEvent.id}`}
+            event={testOwlEvent}
+            soundOn={soundOn}
+          />
+        )}
+        <GlobalMoon visible={displayLayers.moon} halo={aliveRuntimeOn && moonHalo} />
+        <div className={`world-weather-layer ${displayScene === 'black' ? 'world-hidden' : ''}`}>
+          <WorldBaseScene scene={displayScene} />
+          {aliveRuntimeOn && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (
             <RareGroundEventLayer
               key={`alive-rare-ground-${event.kind}-${event.id}`}
               event={event}
               onComplete={completeAliveRareEvent}
             />
           ))}
-          <SnowScene active={scene === 'snow'} alive={aliveOn} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
-          <RainScene active={scene === 'rain'} alive={aliveOn} soundOn={soundOn} speed={aliveOn ? weatherSpeed : 1} />
+          {testFogEvent && <RareGroundEventLayer key={`test-fog-${testFogEvent.id}`} event={testFogEvent} />}
+          <SnowScene active={displayScene === 'snow'} alive={aliveRuntimeOn} soundOn={soundOn} speed={aliveRuntimeOn ? weatherSpeed : 1} />
+          <RainScene active={displayScene === 'rain'} alive={aliveRuntimeOn} soundOn={soundOn} speed={aliveRuntimeOn ? weatherSpeed : 1} />
           <EmberScene
-            active={scene === 'ember'}
-            rainActive={scene === 'rain'}
-            snowActive={scene === 'snow'}
+            active={displayScene === 'ember'}
+            rainActive={displayScene === 'rain'}
+            snowActive={displayScene === 'snow'}
             speed={1}
             soundOn={soundOn}
-            visible={scene !== 'black'}
-            externalMeteorId={aliveOn && skyEvent?.kind === 'meteor-impact' ? skyEvent.id : 0}
+            visible={displayScene !== 'black'}
+            externalMeteorId={aliveRuntimeOn && skyEvent?.kind === 'meteor-impact' ? skyEvent.id : 0}
           />
         </div>
-        <FirefliesLayer active={displayLayers.fireflies} visible abundance={aliveOn ? fireflyMultiplier : 1} />
-        <AliveSkyEvents event={aliveOn ? skyEvent : null} />
+        <FirefliesLayer active={displayLayers.fireflies} visible abundance={aliveRuntimeOn ? fireflyMultiplier : 1} />
+        <AliveSkyEvents event={testMoonVeilEvent ?? (aliveRuntimeOn ? skyEvent : null)} />
         <StormLayer
           active={displayLayers.storm}
-          scene={scene}
+          scene={displayScene}
           soundOn={soundOn}
-          groundStrikeChance={aliveOn ? 0.14 : 0.42}
-          depthRevealEventId={aliveOn && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
+          groundStrikeChance={aliveRuntimeOn ? 0.14 : 0.42}
+          depthRevealEventId={aliveRuntimeOn && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
         />
-        <AliveAmbience active={aliveOn} soundOn={soundOn} phase={alivePhase} />
+        <AliveAmbience active={aliveRuntimeOn} soundOn={soundOn} phase={alivePhase} />
       </div>
 
 

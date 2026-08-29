@@ -18,7 +18,6 @@ export type PitchWorld = {
   ground: Float32Array
   drifts: Float32Array
   water: Float32Array
-  waterOpen: Float32Array
   ice: Float32Array
   ember: Float32Array
   char: Float32Array
@@ -42,7 +41,6 @@ export const pitchWorld: PitchWorld = {
   ground: new Float32Array(1),
   drifts: new Float32Array(1),
   water: new Float32Array(1),
-  waterOpen: new Float32Array(1),
   ice: new Float32Array(1),
   ember: new Float32Array(1),
   char: new Float32Array(1),
@@ -63,7 +61,6 @@ function loadWorld() {
       ground?: number[]
       drifts?: number[]
       water?: number[]
-      waterOpen?: number[]
       ice?: number[]
       ember?: number[]
       char?: number[]
@@ -85,9 +82,6 @@ function loadWorld() {
       pitchWorld.drifts = Float32Array.from(saved.drifts)
       pitchWorld.water = Array.isArray(saved.water) && saved.water.length === saved.drifts.length
         ? Float32Array.from(saved.water)
-        : new Float32Array(saved.drifts.length)
-      pitchWorld.waterOpen = Array.isArray(saved.waterOpen) && saved.waterOpen.length === saved.drifts.length
-        ? Float32Array.from(saved.waterOpen)
         : new Float32Array(saved.drifts.length)
       pitchWorld.ice = Array.isArray(saved.ice) && saved.ice.length === saved.drifts.length
         ? Float32Array.from(saved.ice)
@@ -121,7 +115,6 @@ function loadWorld() {
           const localDecay = Math.exp(-elapsedSeconds / (meanIce > 0.28 ? 7000 : 4200))
           for (let i = 0; i < pitchWorld.water.length; i++) {
             pitchWorld.water[i] *= localDecay
-            pitchWorld.waterOpen[i] = Math.max(0, pitchWorld.waterOpen[i] - elapsedSeconds * 0.006)
           }
         }
       }
@@ -134,7 +127,6 @@ function loadWorld() {
 export function resetWorld() {
   pitchWorld.drifts.fill(0)
   pitchWorld.water.fill(0)
-  pitchWorld.waterOpen.fill(0)
   pitchWorld.ice.fill(0)
   pitchWorld.ember.fill(0)
   pitchWorld.char.fill(0)
@@ -151,7 +143,6 @@ export function saveWorld() {
       ground: Array.from(pitchWorld.ground),
       drifts: Array.from(pitchWorld.drifts),
       water: Array.from(pitchWorld.water),
-      waterOpen: Array.from(pitchWorld.waterOpen),
       ice: Array.from(pitchWorld.ice),
       ember: Array.from(pitchWorld.ember),
       char: Array.from(pitchWorld.char),
@@ -215,7 +206,6 @@ export function ensureWorld(width: number, height: number) {
     pitchWorld.ground.length === targetLength &&
     pitchWorld.drifts.length === targetLength &&
     pitchWorld.water.length === targetLength &&
-    pitchWorld.waterOpen.length === targetLength &&
     pitchWorld.ice.length === targetLength &&
     pitchWorld.ember.length === targetLength &&
     pitchWorld.char.length === targetLength &&
@@ -232,7 +222,6 @@ export function ensureWorld(width: number, height: number) {
   let nextGround: Float32Array
   let nextSnow: Float32Array
   let nextWater: Float32Array
-  let nextWaterOpen: Float32Array
   let nextIce: Float32Array
   let nextEmber: Float32Array
   let nextChar: Float32Array
@@ -241,7 +230,6 @@ export function ensureWorld(width: number, height: number) {
     nextGround = resampleArray(pitchWorld.ground, targetLength)
     nextSnow = resampleArray(pitchWorld.drifts, targetLength)
     nextWater = resampleArray(pitchWorld.water, targetLength)
-    nextWaterOpen = resampleArray(pitchWorld.waterOpen, targetLength)
     nextIce = resampleArray(pitchWorld.ice, targetLength)
     nextEmber = resampleArray(pitchWorld.ember, targetLength)
     nextChar = resampleArray(pitchWorld.char, targetLength)
@@ -249,7 +237,6 @@ export function ensureWorld(width: number, height: number) {
     nextGround = new Float32Array(targetLength)
     nextSnow = new Float32Array(targetLength)
     nextWater = new Float32Array(targetLength)
-    nextWaterOpen = new Float32Array(targetLength)
     nextIce = new Float32Array(targetLength)
     nextEmber = new Float32Array(targetLength)
     nextChar = new Float32Array(targetLength)
@@ -271,7 +258,6 @@ export function ensureWorld(width: number, height: number) {
   pitchWorld.ground = nextGround
   pitchWorld.drifts = nextSnow
   pitchWorld.water = nextWater
-  pitchWorld.waterOpen = nextWaterOpen
   pitchWorld.ice = nextIce
   pitchWorld.ember = nextEmber
   pitchWorld.char = nextChar
@@ -340,10 +326,8 @@ export function pooledSurfaceYAtIndex(index: number, height = pitchWorld.height)
   const waterY = standingWaterSurfaceY(height)
   if (!Number.isFinite(waterY)) return groundY
 
-  // A boiled-back patch exposes the actual terrain underneath, but does not bend
-  // the surrounding water plane into a bowl. The threshold keeps the edge crisp
-  // enough to read as exposed ground rather than a fluid-simulation crater.
-  if ((pitchWorld.waterOpen[i] || 0) > 0.52) return groundY
+  // Standing water is one coherent level plane. Local heat/lightning is
+  // communicated through steam and material change rather than geometric holes.
   return Math.min(groundY, waterY)
 }
 

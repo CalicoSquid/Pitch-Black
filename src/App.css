@@ -256,22 +256,6 @@
   color: rgba(255,255,255,.08);
 }
 
-.cloud-veil {
-  position: absolute;
-  inset: -12% -18%;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse at 28% 46%, rgba(18,22,26,.56) 0 20%, transparent 47%),
-    radial-gradient(ellipse at 72% 54%, rgba(14,18,22,.48) 0 18%, transparent 45%);
-  animation: cloud-drift 38s ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-@keyframes cloud-drift {
-  from { transform: translate3d(-2.5%, 0, 0) scale(1.03); }
-  to { transform: translate3d(3.5%, 1%, 0) scale(1.05); }
-}
-
 @keyframes moon-breathe {
   from { transform: translate(-50%, -50%) translateY(-3px); }
   to { transform: translate(-50%, -50%) translateY(3px); }
@@ -299,7 +283,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .moon-wrap, .cloud-veil, .storm-clouds, .ember-clouds { animation: none; }
+  .moon-wrap { animation: none; }
   .control-dock, .brand-whisper, .utility-popover, .hint, .sleep-clock, .sleep-clock-date { transition-duration: 0ms; }
 }
 
@@ -325,40 +309,6 @@
   border-radius: 50%;
   opacity: .14;
   background: #111417;
-}
-
-.storm-clouds,
-.ember-clouds {
-  position: absolute;
-  inset: -14% -20%;
-  pointer-events: none;
-  will-change: transform;
-}
-
-.storm-clouds {
-  background:
-    radial-gradient(ellipse at 18% 42%, rgba(18,22,26,.88) 0 19%, transparent 44%),
-    radial-gradient(ellipse at 48% 53%, rgba(13,17,21,.92) 0 23%, transparent 49%),
-    radial-gradient(ellipse at 78% 39%, rgba(20,24,28,.84) 0 18%, transparent 45%);
-  animation: storm-cloud-drift 28s ease-in-out infinite alternate;
-}
-
-.ember-clouds {
-  background:
-    radial-gradient(ellipse at 35% 26%, rgba(20,18,17,.42) 0 17%, transparent 46%),
-    radial-gradient(ellipse at 72% 34%, rgba(16,15,14,.30) 0 16%, transparent 42%);
-  opacity: .55;
-  animation: ember-cloud-clear 34s ease-out infinite alternate;
-}
-
-@keyframes storm-cloud-drift {
-  from { transform: translate3d(-3%, 0, 0) scale(1.04); }
-  to { transform: translate3d(4%, 1.5%, 0) scale(1.07); }
-}
-
-@keyframes ember-cloud-clear {
-  from { transform: translate3d(-1%, 0, 0); opacity: .58; }
-  to { transform: translate3d(2%, -1%, 0); opacity: .28; }
 }
 
 .control-dock::-webkit-scrollbar { display: none; }
@@ -1104,8 +1054,8 @@
   66% { opacity: .64; transform: scale(.96); }
 }
 
-/* Passing high cloud is built from separate soft bodies. Keeping the blur on the
-   bodies instead of one filtered rectangle avoids the visible compositor box on black. */
+/* Passing high cloud is one low-resolution procedural density field. The field
+   is scaled softly by the browser, so no individual cloud primitive is readable. */
 .alive-moon-veil {
   position: absolute;
   left: 50%;
@@ -1119,18 +1069,14 @@
   animation: alive-moon-veil var(--alive-event-duration) ease-in-out forwards;
 }
 
-.alive-veil-cloud {
+.alive-veil-cloud-field {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
-  border-radius: 50%;
-  background: rgba(3, 5, 7, .88);
-  box-shadow: 0 0 16px 8px rgba(3, 5, 7, .34);
+  opacity: .96;
 }
-.alive-veil-cloud.c1 { left: 6%;  top: 40%; width: 31%; height: 39%; transform: rotate(-5deg); }
-.alive-veil-cloud.c2 { left: 23%; top: 24%; width: 34%; height: 55%; transform: rotate(7deg); }
-.alive-veil-cloud.c3 { left: 45%; top: 35%; width: 30%; height: 43%; transform: rotate(-8deg); }
-.alive-veil-cloud.c4 { left: 63%; top: 28%; width: 28%; height: 50%; transform: rotate(5deg); }
-.alive-veil-cloud.c5 { left: 78%; top: 44%; width: 19%; height: 31%; transform: rotate(-4deg); }
 
 @keyframes alive-moon-veil {
   0% { opacity: 0; transform: translate(-92%, -50%) scale(1.02); }

@@ -122,7 +122,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let frame = 0
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 2)
+    let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
     let drops: RainDrop[] = []
     let ripples: Ripple[] = []
     let splashes: Splash[] = []
@@ -163,7 +163,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 2)
+      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
@@ -184,13 +184,6 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       const snowDepth = pitchWorld.drifts[idx]
       const frozenAtImpact = Math.max(0, Math.min(1, pitchWorld.ice[idx] || 0))
       const y = surfaceYAt(drop.x, width, height)
-
-      if (pitchWorld.waterOpen.length === pitchWorld.water.length) {
-        const refill = 0.010 + drop.speed * 0.0012
-        pitchWorld.waterOpen[idx] = Math.max(0, pitchWorld.waterOpen[idx] - refill)
-        pitchWorld.waterOpen[idx - 1] = Math.max(0, pitchWorld.waterOpen[idx - 1] - refill * 0.28)
-        pitchWorld.waterOpen[idx + 1] = Math.max(0, pitchWorld.waterOpen[idx + 1] - refill * 0.28)
-      }
 
       if (frozenAtImpact > 0.015) {
         const localThaw = Math.min(frozenAtImpact, 0.012 + drop.speed * 0.0016)
@@ -338,7 +331,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         const dx = px - closestX
         const dy = py - closestY
 
-        if (dx * dx + dy * dy <= hitRadiusSq && Math.random() < 0.012 * intensity * weatherMix) {
+        if (dx * dx + dy * dy <= hitRadiusSq && Math.random() < 0.036 * intensity * weatherMix) {
           fireflySignal.extinguishRequests[i] = fireflySignal.ids[i]
           return
         }
@@ -361,6 +354,8 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let aliveFallTau = 36_000 + Math.random() * 10_000
     let audioWeatherMix = weatherMix
     let aliveArrival: 'sudden' | 'gradual' = 'gradual'
+    let materialCarry = 0
+    let materialFrame = 0
     const draw = (time: number) => {
       frame += 1
       const dt = Math.min(32, time - lastTime)
@@ -443,9 +438,15 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       updateWeather(simTime)
       drawWater()
 
-      // Rain slowly compacts and washes the whole snowpack, with impacts doing the local work.
-      if (pitchWorld.drifts.length > 2) {
-        const scaledDt = (dt / 16.67) * speed
+      // Material evolution does not need particle-frame cadence. Running the
+      // small terrain/ice grid at ~30 Hz preserves its real-time rates while
+      // avoiding duplicate whole-world passes on high-refresh displays.
+      materialCarry += dt
+      if (materialCarry >= 32 && pitchWorld.drifts.length > 2) {
+        const materialDt = Math.min(66, materialCarry)
+        materialCarry = 0
+        materialFrame += 1
+        const scaledDt = (materialDt / 16.67) * speed
         const meltRate = (0.00390 + intensity * 0.00634) * scaledDt * rainDensity
         driftSnapshot.set(pitchWorld.drifts)
         const copy = driftSnapshot
@@ -455,7 +456,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           const exposure = 0.75 + Math.max(0, copy[i] - (copy[i - 1] + copy[i + 1]) * 0.5) * 0.045
           pitchWorld.drifts[i] = Math.max(0, pitchWorld.drifts[i] - meltRate * channelNoise * exposure)
 
-          if (frame % 4 === 0) {
+          if (materialFrame % 2 === 0) {
             const target = pitchWorld.drifts[i - 1] < pitchWorld.drifts[i + 1] ? i - 1 : i + 1
             const slope = pitchWorld.drifts[i] - pitchWorld.drifts[target]
             if (slope > 3.2) {
@@ -480,9 +481,6 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
             if (pitchWorld.ice[i] > 0.001) {
               const exposed = Math.max(0.35, 1 - pitchWorld.drifts[i] / 18)
               pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - thawRate * exposed)
-            }
-            if (pitchWorld.waterOpen.length === pitchWorld.water.length && pitchWorld.waterOpen[i] > 0.001) {
-              pitchWorld.waterOpen[i] = Math.max(0, pitchWorld.waterOpen[i] - 0.0011 * scaledDt * rainDensity)
             }
           }
         }
@@ -517,7 +515,10 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         if (drop.x < -30) drop.x = width + 20
         if (drop.x > width + 30) drop.x = -20
 
-        if (participating) tryExtinguishFirefly(drop, rainDensity, ambientGust)
+        // Firefly collision is stochastic and tiny; checking one third of the
+        // drops per frame keeps the same visual behaviour without an N×M scan
+        // across every raindrop/firefly pair on every refresh.
+        if (participating && (frame + i) % 3 === 0) tryExtinguishFirefly(drop, rainDensity, ambientGust)
 
         const surface = surfaceYAt(drop.x, width, height)
         if (drop.y + drop.length >= surface) {

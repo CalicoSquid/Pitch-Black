@@ -270,37 +270,46 @@ function createStormDensityLayer(
 
   for (let y = 0; y < mapHeight; y++) {
     const ny = y / (mapHeight - 1)
-    const verticalBias = kind === 'upper'
-      ? Math.pow(Math.max(0, 1 - ny), 0.82)
-      : Math.pow(Math.max(0, 1 - ny), 0.72)
 
     for (let x = 0; x < mapWidth; x++) {
       const nx = x / (mapWidth - 1)
-      const warpX = fbm2D(nx * 1.4 + 5.2, ny * 1.1 + 1.9, seed + 11.7) * 0.09
-      const warpY = fbm2D(nx * 1.0 + 2.8, ny * 1.7 + 0.7, seed + 23.1) * 0.08
-      const large = fbm2D((nx + warpX) * 1.05 + 1.3, (ny + warpY) * 0.85 + 4.8, seed + 4.3)
-      const medium = fbm2D((nx - warpX) * 3.0 + 8.7, (ny + warpY) * 2.2 + 2.1, seed + 31.6)
-      const fine = fbm2D(nx * 6.4 + 3.4, ny * 4.9 + 7.2, seed + 57.4)
 
-      const broadBody = large * 0.68 + medium * 0.24 + fine * 0.08
-      const hangingNoise = kind === 'main'
-        ? Math.max(0, fbm2D(nx * 1.35 + 9.2, ny * 3.7 + 4.3, seed + 91.5) - 0.30)
-        : Math.max(0, fbm2D(nx * 1.6 + 7.2, ny * 3.1 + 2.3, seed + 74.8) - 0.48) * 0.55
+      // Build the storm as a continuous ceiling with an irregular, torn lower
+      // edge rather than a collection of rounded cloud bodies. Long horizontal
+      // wavelengths establish the front; smaller warped noise only breaks up
+      // the underside and internal density.
+      const broadBase = fbm2D(nx * 0.92 + 3.2, 1.7, seed + 8.4)
+      const midBase = fbm2D(nx * 2.45 + 7.8, 4.1, seed + 17.9)
+      const fineBase = fbm2D(nx * 5.2 + 1.4, 2.8, seed + 29.6)
+      const cloudBase = kind === 'upper'
+        ? 0.49 + broadBase * 0.115 + midBase * 0.050 + fineBase * 0.016
+        : 0.665 + broadBase * 0.105 + midBase * 0.064 + fineBase * 0.020
 
-      let threshold = kind === 'upper'
-        ? 0.00 + ny * 0.74
-        : -0.11 + ny * 0.83
+      const warpX = fbm2D(nx * 1.35 + 5.1, ny * 1.05 + 2.2, seed + 41.3) * 0.095
+      const warpY = fbm2D(nx * 1.05 + 8.4, ny * 1.55 + 0.9, seed + 53.7) * 0.070
+      const interior = fbm2D((nx + warpX) * 1.55 + 2.0, (ny + warpY) * 1.15 + 5.5, seed + 67.2)
+      const medium = fbm2D((nx - warpX * 0.45) * 3.6 + 6.3, (ny + warpY) * 2.8 + 1.8, seed + 79.9)
+      const detail = fbm2D(nx * 7.8 + 1.1, ny * 5.9 + 8.2, seed + 96.4)
 
-      threshold -= hangingNoise * (kind === 'main' ? 0.29 : 0.13)
+      const signedDepth = cloudBase - ny
+      const ceilingMass = smoothStep(clamp01((signedDepth + (kind === 'upper' ? 0.17 : 0.20)) / (kind === 'upper' ? 0.25 : 0.29)))
+      const internalVariation = clamp01(0.82 + interior * 0.22 + medium * 0.11 + detail * 0.035)
 
-      const topField = verticalBias * (kind === 'upper' ? 0.44 : 0.39)
-      let localDensity = (broadBody + 0.08 + topField) - threshold
-      localDensity = clamp01(localDensity * (kind === 'upper' ? 2.02 : 2.28))
+      // Wisps extend below the main deck only where the noise supports them;
+      // this makes the base fray and dissolve instead of forming scallops.
+      const undersideBand = 1 - smoothStep(clamp01(Math.abs(ny - cloudBase) / (kind === 'upper' ? 0.22 : 0.25)))
+      const wispNoise = clamp01((fbm2D(nx * 2.15 + 9.1, ny * 4.15 + 3.7, seed + 121.8) + 0.30) * 1.18)
+      const hangingNoise = clamp01((fbm2D(nx * 4.9 + 2.7, ny * 2.25 + 6.8, seed + 143.6) + 0.22) * 1.10)
+      const belowBase = smoothStep(clamp01((ny - cloudBase + 0.025) / 0.17))
+      const wisps = undersideBand * belowBase * wispNoise * hangingNoise * (kind === 'upper' ? 0.22 : 0.34)
 
-      // Break the lower edges into soft rounded bellies rather than one continuous band.
-      const lowerBreak = smoothPulse(0.18, 0.38, 0.72, 0.98, ny)
-      const softness = 0.80 + lowerBreak * 0.20
-      localDensity = smoothStep(localDensity) * softness
+      // Sparse broad thinning keeps the cloud deck alive without punching round
+      // holes into it. The storm remains one coherent moving atmospheric mass.
+      const thinning = fbm2D(nx * 1.18 + 11.3, ny * 0.86 + 1.5, seed + 171.2)
+      const openness = 0.90 + thinning * 0.11
+      let localDensity = ceilingMass * internalVariation * openness + wisps
+      localDensity = clamp01(localDensity)
+      localDensity = smoothStep(localDensity)
 
       density[y * mapWidth + x] = localDensity
     }
@@ -524,6 +533,7 @@ export function StormLayer({
     let raf = 0
     let last = performance.now()
     let lastCloudFrame = 0
+    let lastIdleTick = 0
     let stormMix = activeRef.current ? 1 : 0
     let wasActive = activeRef.current
     const initialPhaseTime = performance.now()
@@ -758,10 +768,6 @@ export function StormLayer({
           const melted = Math.min(pitchWorld.drifts[i], (18 + strength * 14) * crater)
           pitchWorld.drifts[i] = Math.max(0, pitchWorld.drifts[i] - melted)
           pitchWorld.water[i] = Math.min(11, pitchWorld.water[i] + melted * 0.10)
-          if (pitchWorld.waterOpen.length === pitchWorld.water.length) {
-            pitchWorld.waterOpen[i] = Math.max(pitchWorld.waterOpen[i], Math.min(1, crater * (0.72 + strength * 0.18)))
-          }
-          pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - crater * (0.72 + strength * 0.20))
         }
         pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - 0.010 * strength)
 
@@ -781,16 +787,11 @@ export function StormLayer({
           const boil = Math.pow(falloff, 1.35)
           const evaporated = Math.min(pitchWorld.water[i], (1.20 + strength * 0.85) * boil)
           pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - evaporated)
-          pitchWorld.ice[i] = Math.max(0, pitchWorld.ice[i] - boil * (0.88 + strength * 0.22))
-          if (pitchWorld.waterOpen.length === pitchWorld.water.length) {
-            pitchWorld.waterOpen[i] = Math.max(pitchWorld.waterOpen[i], Math.min(1, boil * (0.82 + strength * 0.22)))
-          }
         }
         pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - 0.018 * strength)
 
-        // A direct strike can expose and ignite the ground beneath shallow water.
-        // The water still resists spread; EmberScene must keep boiling openings
-        // outward before the fire can travel across the floodplain.
+        // A direct strike can briefly ignite the wet ground, but the shared
+        // water/ice plane stays visually intact; steam carries the heat response.
         for (let offset = -6; offset <= 6; offset++) {
           const i = idx + offset
           if (i <= 1 || i >= pitchWorld.ember.length - 2) continue
@@ -806,9 +807,6 @@ export function StormLayer({
           const falloff = Math.max(0, 1 - Math.abs(offset) / 4)
           pitchWorld.ember[i] = Math.max(pitchWorld.ember[i], (0.70 + strength * 0.18) * falloff)
           pitchWorld.char[i] = Math.max(pitchWorld.char[i], 0.08 * falloff)
-          if (pitchWorld.waterOpen.length === pitchWorld.water.length && pitchWorld.waterLevel > 0.025) {
-            pitchWorld.waterOpen[i] = Math.max(pitchWorld.waterOpen[i], falloff * 0.62)
-          }
         }
       }
 
@@ -941,6 +939,20 @@ export function StormLayer({
       if (requestedDepthReveal !== lastDepthRevealEventId) {
         lastDepthRevealEventId = requestedDepthReveal
         if (requestedDepthReveal > 0) triggerDepthReveal(time, true)
+      }
+
+      // When Storm is completely absent, there is no reason to run gust/cloud
+      // bookkeeping at display refresh rate. Keep a lightweight heartbeat so a
+      // prop/event wakes immediately while the inactive overlay is essentially free.
+      const revealFinished = depthRevealStarted < 0 || time - depthRevealStarted > 460
+      const fullyIdle = !activeRef.current && stormMix < 0.002 && time > boltUntil && revealFinished
+      if (fullyIdle) {
+        stormSignal.mix = 0
+        stormSignal.wind = 0
+        stormSignal.flash = 0
+        pitchWorld.cloudCover += (0.12 - pitchWorld.cloudCover) * 0.18
+        if (time - lastIdleTick < 180) return
+        lastIdleTick = time
       }
 
       if (activeRef.current && !wasActive) {

@@ -460,10 +460,8 @@ export function EmberScene({
       }
 
       // Ember is a world-transforming event, not a local hydrology interaction.
-      // Remove any previous lightning openings so the flood plane remains level,
-      // then flash-boil enough of it to make the impact feel violent without
-      // carving a geometric notch into the water surface.
-      if (pitchWorld.waterOpen.length === pitchWorld.water.length) pitchWorld.waterOpen.fill(0)
+      // Flash-boil enough of the shared flood plane to feel violent without
+      // carving a geometric notch into the water/ice surface.
       if (pitchWorld.waterLevel > 0.025) {
         spawnLightningSteam(impactIndex, 1.70)
         spawnLightningSteam(Math.max(1, impactIndex - 4), 1.18)
@@ -629,13 +627,11 @@ export function EmberScene({
           pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - (0.030 + heatCoverage * 0.055) * scaled)
         }
 
-        if (pitchWorld.waterOpen.length === pitchWorld.water.length) pitchWorld.waterOpen.fill(0)
-
+  
         if (pitchWorld.waterLevel <= 0.025) {
           pitchWorld.waterLevel = 0
           pitchWorld.water.fill(0)
           pitchWorld.ice.fill(0)
-          pitchWorld.waterOpen.fill(0)
           pitchWorld.wetness = 0
           emberPurgeActive = false
         }
@@ -741,6 +737,15 @@ export function EmberScene({
     }
 
     const drawFire = (time: number, dt: number, render: boolean) => {
+      if (
+        !hasIgnited &&
+        !impacted &&
+        meteorStartedAt < 0 &&
+        sparks.length === 0 &&
+        steam.length === 0 &&
+        smoke.length === 0
+      ) return
+
       const t = time * 0.001
 
       if (render) for (let i = 1; i < fire.length - 1; i++) {
@@ -914,6 +919,8 @@ export function EmberScene({
 
     resize()
     syncFireSound()
+    let fireCarry = 0
+    let lastVisualFrame = 0
     raf = requestAnimationFrame(function draw(time) {
       const dt = Math.min(34, time - last)
       last = time
@@ -935,9 +942,18 @@ export function EmberScene({
       consumeWorldReset(time)
       consumeLightningStrike()
       syncFireSound()
-      updateFire(time, dt)
+      fireCarry += dt
+      if (fireCarry >= 30) {
+        updateFire(time, Math.min(66, fireCarry))
+        fireCarry = 0
+      }
 
-      const render = visibleRef.current
+      // The meteor/impact needs display-rate motion. Persistent fire/char is a
+      // slower organic surface and remains visually smooth at ~30 Hz, while its
+      // particles continue to integrate every animation frame below.
+      const highMotion = (meteorStartedAt >= 0 && !impacted) || (impacted && time - impactAt < 1_450)
+      const render = visibleRef.current && (highMotion || time - lastVisualFrame >= 30)
+      if (render) lastVisualFrame = time
       if (render) ctx.clearRect(0, 0, width, height)
       drawMeteor(time, render)
       drawImpact(time, dt, render)

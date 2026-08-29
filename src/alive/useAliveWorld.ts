@@ -64,7 +64,7 @@ function nextGreatMeteorAt(from: number) {
 }
 
 function isAliveRareMicroKind(kind: RareEventKind) {
-  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star'
+  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl'
 }
 
 function isAlivePhase(value: unknown): value is AlivePhase {
@@ -330,6 +330,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     let greatMeteorTimer = 0
     let distantStormTimer = 0
     let impossibleStarTimer = 0
+    let owlTimer = 0
     let fogTimer = 0
     let disposed = false
 
@@ -370,6 +371,12 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       window.clearTimeout(impossibleStarTimer)
       const delay = retry ? between(3, 7) * MINUTE : between(15, 35) * MINUTE
       impossibleStarTimer = window.setTimeout(runImpossibleStar, delay)
+    }
+
+    const scheduleOwl = (retry = false) => {
+      window.clearTimeout(owlTimer)
+      const delay = retry ? between(5, 11) * MINUTE : between(45, 90) * MINUTE
+      owlTimer = window.setTimeout(runOwl, delay)
     }
 
     const scheduleFogAfterRain = () => {
@@ -540,6 +547,18 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       scheduleImpossibleStar()
     }
 
+    function runOwl() {
+      if (disposed) return
+      const currentPhase = phaseRef.current
+      const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
+      const heroActive = rareEventsRef.current.some((event) => event.kind === 'aurora' || event.kind === 'great-meteor')
+      if (document.visibilityState !== 'visible' || !compatible || heroActive || !emitRareEvent('owl')) {
+        scheduleOwl(true)
+        return
+      }
+      scheduleOwl()
+    }
+
     const scheduleHeroTimers = () => {
       window.clearTimeout(auroraTimer)
       window.clearTimeout(greatMeteorTimer)
@@ -584,6 +603,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     scheduleMicro(true)
     scheduleDistantStorm()
     scheduleImpossibleStar()
+    scheduleOwl()
 
     const savedHeroSchedule = readHeroSchedule()
     const heroSchedule = savedHeroSchedule
@@ -614,6 +634,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       window.clearTimeout(greatMeteorTimer)
       window.clearTimeout(distantStormTimer)
       window.clearTimeout(impossibleStarTimer)
+      window.clearTimeout(owlTimer)
       window.clearTimeout(fogTimer)
       window.removeEventListener('pageshow', syncAfterVisibilityChange)
       document.removeEventListener('visibilitychange', syncAfterVisibilityChange)

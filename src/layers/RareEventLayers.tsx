@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 
-export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star'
+export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl'
 
 export type RareEventState = {
   kind: RareEventKind
@@ -57,6 +57,20 @@ function fbm1D(x: number, seed: number) {
   let normalizer = 0
   for (let octave = 0; octave < 4; octave++) {
     value += (valueNoise2D(x * frequency, seed + octave * 0.41, seed + octave * 17.3) * 2 - 1) * amplitude
+    normalizer += amplitude
+    amplitude *= 0.52
+    frequency *= 2.03
+  }
+  return value / normalizer
+}
+
+function fbm2D(x: number, y: number, seed: number) {
+  let value = 0
+  let amplitude = 0.58
+  let frequency = 1
+  let normalizer = 0
+  for (let octave = 0; octave < 4; octave++) {
+    value += (valueNoise2D(x * frequency, y * frequency, seed + octave * 19.3) * 2 - 1) * amplitude
     normalizer += amplitude
     amplitude *= 0.52
     frequency *= 2.03
@@ -624,6 +638,78 @@ function drawImpossibleStar(ctx: CanvasRenderingContext2D, width: number, height
   ctx.fill()
 }
 
+function owlBlinkOpen(elapsed: number, center: number, halfWidth: number) {
+  const distance = Math.abs(elapsed - center)
+  if (distance >= halfWidth) return 1
+  return smoothStep(distance / halfWidth)
+}
+
+function drawOwl(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
+  const duration = 9_600
+  if (elapsed < 0 || elapsed > duration) return
+
+  const fadeIn = smoothStep(elapsed / 1_050)
+  const fadeOut = 1 - smoothStep((elapsed - 7_350) / 1_650)
+  const presence = clamp01(fadeIn * fadeOut)
+  if (presence <= 0) return
+
+  // Keep the sighting away from dead-centre so it feels discovered rather than
+  // presented. The eyes sit just above the live local terrain, not at a fixed
+  // screen coordinate, so snow/water aftermath still belongs to the world.
+  const leftSide = seededFrac(id * 17.3 + 3.2) < 0.5
+  const xBand = seededFrac(id * 11.7 + 8.4)
+  const centerX = width * (leftSide ? 0.17 + xBand * 0.20 : 0.63 + xBand * 0.20)
+  const terrainY = surfaceYAt(centerX, width, height)
+  const perchLift = 17 + seededFrac(id * 23.9 + 1.7) * 15
+  const shift = smoothStep((elapsed - 4_550) / 700)
+  const centerY = Math.min(height * 0.77, terrainY - perchLift - shift * 0.8)
+  const spacing = Math.max(9.5, Math.min(15.5, width * 0.0105))
+  const eyeRadiusX = Math.max(1.8, Math.min(2.8, width * 0.0020))
+  const eyeRadiusY = eyeRadiusX * 0.67
+
+  // Two slightly imperfect blinks. The tiny left/right offset prevents them
+  // from reading like synchronized UI indicators.
+  const firstLeft = owlBlinkOpen(elapsed, 2_920, 175)
+  const firstRight = owlBlinkOpen(elapsed, 2_965, 168)
+  const secondLeft = owlBlinkOpen(elapsed, 4_410, 190)
+  const secondRight = owlBlinkOpen(elapsed, 4_355, 184)
+  const leftOpen = Math.max(0.025, firstLeft * secondLeft)
+  const rightOpen = Math.max(0.025, firstRight * secondRight)
+  const breath = 0.91 + Math.sin(elapsed * 0.0021 + id * 0.37) * 0.09
+  const alpha = presence * breath
+
+  const drawEye = (x: number, openness: number, bias: number) => {
+    const yRadius = eyeRadiusY * openness
+    if (yRadius < 0.06) return
+
+    const glowRadius = 5.2 + eyeRadiusX * 1.6
+    const glow = ctx.createRadialGradient(x, centerY, 0, x, centerY, glowRadius)
+    glow.addColorStop(0, `rgba(232,190,92,${0.17 * alpha * openness})`)
+    glow.addColorStop(0.38, `rgba(197,146,63,${0.075 * alpha * openness})`)
+    glow.addColorStop(1, 'rgba(166,119,51,0)')
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(x, centerY, glowRadius, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.ellipse(x, centerY, eyeRadiusX * (1 + bias), yRadius, 0, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(224,177,78,${0.78 * alpha})`
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.ellipse(x + eyeRadiusX * 0.12, centerY - yRadius * 0.10, eyeRadiusX * 0.34, Math.max(0.12, yRadius * 0.42), 0, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,226,143,${0.52 * alpha * openness})`
+    ctx.fill()
+  }
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'screen'
+  drawEye(centerX - spacing * 0.5 + shift * 0.55, leftOpen, -0.035)
+  drawEye(centerX + spacing * 0.5 + shift * 0.72, rightOpen, 0.025)
+  ctx.restore()
+}
+
 function drawDistantStorm(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
   const duration = 72_000
   const fade = smoothStep(Math.min(elapsed / 8_000, (duration - elapsed) / 10_000))
@@ -685,6 +771,73 @@ function playMeteorBoom(soundOn: boolean) {
   source.start()
 }
 
+function playOwlCall(soundOn: boolean) {
+  if (!soundOn) return
+  const ac = getPitchAudio()
+  if (!ac) return
+
+  const now = ac.currentTime
+  const duration = 1.85
+  const output = getPitchAudioOutput(ac)
+
+  const bodyGain = ac.createGain()
+  const bodyFilter = ac.createBiquadFilter()
+  bodyFilter.type = 'lowpass'
+  bodyFilter.frequency.value = 760
+  bodyFilter.Q.value = 0.55
+  bodyGain.gain.setValueAtTime(0.0001, now)
+  bodyGain.gain.exponentialRampToValueAtTime(0.025, now + 0.10)
+  bodyGain.gain.exponentialRampToValueAtTime(0.013, now + 0.48)
+  bodyGain.gain.exponentialRampToValueAtTime(0.031, now + 0.70)
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
+  bodyGain.connect(bodyFilter).connect(output)
+
+  const fundamental = ac.createOscillator()
+  fundamental.type = 'sine'
+  fundamental.frequency.setValueAtTime(168, now)
+  fundamental.frequency.exponentialRampToValueAtTime(146, now + 0.43)
+  fundamental.frequency.exponentialRampToValueAtTime(184, now + 0.70)
+  fundamental.frequency.exponentialRampToValueAtTime(151, now + 1.70)
+  fundamental.connect(bodyGain)
+
+  const lowBody = ac.createOscillator()
+  const lowGain = ac.createGain()
+  lowBody.type = 'triangle'
+  lowBody.frequency.setValueAtTime(84, now)
+  lowBody.frequency.exponentialRampToValueAtTime(76, now + 1.65)
+  lowGain.gain.value = 0.20
+  lowBody.connect(lowGain).connect(bodyGain)
+
+  // A little breath and throat texture keeps the call from sounding like a
+  // pure synthesizer tone while staying quiet and distant.
+  const noiseBuffer = ac.createBuffer(1, Math.floor(ac.sampleRate * duration), ac.sampleRate)
+  const noise = noiseBuffer.getChannelData(0)
+  let smoothed = 0
+  for (let i = 0; i < noise.length; i++) {
+    const white = Math.random() * 2 - 1
+    smoothed = smoothed * 0.82 + white * 0.18
+    noise[i] = smoothed
+  }
+  const noiseSource = ac.createBufferSource()
+  const noiseFilter = ac.createBiquadFilter()
+  const noiseGain = ac.createGain()
+  noiseSource.buffer = noiseBuffer
+  noiseFilter.type = 'bandpass'
+  noiseFilter.frequency.value = 520
+  noiseFilter.Q.value = 0.72
+  noiseGain.gain.setValueAtTime(0.0001, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0048, now + 0.12)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.62)
+  noiseSource.connect(noiseFilter).connect(noiseGain).connect(output)
+
+  fundamental.start(now)
+  lowBody.start(now)
+  noiseSource.start(now)
+  fundamental.stop(now + duration)
+  lowBody.stop(now + duration)
+  noiseSource.stop(now + duration)
+}
+
 export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const eventRef = useRef(event)
@@ -709,7 +862,9 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     let currentKind: RareEventKind | null = null
     let startedAt = 0
     let completed = false
+    let lastRenderedAt = 0
     let boomTimer: number | null = null
+    let owlTimer: number | null = null
     let auroraField: AuroraFieldRuntime | null = null
 
     const resize = () => {
@@ -729,6 +884,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (kind === 'great-meteor') return 15_500
       if (kind === 'distant-storm') return 72_000
       if (kind === 'impossible-star') return 32_000
+      if (kind === 'owl') return 9_600
       return 0
     }
 
@@ -742,6 +898,10 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
           window.clearTimeout(boomTimer)
           boomTimer = null
         }
+        if (owlTimer !== null) {
+          window.clearTimeout(owlTimer)
+          owlTimer = null
+        }
         ctx.clearRect(0, 0, width, height)
         raf = requestAnimationFrame(draw)
         return
@@ -749,10 +909,12 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
 
       if (requested.id !== currentId || requested.kind !== currentKind) {
         if (boomTimer !== null) window.clearTimeout(boomTimer)
+        if (owlTimer !== null) window.clearTimeout(owlTimer)
         currentId = requested.id
         currentKind = requested.kind
         startedAt = time
         completed = false
+        lastRenderedAt = 0
         if (requested.kind === 'aurora' && auroraField) auroraField.lastUpdate = -Infinity
         if (requested.kind === 'great-meteor') {
           boomTimer = window.setTimeout(() => {
@@ -760,9 +922,21 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
             boomTimer = null
           }, 12_300)
         }
+        if (requested.kind === 'owl') {
+          owlTimer = window.setTimeout(() => {
+            playOwlCall(soundRef.current)
+            owlTimer = null
+          }, 5_350)
+        }
       }
 
       const elapsed = time - startedAt
+      const minFrameMs = currentKind === 'great-meteor' ? 0 : 30
+      if (minFrameMs > 0 && time - lastRenderedAt < minFrameMs) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
+      lastRenderedAt = time
       ctx.clearRect(0, 0, width, height)
 
       if (currentKind === 'aurora') {
@@ -772,6 +946,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (currentKind === 'great-meteor') drawGreatMeteor(ctx, width, height, elapsed)
       if (currentKind === 'distant-storm') drawDistantStorm(ctx, width, height, elapsed, currentId)
       if (currentKind === 'impossible-star') drawImpossibleStar(ctx, width, height, elapsed)
+      if (currentKind === 'owl') drawOwl(ctx, width, height, elapsed, currentId)
 
       const duration = durationFor(currentKind)
       if (!completed && duration > 0 && elapsed >= duration) {
@@ -789,6 +964,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     return () => {
       cancelAnimationFrame(raf)
       if (boomTimer !== null) window.clearTimeout(boomTimer)
+      if (owlTimer !== null) window.clearTimeout(owlTimer)
       window.removeEventListener('resize', resize)
     }
   }, [])
@@ -817,6 +993,81 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
     let currentId = -1
     let startedAt = 0
     let completed = false
+    let lastRenderedAt = 0
+    let fogField: {
+      canvas: HTMLCanvasElement
+      ctx: CanvasRenderingContext2D
+      image: ImageData
+      width: number
+      height: number
+      lastUpdate: number
+    } | null = null
+
+    const createFogField = () => {
+      const fieldWidth = Math.max(180, Math.min(340, Math.round(width / 5)))
+      const fieldHeight = Math.max(48, Math.min(88, Math.round(fieldWidth * 0.24)))
+      const fieldCanvas = document.createElement('canvas')
+      fieldCanvas.width = fieldWidth
+      fieldCanvas.height = fieldHeight
+      const fieldCtx = fieldCanvas.getContext('2d', { alpha: true })
+      if (!fieldCtx) return null
+      return {
+        canvas: fieldCanvas,
+        ctx: fieldCtx,
+        image: fieldCtx.createImageData(fieldWidth, fieldHeight),
+        width: fieldWidth,
+        height: fieldHeight,
+        lastUpdate: Number.NEGATIVE_INFINITY,
+      }
+    }
+
+    const renderFogField = (elapsed: number, id: number) => {
+      if (!fogField) fogField = createFogField()
+      if (!fogField || elapsed - fogField.lastUpdate < 86) return
+      fogField.lastUpdate = elapsed
+
+      const t = elapsed * 0.0000105
+      const seed = 611.7 + id * 17.9
+      const data = fogField.image.data
+      const fw = fogField.width
+      const fh = fogField.height
+
+      for (let y = 0; y < fh; y++) {
+        const ny = y / Math.max(1, fh - 1)
+        const lowerEnvelope = 1 - smoothStep((ny - 0.92) / 0.10)
+
+        for (let x = 0; x < fw; x++) {
+          const nx = x / Math.max(1, fw - 1)
+          const shear = (ny - 0.52) * 0.22
+          const broadWarp = fbm2D(nx * 1.25 + t * 0.10, ny * 0.86 - t * 0.025, seed + 21.4) * 0.18
+          const fineWarp = fbm2D(nx * 3.4 - t * 0.035, ny * 1.7 + 2.2, seed + 43.8) * 0.055
+          const driftX = nx * 2.15 + t * (0.19 + ny * 0.07) + shear + broadWarp + fineWarp
+
+          const broad = fbm2D(driftX, ny * 0.92 + 3.8, seed + 71.1)
+          const medium = fbm2D(driftX * 2.35 + 5.2, ny * 1.85 - t * 0.045, seed + 104.6)
+          const detail = fbm2D(driftX * 4.6 + 1.4, ny * 3.2 + t * 0.055, seed + 151.9)
+
+          const ceiling = 0.17
+            + fbm1D(nx * 1.48 + t * 0.07 + id * 0.13, seed + 203.7) * 0.075
+            + fbm1D(nx * 3.3 - t * 0.035, seed + 251.2) * 0.028
+          const verticalPresence = smoothStep((ny - ceiling) / 0.24) * lowerEnvelope
+          const body = broad * 0.58 + medium * 0.30 + detail * 0.12
+          const density = clamp01((body + 0.24) * 1.55) * verticalPresence
+
+          const openPockets = smoothStep((fbm2D(nx * 1.12 - t * 0.055, ny * 0.72 + 6.4, seed + 319.5) + 0.20) / 0.72)
+          const wisp = clamp01((medium + 0.25) * 1.45) * smoothStep((ny - 0.32) / 0.24)
+          const alpha = Math.pow(density, 1.28) * (0.48 + openPockets * 0.52) + wisp * 0.08
+
+          const i = (y * fw + x) * 4
+          data[i] = 143
+          data[i + 1] = 155
+          data[i + 2] = 162
+          data[i + 3] = Math.round(clamp01(alpha) * 24)
+        }
+      }
+
+      fogField.ctx.putImageData(fogField.image, 0, 0)
+    }
 
     const resize = () => {
       width = window.innerWidth
@@ -827,6 +1078,7 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      fogField = createFogField()
     }
 
     const drawFog = (elapsed: number, id: number) => {
@@ -838,36 +1090,40 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
       const fogTop = Math.min(floor - 7, Number.isFinite(waterY) ? waterY - 3 : floor - 7)
       const depth = Math.min(86, Math.max(34, height * 0.09))
 
-      // Broad, low rolling banks. A handful of ellipses is enough at this scale;
-      // all motion is slow and lateral so it reads as ground-hugging mist.
-      const banks = 11
-      for (let i = 0; i < banks; i++) {
-        const speed = 0.0028 + seededFrac(id * 7.1 + i * 13.3) * 0.0022
-        const direction = seededFrac(id * 4.2 + i * 17.1) < 0.5 ? -1 : 1
-        const phase = seededFrac(id * 19.7 + i * 5.8)
-        const travel = ((phase + elapsed * speed * 0.001 * direction) % 1 + 1) % 1
-        const x = (travel * 1.35 - 0.17) * width
-        const y = fogTop + (seededFrac(id * 11.2 + i * 9.1) - 0.28) * depth * 0.48
-        const rx = width * (0.10 + seededFrac(id * 3.8 + i * 8.6) * 0.13)
-        const ry = depth * (0.24 + seededFrac(id * 6.3 + i * 14.8) * 0.30)
-        const alpha = fade * (0.018 + seededFrac(id * 23.7 + i * 11.4) * 0.022)
-        const g = ctx.createRadialGradient(x, y, 0, x, y, rx)
-        g.addColorStop(0, `rgba(157,169,176,${alpha})`)
-        g.addColorStop(0.62, `rgba(137,150,158,${alpha * 0.58})`)
-        g.addColorStop(1, 'rgba(120,133,141,0)')
-        ctx.fillStyle = g
-        ctx.beginPath()
-        ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2)
-        ctx.fill()
-      }
+      renderFogField(elapsed, id)
+      if (!fogField) return
 
-      // Thin level veil right along the ground/water gives the banks continuity.
-      const shelf = ctx.createLinearGradient(0, fogTop - depth * 0.30, 0, fogTop + depth * 0.42)
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(0, fogTop - depth * 0.78)
+      const terrainStep = Math.max(8, width / 160)
+      for (let x = 0; x <= width + terrainStep; x += terrainStep) {
+        const px = Math.min(width, x)
+        ctx.lineTo(px, surfaceYAt(px, width, height) + 2)
+      }
+      ctx.lineTo(width, fogTop - depth * 0.78)
+      ctx.closePath()
+      ctx.clip()
+
+      ctx.globalAlpha = fade
+      ctx.imageSmoothingEnabled = true
+      ctx.drawImage(
+        fogField.canvas,
+        -width * 0.035,
+        fogTop - depth * 0.72,
+        width * 1.07,
+        depth * 1.42,
+      )
+
+      // A near-ground moisture shelf makes the field settle into the landscape
+      // without revealing a flat geometric band.
+      const shelf = ctx.createLinearGradient(0, fogTop - depth * 0.18, 0, fogTop + depth * 0.50)
       shelf.addColorStop(0, 'rgba(145,158,165,0)')
-      shelf.addColorStop(0.52, `rgba(145,158,165,${0.020 * fade})`)
+      shelf.addColorStop(0.56, `rgba(145,158,165,${0.010 * fade})`)
       shelf.addColorStop(1, 'rgba(145,158,165,0)')
       ctx.fillStyle = shelf
-      ctx.fillRect(0, fogTop - depth * 0.32, width, depth * 0.84)
+      ctx.fillRect(0, fogTop - depth * 0.20, width, depth * 0.72)
+      ctx.restore()
     }
 
     const draw = (time: number) => {
@@ -884,9 +1140,16 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
         currentId = requested.id
         startedAt = time
         completed = false
+        lastRenderedAt = 0
+        if (fogField) fogField.lastUpdate = Number.NEGATIVE_INFINITY
       }
 
       const elapsed = time - startedAt
+      if (time - lastRenderedAt < 30) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
+      lastRenderedAt = time
       ctx.clearRect(0, 0, width, height)
       drawFog(elapsed, currentId)
 
