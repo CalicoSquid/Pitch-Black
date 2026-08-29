@@ -8,36 +8,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#000000" />
-    <meta name="application-name" content="this quiet world" />
+    <meta name="application-name" content="This Quiet World" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-    <meta name="apple-mobile-web-app-title" content="quiet world" />
-    <meta name="robots" content="index, follow" />
+    <meta name="apple-mobile-web-app-title" content="This Quiet World" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://thisquiet.world/" />
     <meta
       name="description"
-      content="A quiet, ad-free black screen for sleep and bedside use, with rain, snow, embers, storms, fireflies, a dim clock, ambient sound and fullscreen mode."
-    />
-    <meta
-      name="keywords"
-      content="black screen, sleep website, sleep aid, rain sounds, ambient sounds, bedside clock, dark screen, fullscreen black screen, snow sounds"
+      content="A free, ad-free living black screen for sleep with rain, snow, storms, embers, moonlight, fireflies, gentle night sounds, a dim clock and fullscreen mode."
     />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="this quiet world — black screen, night sounds & sleep clock" />
+    <meta property="og:site_name" content="This Quiet World" />
+    <meta property="og:url" content="https://thisquiet.world/" />
+    <meta property="og:title" content="This Quiet World — A Living Black Screen for Sleep" />
     <meta
       property="og:description"
-      content="A small living night for an unused screen. Blackout, rain, snow, embers, storms, fireflies, ambient sound and a dim bedside clock."
+      content="A free, ad-free ambient sleep world with a black screen, rain, snow, storms, embers, moonlight, fireflies, gentle night sounds and a dim bedside clock."
     />
-    <meta property="og:image" content="/social-preview.png" />
+    <meta property="og:image" content="https://thisquiet.world/social-preview.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="this quiet world — a dark ambient sleep screen" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="this quiet world — black screen, night sounds & sleep clock" />
+    <meta name="twitter:title" content="This Quiet World — A Living Black Screen for Sleep" />
     <meta
       name="twitter:description"
-      content="A small living night for an unused screen. Blackout, rain, snow, embers, storms, fireflies, ambient sound and a dim bedside clock."
+      content="A free, ad-free ambient sleep world with a black screen, rain, snow, storms, embers, moonlight, fireflies, gentle night sounds and a dim bedside clock."
     />
-    <meta name="twitter:image" content="/social-preview.png" />
+    <meta name="twitter:image" content="https://thisquiet.world/social-preview.png" />
     <style>
       html,body,#root{width:100%;height:100%;margin:0;background:#000}
       body{overflow:hidden}
@@ -50,15 +49,37 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "this quiet world",
-        "applicationCategory": "LifestyleApplication",
-        "operatingSystem": "Any",
-        "isAccessibleForFree": true,
-        "description": "An ad-free black screen and quiet ambient night for sleep and bedside use, with rain, snow, embers, storms, fireflies, a dim clock and fullscreen mode."
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://thisquiet.world/#website",
+            "url": "https://thisquiet.world/",
+            "name": "This Quiet World",
+            "alternateName": ["TQW", "thisquiet.world"],
+            "description": "A free, ad-free living black screen for sleep and ambient nighttime sound.",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://thisquiet.world/#app",
+            "url": "https://thisquiet.world/",
+            "name": "This Quiet World",
+            "applicationCategory": "LifestyleApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires JavaScript and a modern web browser.",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "description": "A free, ad-free ambient sleep world with a black screen, rain, snow, storms, embers, moonlight, fireflies, gentle night sounds, a dim clock and fullscreen mode.",
+            "isPartOf": { "@id": "https://thisquiet.world/#website" }
+          }
+        ]
       }
     </script>
-    <title>this quiet world — black screen, night sounds & sleep clock</title>
+    <title>This Quiet World — Black Screen for Sleep & Ambient Night Sounds</title>
   </head>
   <body>
     <div id="root"></div>
@@ -69,6 +90,14 @@
       </div>
     </div>
     <noscript>This Quiet World is an ad-free black screen and ambient sleep website with rain, snow, embers, storms, fireflies and a dim bedside clock. JavaScript is required to enter the world.</noscript>
+    <script>
+      (function () {
+        if (/(?:^|[?&])test=/.test(window.location.search)) {
+          var robots = document.querySelector('meta[name="robots"]')
+          if (robots) robots.setAttribute('content', 'noindex, nofollow')
+        }
+      }())
+    </script>
     <script>
       (function () {
         var html = document.documentElement

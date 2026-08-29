@@ -192,6 +192,17 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 
 
 
+
+## v1.55.0 — SEO foundation
+
+- Locked the production canonical domain to `https://thisquiet.world/` across canonical, Open Graph and social metadata.
+- Reframed the homepage title and description around the actual product category: a living black screen for sleep with ambient night sounds.
+- Added `WebSite` + `WebApplication` JSON-LD with the final brand/domain, free-use offer data and consistent product description.
+- Added `sitemap.xml` and advertised it from `robots.txt`; QA `?test=` URLs now self-mark `noindex, nofollow`.
+- Upgraded first-visit copy to a semantic H1 and added a restrained, genuinely user-visible About section to the existing More panel so the app has crawlable explanatory content without disturbing the sleep experience.
+- Normalized PWA/share naming and descriptions to the final This Quiet World brand.
+- No scene, Alive, rare-event, audio, world-state, performance or display-compatibility behavior changed.
+
 ## v1.54.1 — Display / embedded-browser compatibility
 
 - Added a non-invasive boot watchdog so unsupported or failed embedded browsers show a quiet compatibility message instead of an indistinguishable black screen.

@@ -644,6 +644,7 @@
 .first-visit-whisper.visible { opacity: 1; }
 
 .first-visit-title {
+  margin: 0;
   font-size: clamp(11px, 1.1vw, 14px);
   letter-spacing: .34em;
   text-transform: lowercase;
@@ -914,6 +915,33 @@
 
 .utility-panel .sleep-timer-status {
   margin-left: 74px;
+}
+
+.utility-about h2 {
+  margin: 1px 2px 5px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 400;
+  letter-spacing: .055em;
+  color: rgba(255,255,255,.46);
+}
+
+.utility-about p {
+  margin: 0 2px 7px;
+  font-size: 9px;
+  line-height: 1.65;
+  letter-spacing: .018em;
+  color: rgba(255,255,255,.24);
+}
+
+.utility-about p:last-child { margin-bottom: 1px; }
+.utility-about .utility-about-tagline {
+  margin-bottom: 8px;
+  color: rgba(255,255,255,.34);
+}
+.utility-about strong {
+  font-weight: 500;
+  color: rgba(255,255,255,.38);
 }
 
 .first-visit-secondary {

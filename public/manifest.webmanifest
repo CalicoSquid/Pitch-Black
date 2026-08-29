@@ -1,7 +1,7 @@
 {
-  "name": "this quiet world",
-  "short_name": "quiet world",
-  "description": "A small living night for an unused screen.",
+  "name": "This Quiet World",
+  "short_name": "Quiet World",
+  "description": "A living black screen for sleep, with a small ambient night that carries on around you.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

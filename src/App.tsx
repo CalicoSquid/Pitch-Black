@@ -538,7 +538,7 @@ function App() {
 
   const shareWorld = async () => {
     const url = buildSharedWorldUrl(scene, layers, showClock, aliveOn)
-    const shareData = { title: 'this quiet world', text: 'a quiet world for an unused screen', url }
+    const shareData = { title: 'This Quiet World', text: 'A living black screen for sleep.', url }
 
     try {
       if (typeof navigator.share === 'function') {
@@ -750,8 +750,8 @@ function App() {
       {showClock && <ClockDisplay awake={controlsVisible} />}
 
       <div className={`first-visit-whisper ${firstVisit ? 'visible' : ''}`} aria-hidden={!firstVisit}>
-        <div className="first-visit-title">Welcome to this quiet world</div>
-        <div className="first-visit-hint">Choose a scene below, or let <strong>Alive</strong> take over.</div>
+        <h1 className="first-visit-title">This Quiet World</h1>
+        <div className="first-visit-hint">A living black screen for sleep. Choose a scene below, or let <strong>Alive</strong> take over.</div>
         <div className="first-visit-secondary">Double-tap anywhere for fullscreen.</div>
       </div>
 
@@ -850,6 +850,20 @@ function App() {
             </button>
           </div>
         )}
+
+        <div className="utility-section utility-about">
+          <div className="utility-section-title">About</div>
+          <h2>This Quiet World</h2>
+          <p className="utility-about-tagline">A living black screen for sleep.</p>
+          <p>
+            A free, ad-free ambient sleep website with rain, snow, storms, embers, moonlight,
+            fireflies, gentle night sounds, a dim bedside clock and fullscreen mode.
+          </p>
+          <p>
+            Choose a scene yourself, or let <strong>Alive</strong> carry the weather, water,
+            ice and rare nighttime events forward on its own. No account, feed or distractions.
+          </p>
+        </div>
       </section>
 
       <nav className={`control-dock ${interfaceAwake ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
