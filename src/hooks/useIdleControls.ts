@@ -29,10 +29,25 @@ export function useIdleControls(delay = 3200) {
 
   useEffect(() => {
     wake()
-    const events: (keyof WindowEventMap)[] = ['pointermove', 'pointerdown', 'keydown']
+    // Pointer Events are the main path, but embedded TV/projector browsers and
+    // remotes often expose only legacy mouse/click or focus events. Treat all
+    // of them as equivalent activity without changing the hide timing.
+    const events: (keyof WindowEventMap)[] = [
+      'pointermove',
+      'pointerdown',
+      'mousemove',
+      'mousedown',
+      'click',
+      'touchstart',
+      'keydown',
+      'wheel',
+      'focus',
+    ]
     events.forEach((event) => window.addEventListener(event, wake, { passive: true }))
+    document.addEventListener('focusin', wake, { passive: true })
     return () => {
       events.forEach((event) => window.removeEventListener(event, wake))
+      document.removeEventListener('focusin', wake)
       if (timer.current !== null) window.clearTimeout(timer.current)
       timer.current = null
     }

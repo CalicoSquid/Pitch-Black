@@ -191,6 +191,17 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Distant Storm, Impossible Star, Fog, Alive scheduling, weather, water/ice, lightning depth, and Ember interactions are unchanged.
 
 
+
+## v1.54.1 — Display / embedded-browser compatibility
+
+- Added a non-invasive boot watchdog so unsupported or failed embedded browsers show a quiet compatibility message instead of an indistinguishable black screen.
+- Made the no-JavaScript fallback visible against the black page.
+- Added legacy mouse/click/touch/focus activity paths alongside Pointer Events so projector/TV remotes can wake the control dock and dismiss onboarding.
+- Added matching legacy gesture paths for browser audio unlock without changing mute, volume, or scene audio behavior.
+- Added a CSS focus-within failsafe so keyboard/remote focus reveals the dock even if pointer activity is unavailable.
+- Lowered the production JavaScript syntax target to ES2017 for older browsers that support modules but not the modern Vite baseline.
+- No scene, rendering, Alive scheduling, rare-event, persistence, performance, or world-state behavior changed.
+
 ## v1.54.0 — Release polish / event + audio audit
 
 - Audited the full audio lifecycle across manual scenes, Alive, Storm, Ember and rare events without changing the approved Rain/Snow long-release sound behavior.

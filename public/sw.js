@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.54.0-release-polish'
+const CACHE_NAME = 'this-quiet-world-v1.54.1-display-compat'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {

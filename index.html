@@ -38,7 +38,15 @@
       content="A small living night for an unused screen. Blackout, rain, snow, embers, storms, fireflies, ambient sound and a dim bedside clock."
     />
     <meta name="twitter:image" content="/social-preview.png" />
-    <style>html,body,#root{width:100%;height:100%;margin:0;background:#000}body{overflow:hidden}</style>
+    <style>
+      html,body,#root{width:100%;height:100%;margin:0;background:#000}
+      body{overflow:hidden}
+      #tqw-boot-fallback{display:none;position:fixed;inset:0;z-index:2147483647;box-sizing:border-box;align-items:center;justify-content:center;padding:32px;background:#000;color:rgba(255,255,255,.78);font:14px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+      #tqw-boot-fallback>div{max-width:560px}
+      #tqw-boot-fallback strong{display:block;margin-bottom:8px;color:rgba(255,255,255,.92);font-weight:500;letter-spacing:.02em}
+      #tqw-boot-fallback span{color:rgba(255,255,255,.52)}
+      noscript{position:fixed;inset:0;z-index:2147483647;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:32px;background:#000;color:rgba(255,255,255,.78);font:14px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+    </style>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -54,7 +62,25 @@
   </head>
   <body>
     <div id="root"></div>
+    <div id="tqw-boot-fallback" role="status" aria-live="polite">
+      <div>
+        <strong>this quiet world couldn't start in this browser.</strong>
+        <span>Try updating the browser, or open thisquiet.world in Chrome, Edge, Firefox or Safari and mirror/cast the screen.</span>
+      </div>
+    </div>
     <noscript>This Quiet World is an ad-free black screen and ambient sleep website with rain, snow, embers, storms, fireflies and a dim bedside clock. JavaScript is required to enter the world.</noscript>
+    <script>
+      (function () {
+        var html = document.documentElement
+        var supportsModules = 'noModule' in document.createElement('script')
+        var delay = supportsModules ? 5000 : 400
+        window.setTimeout(function () {
+          if (html.getAttribute('data-tqw-booted') === '1') return
+          var fallback = document.getElementById('tqw-boot-fallback')
+          if (fallback) fallback.style.display = 'flex'
+        }, delay)
+      }())
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

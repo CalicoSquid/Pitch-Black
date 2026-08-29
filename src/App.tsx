@@ -213,6 +213,15 @@ function App() {
   })
 
   useEffect(() => {
+    // The inline boot watchdog is intentionally independent of the React/Vite
+    // bundle so unsupported embedded browsers never fail as a featureless
+    // black rectangle. Reaching this effect means the real app mounted.
+    document.documentElement.setAttribute('data-tqw-booted', '1')
+    const fallback = document.getElementById('tqw-boot-fallback')
+    if (fallback) fallback.style.display = 'none'
+  }, [])
+
+  useEffect(() => {
     if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl') return
     const interval = testMode === 'fog' ? 90_000 : testMode === 'owl' ? 15_000 : 30_000
     const timer = window.setInterval(() => setTestEventId((id) => id + 1), interval)
@@ -232,9 +241,15 @@ function App() {
     if (!firstVisit) return
     const dismiss = () => dismissFirstVisit()
     window.addEventListener('pointerdown', dismiss, { once: true, passive: true })
+    window.addEventListener('mousedown', dismiss, { once: true, passive: true })
+    window.addEventListener('click', dismiss, { once: true, passive: true })
+    window.addEventListener('touchstart', dismiss, { once: true, passive: true })
     window.addEventListener('keydown', dismiss, { once: true })
     return () => {
       window.removeEventListener('pointerdown', dismiss)
+      window.removeEventListener('mousedown', dismiss)
+      window.removeEventListener('click', dismiss)
+      window.removeEventListener('touchstart', dismiss)
       window.removeEventListener('keydown', dismiss)
     }
   }, [dismissFirstVisit, firstVisit])
@@ -359,6 +374,9 @@ function App() {
     window.addEventListener('pagehide', suspendForPageHide)
     window.addEventListener('pageshow', syncAudioVisibility)
     window.addEventListener('pointerdown', unlockOnGesture, { passive: true })
+    window.addEventListener('mousedown', unlockOnGesture, { passive: true })
+    window.addEventListener('click', unlockOnGesture, { passive: true })
+    window.addEventListener('touchstart', unlockOnGesture, { passive: true })
     window.addEventListener('keydown', unlockOnGesture)
 
     syncAudioVisibility()
@@ -368,6 +386,9 @@ function App() {
       window.removeEventListener('pagehide', suspendForPageHide)
       window.removeEventListener('pageshow', syncAudioVisibility)
       window.removeEventListener('pointerdown', unlockOnGesture)
+      window.removeEventListener('mousedown', unlockOnGesture)
+      window.removeEventListener('click', unlockOnGesture)
+      window.removeEventListener('touchstart', unlockOnGesture)
       window.removeEventListener('keydown', unlockOnGesture)
     }
   }, [soundOn])

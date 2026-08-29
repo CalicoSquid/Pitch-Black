@@ -106,7 +106,8 @@
   pointer-events: none;
   transition: opacity 650ms ease, transform 650ms cubic-bezier(.2,.8,.2,1);
 }
-.control-dock.visible { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
+.control-dock.visible,
+.control-dock:focus-within { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
 
 .control-dock button {
   appearance: none;
