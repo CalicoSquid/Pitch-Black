@@ -4,6 +4,7 @@ let pitchAudioContext: PitchAudioContext | null = null
 let pitchAudioOutputGain: GainNode | null = null
 let pitchAudioFadeGain: GainNode | null = null
 let pitchAudioMuteGain: GainNode | null = null
+let pitchAudioTransientGain: GainNode | null = null
 let pitchAudioMuted = false
 let pitchAudioVolume = 1
 
@@ -24,12 +25,40 @@ function ensurePitchAudioMaster(audioCtx: AudioContext) {
   return pitchAudioOutputGain
 }
 
+function ensurePitchAudioTransientOutput(audioCtx: AudioContext) {
+  const output = ensurePitchAudioMaster(audioCtx)
+  if (!pitchAudioTransientGain) {
+    pitchAudioTransientGain = audioCtx.createGain()
+    pitchAudioTransientGain.gain.value = 1
+    pitchAudioTransientGain.connect(output)
+  }
+  return pitchAudioTransientGain
+}
+
+export function cancelPitchAudioTransients() {
+  const audioCtx = pitchAudioContext
+  const transientGain = pitchAudioTransientGain
+  if (!audioCtx || !transientGain) return
+
+  // Disconnecting the old transient bus permanently silences already-started
+  // and already-scheduled one-shots. A fresh bus is created lazily for future
+  // events, so a thunder tail or owl call cannot reappear after mute/background.
+  try {
+    transientGain.gain.cancelScheduledValues(audioCtx.currentTime)
+    transientGain.gain.setValueAtTime(0, audioCtx.currentTime)
+    transientGain.disconnect()
+  } catch {
+    // A partially torn-down Web Audio graph is harmless here.
+  }
+  pitchAudioTransientGain = null
+}
+
 export function unlockPitchAudio() {
   try {
     // Never create or resume Web Audio while the page is backgrounded. Some
     // mobile browsers otherwise keep ambient audio alive after the browser closes.
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-      return pitchAudioContext
+      return null
     }
     const AudioCtx =
       window.AudioContext ||
@@ -41,6 +70,7 @@ export function unlockPitchAudio() {
       pitchAudioOutputGain = null
       pitchAudioFadeGain = null
       pitchAudioMuteGain = null
+      pitchAudioTransientGain = null
     }
 
     ensurePitchAudioMaster(pitchAudioContext)
@@ -56,6 +86,7 @@ export function unlockPitchAudio() {
 
 export function suspendPitchAudio() {
   const audioCtx = pitchAudioContext
+  cancelPitchAudioTransients()
   if (!audioCtx || audioCtx.state !== 'running') return
 
   try {
@@ -73,8 +104,13 @@ export function getPitchAudioOutput(audioCtx: AudioContext) {
   return ensurePitchAudioMaster(audioCtx)
 }
 
+export function getPitchAudioTransientOutput(audioCtx: AudioContext) {
+  return ensurePitchAudioTransientOutput(audioCtx)
+}
+
 export function setPitchAudioMuted(muted: boolean) {
   pitchAudioMuted = muted
+  if (muted) cancelPitchAudioTransients()
   const audioCtx = pitchAudioContext
   const muteGain = pitchAudioMuteGain
   if (!audioCtx || !muteGain) return

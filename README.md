@@ -191,6 +191,17 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Distant Storm, Impossible Star, Fog, Alive scheduling, weather, water/ice, lightning depth, and Ember interactions are unchanged.
 
 
+## v1.54.0 — Release polish / event + audio audit
+
+- Audited the full audio lifecycle across manual scenes, Alive, Storm, Ember and rare events without changing the approved Rain/Snow long-release sound behavior.
+- Added a dedicated cancellable transient-audio bus for thunder, meteor/impact sounds, Owl and cricket chirps. Muting or backgrounding now permanently silences already-started / already-scheduled one-shots so stale tails cannot reappear after unmute or tab return.
+- `getPitchAudio()` now refuses audio scheduling while the document is hidden rather than returning a suspended context; missed Owl calls, meteor booms and thunder therefore remain genuinely missed.
+- Ember no longer creates meteor whoosh/impact audio at all while Sound is muted, and Snow audio shutdown now captures the correct source safely across rapid mute/unmute changes.
+- Made Alive event hierarchy explicit: routine micro-events yield to all rare events; Distant Storm, Fog, Impossible Star and Owl share the rare-micro tier; Aurora and Great Meteor remain independent hero events and may still overlap each other naturally.
+- Hero events now clear lower-tier transient garnish when they begin, and rare micro-events wait/retry around hero moments, while normal weather timing and persistent world simulation continue uninterrupted.
+- Kept the non-persistent URL QA hooks (`?test=fog`, `?test=storm`, `?test=moon-veil`, `?test=owl`) for verification; they still do not alter saved production preferences.
+- Cleaned one stale pre-v1.52 water-hole comment. No approved visuals, rarity cadences, weather durations, terrain physics or v1.52 performance behavior were intentionally changed.
+
 ## v1.53.0 — Owl
 
 - Added Owl as a small Alive rare event: only two dim warm eyes appear just above the live terrain, blink twice with slight asymmetry, shift almost imperceptibly, then fade away. No owl body or silhouette is drawn.

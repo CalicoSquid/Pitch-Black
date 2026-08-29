@@ -67,6 +67,10 @@ function isAliveRareMicroKind(kind: RareEventKind) {
   return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl'
 }
 
+function isAliveHeroKind(kind: RareEventKind) {
+  return kind === 'aurora' || kind === 'great-meteor'
+}
+
 function isAlivePhase(value: unknown): value is AlivePhase {
   return value === 'calm'
     || value === 'rain-front'
@@ -339,17 +343,34 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       setSkyEvent({ ...event, id: eventIdRef.current })
     }
 
+    const clearRoutineMicroPresentation = () => {
+      window.clearTimeout(microEndTimer)
+      setSkyEvent(null)
+      setMoonHalo(false)
+      setFireflyMultiplier(1)
+      if (aliveLayersRef.current.fireflies) patchAliveLayers({ fireflies: false })
+    }
+
     const emitRareEvent = (kind: RareEventKind) => {
-      if (isAliveRareMicroKind(kind) && rareEventsRef.current.some((event) => isAliveRareMicroKind(event.kind))) {
+      const current = rareEventsRef.current
+
+      // Hero sightings own the moment. Subtle rare events wait rather than
+      // cluttering Aurora / Great Meteor, while the two hero kinds remain
+      // independent so their extremely rare natural overlap is still possible.
+      if (isAliveRareMicroKind(kind) && current.some((event) => isAliveRareMicroKind(event.kind) || isAliveHeroKind(event.kind))) {
         return false
       }
-      if (!isAliveRareMicroKind(kind) && rareEventsRef.current.some((event) => event.kind === kind)) {
+      if (isAliveHeroKind(kind) && current.some((event) => event.kind === kind)) {
         return false
       }
 
+      clearRoutineMicroPresentation()
       rareEventIdRef.current += 1
       const event = { kind, id: rareEventIdRef.current }
-      const next = [...rareEventsRef.current, event]
+      const base = isAliveHeroKind(kind)
+        ? current.filter((activeEvent) => !isAliveRareMicroKind(activeEvent.kind))
+        : current
+      const next = [...base, event]
       rareEventsRef.current = next
       setRareEvents(next)
       return true
@@ -454,6 +475,14 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
 
     function runMicroEvent() {
       if (disposed) return
+
+      // Rare events are a distinct tier above the routine Alive garnish. Let
+      // the rare sighting breathe, then try the normal micro stream again.
+      if (rareEventsRef.current.length > 0) {
+        scheduleMicro()
+        return
+      }
+
       window.clearTimeout(microEndTimer)
       // A new micro-event closes the previous transient cleanly rather than
       // allowing a long firefly/halo timer to be cancelled and left stuck on.
@@ -551,8 +580,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       if (disposed) return
       const currentPhase = phaseRef.current
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
-      const heroActive = rareEventsRef.current.some((event) => event.kind === 'aurora' || event.kind === 'great-meteor')
-      if (document.visibilityState !== 'visible' || !compatible || heroActive || !emitRareEvent('owl')) {
+      if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent('owl')) {
         scheduleOwl(true)
         return
       }
@@ -582,6 +610,8 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
         return
       }
 
+      // Routine micro-events yield to a hero sighting. Weather itself continues
+      // uninterrupted, and the other hero kind is deliberately left alone.
       emitRareEvent(kind)
       const next = kind === 'aurora'
         ? { ...schedule, auroraNextAt: nextAuroraAt(now) }

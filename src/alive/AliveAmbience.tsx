@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import type { AlivePhase } from './useAliveWorld'
 
 function between(min: number, max: number) {
@@ -65,7 +65,7 @@ export function AliveAmbience({ active, soundOn, phase }: { active: boolean; sou
         gain.gain.setValueAtTime(0.0001, start)
         gain.gain.exponentialRampToValueAtTime(between(0.007, 0.012), start + 0.009)
         gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.045)
-        oscillator.connect(filter).connect(gain).connect(output)
+        oscillator.connect(filter).connect(gain).connect(getPitchAudioTransientOutput(audioCtx))
         oscillator.start(start)
         oscillator.stop(start + 0.055)
       }

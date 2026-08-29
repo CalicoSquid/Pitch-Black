@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { lightningGroundStrikeSignal } from '../world/lightningSignal'
 import {
   ensureWorld,
@@ -119,6 +119,7 @@ export function EmberScene({
     }
 
     const startWhoosh = () => {
+      if (!soundOnRef.current) return
       if (whooshSource) return
       const ac = ensureAudio()
       if (!ac) return
@@ -142,7 +143,7 @@ export function EmberScene({
       filter.Q.value = 0.55
       gain.gain.value = 0
 
-      source.connect(filter).connect(gain).connect(getPitchAudioOutput(ac))
+      source.connect(filter).connect(gain).connect(getPitchAudioTransientOutput(ac))
       source.start()
       gain.gain.setTargetAtTime(0.045, ac.currentTime, 0.38)
       filter.frequency.exponentialRampToValueAtTime(1250, ac.currentTime + 1.8)
@@ -158,6 +159,7 @@ export function EmberScene({
     }
 
     const impactSound = () => {
+      if (!soundOnRef.current) return
       const ac = ensureAudio()
       if (!ac) return
 
@@ -171,7 +173,7 @@ export function EmberScene({
       impactGain.gain.setValueAtTime(0.0001, ac.currentTime)
       impactGain.gain.exponentialRampToValueAtTime(0.17, ac.currentTime + 0.012)
       impactGain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.42)
-      osc.connect(impactGain).connect(getPitchAudioOutput(ac))
+      osc.connect(impactGain).connect(getPitchAudioTransientOutput(ac))
       osc.start()
       osc.stop(ac.currentTime + 0.46)
 
@@ -188,7 +190,7 @@ export function EmberScene({
       filter.type = 'lowpass'
       filter.frequency.value = 850
       gain.gain.value = 0.055
-      source.connect(filter).connect(gain).connect(getPitchAudioOutput(ac))
+      source.connect(filter).connect(gain).connect(getPitchAudioTransientOutput(ac))
       source.start()
     }
 

@@ -62,10 +62,11 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
   useEffect(() => {
     if (!soundOn) {
       if (audioRef.current) {
-        audioRef.current.gain.gain.setTargetAtTime(0, audioRef.current.ctx.currentTime, 0.6)
+        const current = audioRef.current
+        current.gain.gain.setTargetAtTime(0, current.ctx.currentTime, 0.6)
         window.setTimeout(() => {
-          audioRef.current?.source.stop()
-          audioRef.current = null
+          try { current.source.stop() } catch { /* already stopped */ }
+          if (audioRef.current === current) audioRef.current = null
         }, 900)
       }
       return

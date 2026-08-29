@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 
 export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl'
@@ -767,7 +767,7 @@ function playMeteorBoom(soundOn: boolean) {
   filter.type = 'lowpass'
   filter.frequency.value = 165
   gain.gain.value = 0.095
-  source.connect(filter).connect(gain).connect(getPitchAudioOutput(ac))
+  source.connect(filter).connect(gain).connect(getPitchAudioTransientOutput(ac))
   source.start()
 }
 
@@ -778,7 +778,7 @@ function playOwlCall(soundOn: boolean) {
 
   const now = ac.currentTime
   const duration = 1.85
-  const output = getPitchAudioOutput(ac)
+  const output = getPitchAudioTransientOutput(ac)
 
   const bodyGain = ac.createGain()
   const bodyFilter = ac.createBiquadFilter()

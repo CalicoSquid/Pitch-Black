@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
-import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { publishLightningGroundStrike } from '../world/lightningSignal'
 import {
   ensureWorld,
@@ -637,7 +637,7 @@ export function StormLayer({
       bodyFilter.frequency.value = bodyCutoff
       bodyFilter.Q.value = 0.42
       bodyGain.gain.value = bodyGainValue
-      bodySource.connect(bodyFilter).connect(bodyGain).connect(getPitchAudioOutput(audioCtx))
+      bodySource.connect(bodyFilter).connect(bodyGain).connect(getPitchAudioTransientOutput(audioCtx))
       bodySource.start(startTime)
 
       const textureSource = audioCtx.createBufferSource()
@@ -649,7 +649,7 @@ export function StormLayer({
       textureFilter.frequency.value = 520 + Math.random() * 210
       textureFilter.Q.value = 0.52
       textureGain.gain.value = textureGainValue
-      textureSource.connect(textureFilter).connect(textureGain).connect(getPitchAudioOutput(audioCtx))
+      textureSource.connect(textureFilter).connect(textureGain).connect(getPitchAudioTransientOutput(audioCtx))
       textureSource.start(startTime + 0.035 + Math.random() * 0.055)
     }
 
@@ -691,7 +691,7 @@ export function StormLayer({
       boomGain.gain.setValueAtTime(0.0001, startTime)
       boomGain.gain.exponentialRampToValueAtTime(0.055 + strength * 0.025, startTime + 0.030)
       boomGain.gain.exponentialRampToValueAtTime(0.0001, startTime + boomDuration)
-      boomSource.connect(boomFilter).connect(boomGain).connect(getPitchAudioOutput(audioCtx))
+      boomSource.connect(boomFilter).connect(boomGain).connect(getPitchAudioTransientOutput(audioCtx))
       boomSource.start(startTime)
 
       // The broader thunder body arrives with the pressure wave and then rolls away.

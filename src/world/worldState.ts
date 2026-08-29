@@ -101,7 +101,7 @@ function loadWorld() {
       pitchWorld.cloudCover = Math.max(0, Math.min(1, Number(saved.cloudCover) || 0.12))
 
       // Material aftermath continues aging while the page is closed. Frozen
-      // water drains/sublimates more slowly; dry openings quietly level back in.
+      // water drains/sublimates more slowly while the coherent surface recedes.
       const savedAt = Math.max(0, Number(saved.savedAt) || 0)
       if (savedAt > 0) {
         const elapsedSeconds = Math.max(0, Math.min(7 * 24 * 3600, (Date.now() - savedAt) / 1000))
