@@ -53,7 +53,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'aurora'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -72,7 +72,7 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'aurora' ? test : null
 }
 
 function readSharedWorld(): Partial<PitchPreferences> | null {
@@ -222,8 +222,14 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl') return
-    const interval = testMode === 'fog' ? 90_000 : testMode === 'owl' ? 15_000 : 30_000
+    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'aurora') return
+    const interval = testMode === 'fog'
+      ? 90_000
+      : testMode === 'owl'
+        ? 15_000
+        : testMode === 'aurora'
+          ? 100_000
+          : 30_000
     const timer = window.setInterval(() => setTestEventId((id) => id + 1), interval)
     return () => window.clearInterval(timer)
   }, [testMode])
@@ -664,15 +670,18 @@ function App() {
       ? { moon: true, storm: true, fireflies: false }
     : testMode === 'moon-veil'
       ? { moon: true, storm: false, fireflies: false }
-    : testMode === 'owl'
+    : testMode === 'owl' || testMode === 'aurora'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
-  const displayScene: Scene = testMode === 'fog' || testMode === 'owl' ? 'calm' : scene
+  const displayScene: Scene = testMode === 'fog' || testMode === 'owl' || testMode === 'aurora' ? 'calm' : scene
   const testFogEvent: RareEventState | null = testMode === 'fog'
     ? { kind: 'ground-fog', id: testEventId }
     : null
   const testOwlEvent: RareEventState | null = testMode === 'owl'
     ? { kind: 'owl', id: testEventId }
+    : null
+  const testAuroraEvent: RareEventState | null = testMode === 'aurora'
+    ? { kind: 'aurora', id: testEventId }
     : null
   const testMoonVeilEvent: AliveSkyEvent | null = testMode === 'moon-veil'
     ? { id: testEventId, kind: 'moon-veil', duration: 26_000 }
@@ -695,7 +704,7 @@ function App() {
       onPointerUp={handleWorldPointerUp}
     >
       <div className="scene-layer">
-        {aliveRuntimeOn && <AliveNightSky phase={alivePhase} />}
+        {(aliveRuntimeOn || testMode === 'aurora') && <AliveNightSky phase={alivePhase} />}
         {aliveRuntimeOn && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
           <RareSkyEventLayer
             key={`alive-rare-sky-${event.kind}-${event.id}`}
@@ -709,6 +718,13 @@ function App() {
             key={`test-owl-${testOwlEvent.id}`}
             event={testOwlEvent}
             soundOn={soundOn}
+          />
+        )}
+        {testAuroraEvent && (
+          <RareSkyEventLayer
+            key={`test-aurora-${testAuroraEvent.id}`}
+            event={testAuroraEvent}
+            soundOn={false}
           />
         )}
         <GlobalMoon visible={displayLayers.moon} halo={aliveRuntimeOn && moonHalo} />

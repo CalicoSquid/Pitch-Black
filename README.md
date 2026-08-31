@@ -193,6 +193,13 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 
 
 
+## v1.55.1 — Aurora QA hook
+
+- Added the non-persistent `?test=aurora` QA hook, using the production Aurora renderer against the calm night world with the Alive star field visible for representative inspection.
+- Aurora test mode starts immediately and automatically replays every 100 seconds while normal Alive scheduling is suspended.
+- The hook does not alter saved preferences, production rarity scheduling, Aurora visuals, audio, or world-state behavior.
+
+
 ## v1.55.0 — SEO foundation
 
 - Locked the production canonical domain to `https://thisquiet.world/` across canonical, Open Graph and social metadata.
