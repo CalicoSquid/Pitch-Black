@@ -14,6 +14,23 @@ For a Git-connected Netlify site, deploy the repository/root folder as-is; Netli
 
 For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and upload the generated `dist` folder.
 
+## v1.57.2 — live baseline
+
+- Removed the visible developer Night Events lab and its Airplane / Owl UFO test buttons for the production baseline.
+- Removed the now-unused developer-lab CSS and App-level trigger bindings.
+- Locked production Airplane and Owl Abduction behavior remains unchanged, including the 10% UFO variant on successful owl sightings.
+- No Alive scheduling, rendering, audio, weather, terrain, persistence, rarity, or event timing was changed in this release.
+
+## v1.57.0 — owl abduction
+
+- Removed Distant Dog from Ambient Life production scheduling, rendering/audio code, and the developer lab after the synthetic bark failed live testing. Airplane is intentionally unchanged.
+- Added an ultra-rare Owl Abduction variant: successful Owl sightings now have a 10% chance to become `owl-ufo` while the accepted normal Owl remains the other 90%.
+- The abduction starts as the normal owl sighting, then a mostly-dark saucer glides in, casts a restrained cold beam, lifts the owl's warm eyes from the terrain, and accelerates diagonally out of the sky.
+- The normal owl call remains unchanged. The UFO variant adds only one faint rising/fading owl call as the craft departs; there is no spaceship hum, neon glow, UI acknowledgement, or standalone UFO schedule.
+- Added a dev-only `Owl UFO` button under `More → Dev · Night events`; the existing Airplane dev trigger remains alongside it. No new URL test hook was added.
+- Ambient Life persistence is bumped to v2 and now schedules Airplane only; stale v1 dog schedules are ignored.
+
+
 ## v1.37.0 freeze / thaw
 
 - Added a restrained frozen-surface state to the persistent terrain. Ice is not invented by Snow on dry ground: it forms from wetness and standing water left by Rain.
@@ -193,6 +210,22 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 
 
 
+## v1.56.1 — Distant dog synthesis retry
+
+- Left the approved airplane event completely unchanged.
+- Replaced the dog bark's short filtered-noise/triangle transient with a voiced synthetic call: descending fundamental, harmonic body, two-lobed “wuh-oof” envelope, restrained onset grit, canine-oriented formant shaping, and distance low-pass filtering.
+- Preserved the existing dog patterns, answering-dog timing, Ambient Life scheduling, and dev test button so this pass tests the sound design only.
+
+## v1.56.0 — Ambient Life I: airplane + distant dog
+
+- Added the first non-blocking Ambient Life tier to Alive, separate from routine micro-events and rare/hero sightings.
+- Added a tiny high-altitude airplane: only navigation/strobe lights are visible, crossing slowly over roughly 2.5–4 minutes with randomized direction, altitude drift and perspective scale.
+- Airplanes can appear during calm, clearing, cold-front and snow phases, remain behind local precipitation, and yield to any active rare/hero sighting.
+- Added a synthesized distant-dog event with restrained single, double and occasional far-answer patterns; it is audio-only and uses the existing transient audio bus so mute/background cleanup remains authoritative.
+- Added persistent wall-clock scheduling for Ambient Life (`this-quiet-world-alive-life-events-v1`): airplane roughly every 45–100 minutes and dog roughly every 50–110 minutes. Missed/background sightings are advanced rather than replayed.
+- Added a DEV-only `Ambient life` section inside More with direct Airplane and Dog bark buttons. Production builds contain no visible test controls and no new test URLs.
+- Kept the existing Aurora QA URL hook and previous visual QA hooks unchanged.
+
 ## v1.55.1 — Aurora QA hook
 
 - Added the non-persistent `?test=aurora` QA hook, using the production Aurora renderer against the calm night world with the Alive star field visible for representative inspection.
@@ -315,3 +348,11 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Tweaked fragmentation toward smaller shedding sparks with soft halos and short-lived diverging tails, keeping the effect restrained rather than explosive.
 - Added a tiny horizon acknowledgement flash at disappearance to imply physical scale without turning the event into a dramatic explosion.
 - Aurora, event rarity logic, Alive integration, Fog, Distant Storm, Impossible Star, and all DEV toggles are unchanged.
+
+
+## v1.57.1 — Owl Abduction polish
+
+- Removed the bright center line from the UFO beam; the beam is now only the soft translucent field.
+- Reworked the normal owl call into two distinct rounded hoots with a short silence between them.
+- Owl eyes now shrink as they rise into the beam, adding a stronger sense of height and distance.
+- Saucer motion, event timing, 10% owl-abduction rarity, airplane behavior, and the departing mangled hoot are unchanged.

@@ -1383,3 +1383,106 @@
   z-index: 1;
 }
 
+
+/* v1.56 — Ambient Life. Tiny, non-blocking signs that the night continues
+   beyond the procedural foreground. These sit behind local precipitation. */
+.ambient-airplane {
+  position: absolute;
+  left: -5vw;
+  top: var(--life-plane-y);
+  width: 14px;
+  height: 7px;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: ambient-airplane-cross var(--life-plane-duration) linear forwards;
+}
+
+.ambient-airplane.from-right {
+  left: 105vw;
+}
+
+.ambient-airplane i {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+}
+
+.ambient-airplane-red,
+.ambient-airplane-green {
+  top: 3px;
+  width: 1.7px;
+  height: 1.7px;
+  animation: ambient-nav-light 2.9s ease-in-out infinite;
+}
+
+.ambient-airplane-red {
+  left: 1px;
+  background: rgba(218, 55, 48, .82);
+  box-shadow: 0 0 4px rgba(218, 55, 48, .24);
+}
+
+.ambient-airplane-green {
+  right: 1px;
+  background: rgba(70, 188, 116, .74);
+  box-shadow: 0 0 4px rgba(70, 188, 116, .20);
+  animation-delay: -1.25s;
+}
+
+.ambient-airplane-strobe {
+  left: 6.2px;
+  top: 2.7px;
+  width: 1.45px;
+  height: 1.45px;
+  background: rgba(232, 238, 242, .92);
+  box-shadow: 0 0 5px rgba(220, 232, 239, .28);
+  opacity: 0;
+  animation: ambient-plane-strobe 2.35s steps(1, end) infinite;
+}
+
+@keyframes ambient-airplane-cross {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(var(--life-plane-scale-start));
+  }
+  3% { opacity: .9; }
+  94% { opacity: .78; }
+  100% {
+    opacity: 0;
+    transform: translate3d(110vw, var(--life-plane-dy), 0) scale(var(--life-plane-scale-end));
+  }
+}
+
+.ambient-airplane.from-right {
+  animation-name: ambient-airplane-cross-reverse;
+}
+
+@keyframes ambient-airplane-cross-reverse {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(var(--life-plane-scale-start));
+  }
+  3% { opacity: .9; }
+  94% { opacity: .78; }
+  100% {
+    opacity: 0;
+    transform: translate3d(-110vw, var(--life-plane-dy), 0) scale(var(--life-plane-scale-end));
+  }
+}
+
+@keyframes ambient-nav-light {
+  0%, 38%, 100% { opacity: .30; }
+  48%, 68% { opacity: .92; }
+}
+
+@keyframes ambient-plane-strobe {
+  0%, 4% { opacity: 1; }
+  5%, 10% { opacity: 0; }
+  11%, 14% { opacity: .9; }
+  15%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-airplane { display: none; }
+}

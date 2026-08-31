@@ -13,6 +13,19 @@ export type AlivePhase =
   | 'cold-front'
   | 'snow'
 
+export type AmbientLifeEventKind = 'airplane'
+
+export type AmbientLifeEvent = {
+  id: number
+  kind: AmbientLifeEventKind
+  duration?: number
+  direction?: number
+  startY?: number
+  travelY?: number
+  startScale?: number
+  endScale?: number
+}
+
 export type AliveSkyEvent = {
   id: number
   kind: 'shooting-star' | 'meteor-shower' | 'meteor-impact' | 'distant-flash' | 'depth-flash' | 'moon-veil'
@@ -44,11 +57,17 @@ type AliveHeroSchedule = {
   greatMeteorNextAt: number
 }
 
+type AmbientLifeSchedule = {
+  version: 2
+  airplaneNextAt: number
+}
+
 const SECOND = 1_000
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const ALIVE_TIMELINE_STORAGE_KEY = 'this-quiet-world-alive-timeline-v1'
 const ALIVE_HERO_STORAGE_KEY = 'this-quiet-world-alive-hero-events-v1'
+const ALIVE_LIFE_STORAGE_KEY = 'this-quiet-world-alive-life-events-v2'
 const EMPTY_ALIVE_LAYERS: LayerState = { moon: false, storm: false, fireflies: false }
 
 function between(min: number, max: number) {
@@ -63,8 +82,13 @@ function nextGreatMeteorAt(from: number) {
   return from + between(3, 6) * HOUR
 }
 
+function nextAirplaneAt(from: number) {
+  return from + between(45, 100) * MINUTE
+}
+
+
 function isAliveRareMicroKind(kind: RareEventKind) {
-  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl'
+  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl' || kind === 'owl-ufo'
 }
 
 function isAliveHeroKind(kind: RareEventKind) {
@@ -265,6 +289,67 @@ function resolveHeroScheduleToNow(schedule: AliveHeroSchedule, now: number) {
   return resolved
 }
 
+function readAmbientLifeSchedule(): AmbientLifeSchedule | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(ALIVE_LIFE_STORAGE_KEY)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as Partial<AmbientLifeSchedule>
+    if (saved.version !== 2) return null
+    if (typeof saved.airplaneNextAt !== 'number' || !Number.isFinite(saved.airplaneNextAt)) return null
+    return saved as AmbientLifeSchedule
+  } catch {
+    return null
+  }
+}
+
+function saveAmbientLifeSchedule(schedule: AmbientLifeSchedule) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(ALIVE_LIFE_STORAGE_KEY, JSON.stringify(schedule))
+  } catch {
+    // Ambient life remains an in-session feature when storage is unavailable.
+  }
+}
+
+function makeAmbientLifeSchedule(now: number): AmbientLifeSchedule {
+  return {
+    version: 2,
+    airplaneNextAt: nextAirplaneAt(now),
+  }
+}
+
+function resolveAmbientLifeScheduleToNow(schedule: AmbientLifeSchedule, now: number) {
+  let airplaneNextAt = schedule.airplaneNextAt
+  let guard = 0
+
+  while (airplaneNextAt <= now && guard < 2048) {
+    airplaneNextAt = nextAirplaneAt(airplaneNextAt)
+    guard += 1
+  }
+
+  const resolved = airplaneNextAt <= now
+    ? makeAmbientLifeSchedule(now)
+    : { version: 2 as const, airplaneNextAt }
+  saveAmbientLifeSchedule(resolved)
+  return resolved
+}
+
+function makeAmbientLifeEvent(kind: AmbientLifeEventKind, id: number): AmbientLifeEvent {
+  const direction = Math.random() < 0.5 ? 1 : -1
+  const towardViewer = Math.random() < 0.5
+  return {
+    id,
+    kind,
+    direction,
+    duration: between(150_000, 240_000),
+    startY: between(8, 22),
+    travelY: between(-3.5, 6.5),
+    startScale: towardViewer ? between(0.58, 0.78) : between(0.90, 1.10),
+    endScale: towardViewer ? between(0.92, 1.14) : between(0.58, 0.80),
+  }
+}
+
 function averageSnowDepth() {
   const snow = pitchWorld.drifts
   if (snow.length < 3) return 0
@@ -290,14 +375,18 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
   const [skyEvent, setSkyEvent] = useState<AliveSkyEvent | null>(null)
   const [aliveLayers, setAliveLayers] = useState<LayerState>(EMPTY_ALIVE_LAYERS)
   const [rareEvents, setRareEvents] = useState<RareEventState[]>([])
+  const [ambientLifeEvents, setAmbientLifeEvents] = useState<AmbientLifeEvent[]>([])
 
   const aliveLayersRef = useRef<LayerState>(EMPTY_ALIVE_LAYERS)
   const rareEventsRef = useRef<RareEventState[]>([])
+  const ambientLifeEventsRef = useRef<AmbientLifeEvent[]>([])
   const phaseRef = useRef<AlivePhase>('calm')
   const timelineRef = useRef<AliveTimeline | null>(null)
   const heroScheduleRef = useRef<AliveHeroSchedule | null>(null)
+  const ambientLifeScheduleRef = useRef<AmbientLifeSchedule | null>(null)
   const eventIdRef = useRef(0)
   const rareEventIdRef = useRef(0)
+  const ambientLifeIdRef = useRef(0)
 
   const patchAliveLayers = (patch: Partial<LayerState>) => {
     setAliveLayers((current) => {
@@ -315,15 +404,26 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     })
   }, [])
 
+
+  const completeAmbientLifeEvent = useCallback((kind: AmbientLifeEventKind, id: number) => {
+    setAmbientLifeEvents((current) => {
+      const next = current.filter((event) => !(event.kind === kind && event.id === id))
+      ambientLifeEventsRef.current = next
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     if (!enabled) {
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS
       rareEventsRef.current = []
+      ambientLifeEventsRef.current = []
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)
       setFireflyMultiplier(1)
       setSkyEvent(null)
       setRareEvents([])
+      setAmbientLifeEvents([])
       return
     }
 
@@ -336,6 +436,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     let impossibleStarTimer = 0
     let owlTimer = 0
     let fogTimer = 0
+    let airplaneTimer = 0
     let disposed = false
 
     const emitSkyEvent = (event: Omit<AliveSkyEvent, 'id'>) => {
@@ -375,6 +476,39 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       setRareEvents(next)
       return true
     }
+
+    const emitAmbientLifeEvent = (kind: AmbientLifeEventKind) => {
+      if (ambientLifeEventsRef.current.some((event) => event.kind === 'airplane')) return false
+      ambientLifeIdRef.current += 1
+      const event = makeAmbientLifeEvent(kind, ambientLifeIdRef.current)
+      const next = [...ambientLifeEventsRef.current, event]
+      ambientLifeEventsRef.current = next
+      setAmbientLifeEvents(next)
+      return true
+    }
+
+    const scheduleAmbientLifeTimers = () => {
+      window.clearTimeout(airplaneTimer)
+      const schedule = ambientLifeScheduleRef.current
+      if (!schedule) return
+      airplaneTimer = window.setTimeout(runAirplane, Math.max(0, schedule.airplaneNextAt - Date.now()))
+    }
+
+    function runAirplane() {
+      if (disposed) return
+      const schedule = ambientLifeScheduleRef.current
+      if (!schedule) return
+      const now = Date.now()
+      const currentPhase = phaseRef.current
+      const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
+      const quietEnough = rareEventsRef.current.length === 0
+      if (document.visibilityState === 'visible' && compatible && quietEnough) emitAmbientLifeEvent('airplane')
+      const nextSchedule = { ...schedule, airplaneNextAt: nextAirplaneAt(now) }
+      ambientLifeScheduleRef.current = nextSchedule
+      saveAmbientLifeSchedule(nextSchedule)
+      scheduleAmbientLifeTimers()
+    }
+
 
     const scheduleMicro = (first = false) => {
       window.clearTimeout(microTimer)
@@ -580,7 +714,8 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       if (disposed) return
       const currentPhase = phaseRef.current
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
-      if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent('owl')) {
+      const owlKind: RareEventKind = Math.random() < 0.10 ? 'owl-ufo' : 'owl'
+      if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent(owlKind)) {
         scheduleOwl(true)
         return
       }
@@ -643,6 +778,14 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     if (!savedHeroSchedule) saveHeroSchedule(heroSchedule)
     scheduleHeroTimers()
 
+    const savedAmbientLifeSchedule = readAmbientLifeSchedule()
+    const ambientLifeSchedule = savedAmbientLifeSchedule
+      ? resolveAmbientLifeScheduleToNow(savedAmbientLifeSchedule, now)
+      : makeAmbientLifeSchedule(now)
+    ambientLifeScheduleRef.current = ambientLifeSchedule
+    if (!savedAmbientLifeSchedule) saveAmbientLifeSchedule(ambientLifeSchedule)
+    scheduleAmbientLifeTimers()
+
     const syncAfterVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return
       syncTimelineToNow()
@@ -650,6 +793,11 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       if (currentHeroSchedule) {
         heroScheduleRef.current = resolveHeroScheduleToNow(currentHeroSchedule, Date.now())
         scheduleHeroTimers()
+      }
+      const currentAmbientLifeSchedule = ambientLifeScheduleRef.current
+      if (currentAmbientLifeSchedule) {
+        ambientLifeScheduleRef.current = resolveAmbientLifeScheduleToNow(currentAmbientLifeSchedule, Date.now())
+        scheduleAmbientLifeTimers()
       }
     }
     window.addEventListener('pageshow', syncAfterVisibilityChange)
@@ -666,15 +814,18 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       window.clearTimeout(impossibleStarTimer)
       window.clearTimeout(owlTimer)
       window.clearTimeout(fogTimer)
+      window.clearTimeout(airplaneTimer)
       window.removeEventListener('pageshow', syncAfterVisibilityChange)
       document.removeEventListener('visibilitychange', syncAfterVisibilityChange)
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS
       rareEventsRef.current = []
+      ambientLifeEventsRef.current = []
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)
       setFireflyMultiplier(1)
       setSkyEvent(null)
       setRareEvents([])
+      setAmbientLifeEvents([])
     }
   }, [enabled, setScene])
 
@@ -687,5 +838,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     aliveLayers,
     rareEvents,
     completeRareEvent,
+    ambientLifeEvents,
+    completeAmbientLifeEvent,
   }
 }

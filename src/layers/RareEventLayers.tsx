@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 
-export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl'
+export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl' | 'owl-ufo'
 
 export type RareEventState = {
   kind: RareEventKind
@@ -710,6 +710,157 @@ function drawOwl(ctx: CanvasRenderingContext2D, width: number, height: number, e
   ctx.restore()
 }
 
+
+function drawOwlUfo(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
+  const duration = 15_600
+  if (elapsed < 0 || elapsed > duration) return
+
+  const leftSide = seededFrac(id * 17.3 + 3.2) < 0.5
+  const xBand = seededFrac(id * 11.7 + 8.4)
+  const perchX = width * (leftSide ? 0.17 + xBand * 0.20 : 0.63 + xBand * 0.20)
+  const terrainY = surfaceYAt(perchX, width, height)
+  const perchLift = 17 + seededFrac(id * 23.9 + 1.7) * 15
+  const baseY = Math.min(height * 0.77, terrainY - perchLift)
+
+  const hoverX = Math.max(width * 0.10, Math.min(width * 0.90, perchX + (leftSide ? width * 0.018 : -width * 0.018)))
+  const hoverY = Math.max(height * 0.13, Math.min(height * 0.43, baseY - Math.max(88, height * 0.19)))
+  const entryFromRight = !leftSide
+  const entryX = entryFromRight ? width * 1.08 : -width * 0.08
+  const entryY = height * (0.14 + seededFrac(id * 31.1 + 9.7) * 0.12)
+
+  const arrival = smoothStep((elapsed - 6_850) / 2_150)
+  const hoverDrift = Math.sin((elapsed - 7_800) * 0.00145 + id * 0.17) * Math.min(2.6, height * 0.004)
+  let saucerX = entryX + (hoverX - entryX) * arrival
+  let saucerY = entryY + (hoverY - entryY) * arrival + hoverDrift
+
+  const zip = smoothStep((elapsed - 12_000) / 1_550)
+  const zipAccel = zip * zip
+  if (zip > 0) {
+    const exitDirection = leftSide ? -1 : 1
+    saucerX += exitDirection * width * 0.90 * zipAccel
+    saucerY -= height * 0.60 * zipAccel
+  }
+
+  const saucerFadeIn = smoothStep((elapsed - 6_650) / 850)
+  const saucerFadeOut = 1 - smoothStep((elapsed - 13_050) / 850)
+  const saucerAlpha = clamp01(saucerFadeIn * saucerFadeOut)
+
+  const beamIn = smoothStep((elapsed - 8_850) / 650)
+  const beamOut = 1 - smoothStep((elapsed - 11_520) / 520)
+  const beamStrength = clamp01(beamIn * beamOut * (1 - zip))
+  const lift = smoothStep((elapsed - 9_150) / 2_450)
+  const owlTargetY = saucerY + Math.max(14, height * 0.028)
+  const owlY = baseY + (owlTargetY - baseY) * lift
+  const owlX = perchX + (saucerX - perchX) * lift * 0.92
+
+  if (beamStrength > 0.001) {
+    const beamTopY = saucerY + Math.max(4, height * 0.006)
+    const beamBottomY = Math.min(terrainY + 2, owlY + Math.max(24, height * 0.055))
+    const topHalf = Math.max(4.5, width * 0.004)
+    const bottomHalf = Math.max(14, width * 0.017)
+    const beam = ctx.createLinearGradient(0, beamTopY, 0, beamBottomY)
+    beam.addColorStop(0, `rgba(176,207,222,${0.055 * beamStrength})`)
+    beam.addColorStop(0.55, `rgba(162,198,216,${0.035 * beamStrength})`)
+    beam.addColorStop(1, 'rgba(152,190,209,0)')
+    ctx.fillStyle = beam
+    ctx.beginPath()
+    ctx.moveTo(saucerX - topHalf, beamTopY)
+    ctx.lineTo(saucerX + topHalf, beamTopY)
+    ctx.lineTo(owlX + bottomHalf, beamBottomY)
+    ctx.lineTo(owlX - bottomHalf, beamBottomY)
+    ctx.closePath()
+    ctx.fill()
+
+  }
+
+  // Keep the owl identical in spirit to the accepted sighting: two imperfect,
+  // warm points with the same blinks. During the beam they simply leave the perch.
+  const owlFadeIn = smoothStep(elapsed / 1_050)
+  const owlFadeOut = 1 - smoothStep((elapsed - 11_650) / 850)
+  const owlPresence = clamp01(owlFadeIn * owlFadeOut)
+  if (owlPresence > 0) {
+    // As the owl is lifted toward the distant craft, let the eyes recede in
+    // perspective rather than staying screen-sized all the way up.
+    const perspectiveScale = 1 - lift * 0.44
+    const spacing = Math.max(9.5, Math.min(15.5, width * 0.0105)) * perspectiveScale
+    const eyeRadiusX = Math.max(1.8, Math.min(2.8, width * 0.0020)) * perspectiveScale
+    const eyeRadiusY = eyeRadiusX * 0.67
+    const firstLeft = owlBlinkOpen(elapsed, 2_920, 175)
+    const firstRight = owlBlinkOpen(elapsed, 2_965, 168)
+    const secondLeft = owlBlinkOpen(elapsed, 4_410, 190)
+    const secondRight = owlBlinkOpen(elapsed, 4_355, 184)
+    const leftOpen = Math.max(0.025, firstLeft * secondLeft)
+    const rightOpen = Math.max(0.025, firstRight * secondRight)
+    const breath = 0.91 + Math.sin(elapsed * 0.0021 + id * 0.37) * 0.09
+    const alpha = owlPresence * breath
+
+    const drawEye = (x: number, openness: number, bias: number) => {
+      const yRadius = eyeRadiusY * openness
+      if (yRadius < 0.06) return
+      const glowRadius = 5.2 + eyeRadiusX * 1.6
+      const glow = ctx.createRadialGradient(x, owlY, 0, x, owlY, glowRadius)
+      glow.addColorStop(0, `rgba(232,190,92,${0.17 * alpha * openness})`)
+      glow.addColorStop(0.38, `rgba(197,146,63,${0.075 * alpha * openness})`)
+      glow.addColorStop(1, 'rgba(166,119,51,0)')
+      ctx.fillStyle = glow
+      ctx.beginPath()
+      ctx.arc(x, owlY, glowRadius, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.ellipse(x, owlY, eyeRadiusX * (1 + bias), yRadius, 0, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(224,177,78,${0.78 * alpha})`
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.ellipse(x + eyeRadiusX * 0.12, owlY - yRadius * 0.10, eyeRadiusX * 0.34, Math.max(0.12, yRadius * 0.42), 0, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(255,226,143,${0.52 * alpha * openness})`
+      ctx.fill()
+    }
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    drawEye(owlX - spacing * 0.5, leftOpen, -0.035)
+    drawEye(owlX + spacing * 0.5, rightOpen, 0.025)
+    ctx.restore()
+  }
+
+  if (saucerAlpha > 0.001) {
+    const scale = Math.max(0.72, Math.min(1.22, width / 1100))
+    const saucerW = 34 * scale
+    const saucerH = 8.4 * scale
+    ctx.save()
+    ctx.translate(saucerX, saucerY)
+    ctx.rotate((entryFromRight ? -1 : 1) * 0.012 + Math.sin(elapsed * 0.0011) * 0.006)
+
+    // Mostly-black craft: it is discovered through the faint cold rim and tiny
+    // under-lights rather than presented as a bright sci-fi prop.
+    ctx.fillStyle = `rgba(5,8,11,${0.94 * saucerAlpha})`
+    ctx.beginPath()
+    ctx.ellipse(0, 0, saucerW * 0.50, saucerH * 0.50, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = `rgba(11,15,19,${0.88 * saucerAlpha})`
+    ctx.beginPath()
+    ctx.ellipse(0, -saucerH * 0.22, saucerW * 0.22, saucerH * 0.36, 0, Math.PI, Math.PI * 2)
+    ctx.fill()
+
+    ctx.strokeStyle = `rgba(151,177,191,${0.18 * saucerAlpha})`
+    ctx.lineWidth = 0.55
+    ctx.beginPath()
+    ctx.ellipse(0, 0, saucerW * 0.50, saucerH * 0.50, 0, 0, Math.PI * 2)
+    ctx.stroke()
+
+    const lampAlpha = 0.19 * saucerAlpha * (0.84 + Math.sin(elapsed * 0.0032) * 0.16)
+    for (const dx of [-0.22, 0, 0.22]) {
+      ctx.beginPath()
+      ctx.arc(saucerW * dx, saucerH * 0.30, Math.max(0.55, scale * 0.62), 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(168,204,220,${lampAlpha})`
+      ctx.fill()
+    }
+    ctx.restore()
+  }
+}
+
 function drawDistantStorm(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
   const duration = 72_000
   const fade = smoothStep(Math.min(elapsed / 8_000, (duration - elapsed) / 10_000))
@@ -777,45 +928,64 @@ function playOwlCall(soundOn: boolean) {
   if (!ac) return
 
   const now = ac.currentTime
-  const duration = 1.85
+  const duration = 1.72
   const output = getPitchAudioTransientOutput(ac)
 
+  // Two distinct, rounded hoots with a real pocket of silence between them.
+  // Keeping the oscillators continuous avoids clicks, while the envelope makes
+  // the call read as "hoot ... hoot" instead of one sustained synth hum.
   const bodyGain = ac.createGain()
   const bodyFilter = ac.createBiquadFilter()
   bodyFilter.type = 'lowpass'
-  bodyFilter.frequency.value = 760
-  bodyFilter.Q.value = 0.55
+  bodyFilter.frequency.value = 690
+  bodyFilter.Q.value = 0.62
   bodyGain.gain.setValueAtTime(0.0001, now)
-  bodyGain.gain.exponentialRampToValueAtTime(0.025, now + 0.10)
-  bodyGain.gain.exponentialRampToValueAtTime(0.013, now + 0.48)
-  bodyGain.gain.exponentialRampToValueAtTime(0.031, now + 0.70)
-  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
+  bodyGain.gain.exponentialRampToValueAtTime(0.027, now + 0.075)
+  bodyGain.gain.exponentialRampToValueAtTime(0.0105, now + 0.30)
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.53)
+  bodyGain.gain.setValueAtTime(0.0001, now + 0.70)
+  bodyGain.gain.exponentialRampToValueAtTime(0.030, now + 0.80)
+  bodyGain.gain.exponentialRampToValueAtTime(0.0115, now + 1.10)
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.49)
   bodyGain.connect(bodyFilter).connect(output)
 
   const fundamental = ac.createOscillator()
   fundamental.type = 'sine'
-  fundamental.frequency.setValueAtTime(168, now)
-  fundamental.frequency.exponentialRampToValueAtTime(146, now + 0.43)
-  fundamental.frequency.exponentialRampToValueAtTime(184, now + 0.70)
-  fundamental.frequency.exponentialRampToValueAtTime(151, now + 1.70)
+  fundamental.frequency.setValueAtTime(176, now)
+  fundamental.frequency.exponentialRampToValueAtTime(149, now + 0.48)
+  fundamental.frequency.setValueAtTime(181, now + 0.72)
+  fundamental.frequency.exponentialRampToValueAtTime(151, now + 1.48)
   fundamental.connect(bodyGain)
 
   const lowBody = ac.createOscillator()
   const lowGain = ac.createGain()
   lowBody.type = 'triangle'
-  lowBody.frequency.setValueAtTime(84, now)
-  lowBody.frequency.exponentialRampToValueAtTime(76, now + 1.65)
-  lowGain.gain.value = 0.20
+  lowBody.frequency.setValueAtTime(88, now)
+  lowBody.frequency.exponentialRampToValueAtTime(75, now + 0.50)
+  lowBody.frequency.setValueAtTime(90, now + 0.72)
+  lowBody.frequency.exponentialRampToValueAtTime(76, now + 1.48)
+  lowGain.gain.value = 0.16
   lowBody.connect(lowGain).connect(bodyGain)
 
-  // A little breath and throat texture keeps the call from sounding like a
-  // pure synthesizer tone while staying quiet and distant.
+  // A very small second harmonic gives each hoot a throat/formant edge without
+  // turning the call bright or buzzy.
+  const throat = ac.createOscillator()
+  const throatGain = ac.createGain()
+  throat.type = 'sine'
+  throat.frequency.setValueAtTime(350, now)
+  throat.frequency.exponentialRampToValueAtTime(296, now + 0.48)
+  throat.frequency.setValueAtTime(360, now + 0.72)
+  throat.frequency.exponentialRampToValueAtTime(300, now + 1.48)
+  throatGain.gain.value = 0.075
+  throat.connect(throatGain).connect(bodyGain)
+
+  // Just enough filtered breath to stop the two notes feeling laboratory-clean.
   const noiseBuffer = ac.createBuffer(1, Math.floor(ac.sampleRate * duration), ac.sampleRate)
   const noise = noiseBuffer.getChannelData(0)
   let smoothed = 0
   for (let i = 0; i < noise.length; i++) {
     const white = Math.random() * 2 - 1
-    smoothed = smoothed * 0.82 + white * 0.18
+    smoothed = smoothed * 0.88 + white * 0.12
     noise[i] = smoothed
   }
   const noiseSource = ac.createBufferSource()
@@ -823,19 +993,66 @@ function playOwlCall(soundOn: boolean) {
   const noiseGain = ac.createGain()
   noiseSource.buffer = noiseBuffer
   noiseFilter.type = 'bandpass'
-  noiseFilter.frequency.value = 520
-  noiseFilter.Q.value = 0.72
+  noiseFilter.frequency.value = 430
+  noiseFilter.Q.value = 0.82
   noiseGain.gain.setValueAtTime(0.0001, now)
-  noiseGain.gain.exponentialRampToValueAtTime(0.0048, now + 0.12)
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.62)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0026, now + 0.09)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.50)
+  noiseGain.gain.setValueAtTime(0.0001, now + 0.72)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0028, now + 0.82)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.46)
   noiseSource.connect(noiseFilter).connect(noiseGain).connect(output)
 
   fundamental.start(now)
   lowBody.start(now)
+  throat.start(now)
   noiseSource.start(now)
   fundamental.stop(now + duration)
   lowBody.stop(now + duration)
+  throat.stop(now + duration)
   noiseSource.stop(now + duration)
+}
+
+
+function playAbductedOwlCall(soundOn: boolean) {
+  if (!soundOn) return
+  const ac = getPitchAudio()
+  if (!ac) return
+
+  const now = ac.currentTime
+  const duration = 1.15
+  const output = getPitchAudioTransientOutput(ac)
+  const filter = ac.createBiquadFilter()
+  const gain = ac.createGain()
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(620, now)
+  filter.frequency.exponentialRampToValueAtTime(430, now + duration)
+  filter.Q.value = 0.5
+  gain.gain.setValueAtTime(0.0001, now)
+  gain.gain.exponentialRampToValueAtTime(0.010, now + 0.08)
+  gain.gain.exponentialRampToValueAtTime(0.0045, now + 0.42)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
+  gain.connect(filter).connect(output)
+
+  const voice = ac.createOscillator()
+  voice.type = 'sine'
+  voice.frequency.setValueAtTime(154, now)
+  voice.frequency.exponentialRampToValueAtTime(186, now + 0.44)
+  voice.frequency.exponentialRampToValueAtTime(228, now + duration)
+  voice.connect(gain)
+
+  const body = ac.createOscillator()
+  const bodyGain = ac.createGain()
+  body.type = 'triangle'
+  body.frequency.setValueAtTime(77, now)
+  body.frequency.exponentialRampToValueAtTime(112, now + duration)
+  bodyGain.gain.value = 0.12
+  body.connect(bodyGain).connect(gain)
+
+  voice.start(now)
+  body.start(now)
+  voice.stop(now + duration)
+  body.stop(now + duration)
 }
 
 export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerProps) {
@@ -865,6 +1082,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     let lastRenderedAt = 0
     let boomTimer: number | null = null
     let owlTimer: number | null = null
+    let ufoHootTimer: number | null = null
     let auroraField: AuroraFieldRuntime | null = null
 
     const resize = () => {
@@ -885,6 +1103,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (kind === 'distant-storm') return 72_000
       if (kind === 'impossible-star') return 32_000
       if (kind === 'owl') return 9_600
+      if (kind === 'owl-ufo') return 15_600
       return 0
     }
 
@@ -902,6 +1121,10 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
           window.clearTimeout(owlTimer)
           owlTimer = null
         }
+        if (ufoHootTimer !== null) {
+          window.clearTimeout(ufoHootTimer)
+          ufoHootTimer = null
+        }
         ctx.clearRect(0, 0, width, height)
         raf = requestAnimationFrame(draw)
         return
@@ -910,6 +1133,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (requested.id !== currentId || requested.kind !== currentKind) {
         if (boomTimer !== null) window.clearTimeout(boomTimer)
         if (owlTimer !== null) window.clearTimeout(owlTimer)
+        if (ufoHootTimer !== null) window.clearTimeout(ufoHootTimer)
         currentId = requested.id
         currentKind = requested.kind
         startedAt = time
@@ -922,11 +1146,17 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
             boomTimer = null
           }, 12_300)
         }
-        if (requested.kind === 'owl') {
+        if (requested.kind === 'owl' || requested.kind === 'owl-ufo') {
           owlTimer = window.setTimeout(() => {
             playOwlCall(soundRef.current)
             owlTimer = null
           }, 5_350)
+        }
+        if (requested.kind === 'owl-ufo') {
+          ufoHootTimer = window.setTimeout(() => {
+            playAbductedOwlCall(soundRef.current)
+            ufoHootTimer = null
+          }, 12_050)
         }
       }
 
@@ -947,6 +1177,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (currentKind === 'distant-storm') drawDistantStorm(ctx, width, height, elapsed, currentId)
       if (currentKind === 'impossible-star') drawImpossibleStar(ctx, width, height, elapsed)
       if (currentKind === 'owl') drawOwl(ctx, width, height, elapsed, currentId)
+      if (currentKind === 'owl-ufo') drawOwlUfo(ctx, width, height, elapsed, currentId)
 
       const duration = durationFor(currentKind)
       if (!completed && duration > 0 && elapsed >= duration) {
@@ -965,6 +1196,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       cancelAnimationFrame(raf)
       if (boomTimer !== null) window.clearTimeout(boomTimer)
       if (owlTimer !== null) window.clearTimeout(owlTimer)
+      if (ufoHootTimer !== null) window.clearTimeout(ufoHootTimer)
       window.removeEventListener('resize', resize)
     }
   }, [])

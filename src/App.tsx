@@ -4,6 +4,7 @@ import './App.css'
 import { AliveSkyEvents } from './alive/AliveSkyEvents'
 import { AliveNightSky } from './alive/AliveNightSky'
 import { AliveAmbience } from './alive/AliveAmbience'
+import { AmbientLifeLayer } from './alive/AmbientLifeLayer'
 import { useAliveWorld } from './alive/useAliveWorld'
 import type { AliveSkyEvent } from './alive/useAliveWorld'
 import type { LayerKey, LayerState, Scene } from './types'
@@ -207,6 +208,8 @@ function App() {
     aliveLayers,
     rareEvents: aliveRareEvents,
     completeRareEvent: completeAliveRareEvent,
+    ambientLifeEvents,
+    completeAmbientLifeEvent,
   } = useAliveWorld({
     enabled: aliveRuntimeOn,
     setScene,
@@ -705,7 +708,7 @@ function App() {
     >
       <div className="scene-layer">
         {(aliveRuntimeOn || testMode === 'aurora') && <AliveNightSky phase={alivePhase} />}
-        {aliveRuntimeOn && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
+        {(aliveRuntimeOn || import.meta.env.DEV) && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
           <RareSkyEventLayer
             key={`alive-rare-sky-${event.kind}-${event.id}`}
             event={event}
@@ -728,6 +731,14 @@ function App() {
           />
         )}
         <GlobalMoon visible={displayLayers.moon} halo={aliveRuntimeOn && moonHalo} />
+        {ambientLifeEvents.map((event) => (
+          <AmbientLifeLayer
+            key={`ambient-life-${event.kind}-${event.id}`}
+            event={event}
+            soundOn={soundOn}
+            onComplete={completeAmbientLifeEvent}
+          />
+        ))}
         <div className={`world-weather-layer ${displayScene === 'black' ? 'world-hidden' : ''}`}>
           <WorldBaseScene scene={displayScene} />
           {aliveRuntimeOn && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (
