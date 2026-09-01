@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="application-name" content="This Quiet World" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="This Quiet World" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://thisquiet.world/" />
+    <meta
+      name="description"
+      content="A free, ad-free living black screen for sleep with rain, snow, storms, embers, moonlight, fireflies, gentle night sounds, a dim clock and fullscreen mode."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="This Quiet World" />
+    <meta property="og:url" content="https://thisquiet.world/" />
+    <meta property="og:title" content="This Quiet World — A Living Black Screen for Sleep" />
+    <meta
+      property="og:description"
+      content="A free, ad-free ambient sleep world with a black screen, rain, snow, storms, embers, moonlight, fireflies, gentle night sounds and a dim bedside clock."
+    />
+    <meta property="og:image" content="https://thisquiet.world/social-preview.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="this quiet world — a dark ambient sleep screen" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="This Quiet World — A Living Black Screen for Sleep" />
+    <meta
+      name="twitter:description"
+      content="A free, ad-free ambient sleep world with a black screen, rain, snow, storms, embers, moonlight, fireflies, gentle night sounds and a dim bedside clock."
+    />
+    <meta name="twitter:image" content="https://thisquiet.world/social-preview.png" />
+    <style>
+      html,body,#root{width:100%;height:100%;margin:0;background:#000}
+      body{overflow:hidden}
+      #tqw-boot-fallback{display:none;position:fixed;inset:0;z-index:2147483647;box-sizing:border-box;align-items:center;justify-content:center;padding:32px;background:#000;color:rgba(255,255,255,.78);font:14px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+      #tqw-boot-fallback>div{max-width:560px}
+      #tqw-boot-fallback strong{display:block;margin-bottom:8px;color:rgba(255,255,255,.92);font-weight:500;letter-spacing:.02em}
+      #tqw-boot-fallback span{color:rgba(255,255,255,.52)}
+      noscript{position:fixed;inset:0;z-index:2147483647;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:32px;background:#000;color:rgba(255,255,255,.78);font:14px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+    </style>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://thisquiet.world/#website",
+            "url": "https://thisquiet.world/",
+            "name": "This Quiet World",
+            "alternateName": ["TQW", "thisquiet.world"],
+            "description": "A free, ad-free living black screen for sleep and ambient nighttime sound.",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://thisquiet.world/#app",
+            "url": "https://thisquiet.world/",
+            "name": "This Quiet World",
+            "applicationCategory": "LifestyleApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires JavaScript and a modern web browser.",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "description": "A free, ad-free ambient sleep world with a black screen, rain, snow, storms, embers, moonlight, fireflies, gentle night sounds, a dim clock and fullscreen mode.",
+            "isPartOf": { "@id": "https://thisquiet.world/#website" }
+          }
+        ]
+      }
+    </script>
+    <title>This Quiet World — Black Screen for Sleep & Ambient Night Sounds</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="tqw-boot-fallback" role="status" aria-live="polite">
+      <div>
+        <strong>this quiet world couldn't start in this browser.</strong>
+        <span>Try updating the browser, or open thisquiet.world in Chrome, Edge, Firefox or Safari and mirror/cast the screen.</span>
+      </div>
+    </div>
+    <noscript>This Quiet World is an ad-free black screen and ambient sleep website with rain, snow, embers, storms, fireflies and a dim bedside clock. JavaScript is required to enter the world.</noscript>
+    <script>
+      (function () {
+        if (/(?:^|[?&])test=/.test(window.location.search)) {
+          var robots = document.querySelector('meta[name="robots"]')
+          if (robots) robots.setAttribute('content', 'noindex, nofollow')
+        }
+      }())
+    </script>
+    <script>
+      (function () {
+        var html = document.documentElement
+        var supportsModules = 'noModule' in document.createElement('script')
+        var delay = supportsModules ? 5000 : 400
+        window.setTimeout(function () {
+          if (html.getAttribute('data-tqw-booted') === '1') return
+          var fallback = document.getElementById('tqw-boot-fallback')
+          if (fallback) fallback.style.display = 'flex'
+        }, delay)
+      }())
+    </script>
+    <script>
+      // Local production previews can leave a service worker behind on the same
+      // localhost origin that Vite later uses. Clear it before importing source
+      // modules so normal/IDE browsers cannot get stuck on an old build.
+      window.__tqwLocalCleanup = (function () {
+        var host = window.location.hostname
+        var local = host === 'localhost' || host === '127.0.0.1' || host === '::1'
+        if (!local) return Promise.resolve()
+
+        var jobs = []
+        if ('serviceWorker' in navigator) {
+          jobs.push(navigator.serviceWorker.getRegistrations().then(function (registrations) {
+            return Promise.all(registrations.map(function (registration) { return registration.unregister() }))
+          }))
+        }
+        if ('caches' in window) {
+          jobs.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.filter(function (key) {
+              return key.indexOf('this-quiet-world') === 0
+            }).map(function (key) { return caches.delete(key) }))
+          }))
+        }
+        return Promise.all(jobs).catch(function () {})
+      }())
+    </script>
+    <script type="module">
+      Promise.resolve(window.__tqwLocalCleanup).then(function () {
+        return import('/src/main.tsx')
+      })
+    </script>
+  </body>
+</html>
