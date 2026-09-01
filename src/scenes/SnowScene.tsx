@@ -48,6 +48,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
   const activeRef = useRef(active)
   const aliveRef = useRef(alive)
   const soundOnRef = useRef(soundOn)
+  const speedRef = useRef(speed)
   const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; source: AudioBufferSourceNode } | null>(null)
 
   useEffect(() => {
@@ -58,6 +59,10 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
   useEffect(() => {
     soundOnRef.current = soundOn
   }, [soundOn])
+
+  useEffect(() => {
+    speedRef.current = speed
+  }, [speed])
 
   useEffect(() => {
     if (!soundOn) {
@@ -497,7 +502,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     const updateFreeze = (dt: number, snowfallMix: number) => {
       if (snowfallMix <= 0.004 || pitchWorld.ice.length < 3) return
 
-      const scaledDt = (dt / 16.67) * speed
+      const scaledDt = (dt / 16.67) * speedRef.current
       const surfaceWetness = pitchWorld.wetness
 
       for (let i = 1; i < pitchWorld.ice.length - 1; i++) {
@@ -534,7 +539,8 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       frame += 1
       const dt = Math.min(34, time - lastFrameTime)
       lastFrameTime = time
-      simTime += dt * speed
+      const speedNow = speedRef.current
+      simTime += dt * speedNow
 
       const nowActive = activeRef.current
       if (nowActive && !wasActive) {
@@ -619,7 +625,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
       for (let i = 0; i < flakes.length; i++) {
         const f = flakes[i]
-        const motionScale = Math.min(2.05, Math.max(0.75, 0.82 + Math.sqrt(speed) * 0.43))
+        const motionScale = Math.min(2.05, Math.max(0.75, 0.82 + Math.sqrt(speedNow) * 0.43))
         const sway = Math.sin(simTime * 0.00028 + f.phase + f.y * 0.009) * f.drift
         f.x += (f.vx + sway + activeWind * (0.12 + f.depth * 0.48)) * motionScale
         f.y += (f.vy + Math.abs(activeWind) * 0.06) * motionScale
@@ -696,10 +702,10 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
       let powderWrite = 0
       const powderWind = effectiveWind()
-      const powderMotionScale = Math.min(1.9, Math.max(0.7, 0.9 + speed * 0.13))
+      const powderMotionScale = Math.min(1.9, Math.max(0.7, 0.9 + speedNow * 0.13))
       for (let powderRead = 0; powderRead < loosePowder.length; powderRead++) {
         const p = loosePowder[powderRead]
-        p.life -= Math.min(1.8, Math.max(0.8, 0.9 + speed * 0.12))
+        p.life -= Math.min(1.8, Math.max(0.8, 0.9 + speedNow * 0.12))
         if (p.life <= 0) continue
 
         const age = 1 - p.life / p.maxLife
@@ -737,7 +743,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resetCanvas)
     }
-  }, [speed])
+  }, [])
 
   return <canvas className="scene-canvas" ref={canvasRef} aria-hidden="true" />
 }

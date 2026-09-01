@@ -55,7 +55,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-ufo' | 'aurora' | 'train' | 'night' | 'rain' | 'heavy-rain'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-ufo' | 'aurora' | 'train' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -74,7 +74,7 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-ufo' || test === 'aurora' || test === 'train' || test === 'night' || test === 'rain' || test === 'heavy-rain' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-ufo' || test === 'aurora' || test === 'train' || test === 'night' || test === 'rain' || test === 'heavy-rain' || test === 'snow-fade' || test === 'meteor' || test === 'meteor-shower' ? test : null
 }
 
 function readSharedWorld(): Partial<PitchPreferences> | null {
@@ -196,6 +196,7 @@ function App() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEventLike | null>(null)
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared'>('idle')
   const [testEventId, setTestEventId] = useState(51_100)
+  const [testSnowActive, setTestSnowActive] = useState(testMode === 'snow-fade')
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
   const shareStatusTimerRef = useRef<number | null>(null)
   const lastWorldTapRef = useRef<{ at: number; x: number; y: number } | null>(null)
@@ -226,13 +227,31 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'owl-ufo' && testMode !== 'aurora' && testMode !== 'train') return
+    if (testMode !== 'snow-fade') return
+    let stopTimer = 0
+    const beginCycle = () => {
+      setTestSnowActive(true)
+      window.clearTimeout(stopTimer)
+      stopTimer = window.setTimeout(() => setTestSnowActive(false), 14_000)
+    }
+    beginCycle()
+    const cycleTimer = window.setInterval(beginCycle, 110_000)
+    return () => {
+      window.clearTimeout(stopTimer)
+      window.clearInterval(cycleTimer)
+    }
+  }, [testMode])
+
+  useEffect(() => {
+    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'owl-ufo' && testMode !== 'aurora' && testMode !== 'train' && testMode !== 'meteor' && testMode !== 'meteor-shower') return
     const interval = testMode === 'fog'
       ? 90_000
       : testMode === 'owl' || testMode === 'owl-ufo'
         ? 18_000
         : testMode === 'aurora'
           ? 100_000
+          : testMode === 'meteor' || testMode === 'meteor-shower'
+            ? 11_000
           : testMode === 'train'
             ? 94_000
             : 30_000
@@ -700,14 +719,16 @@ function App() {
       ? { moon: true, storm: false, fireflies: false }
     : testMode === 'train'
       ? { moon: true, storm: false, fireflies: false }
-    : testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain'
+    : testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain' || testMode === 'meteor' || testMode === 'meteor-shower'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
   const displayScene: Scene = testMode === 'rain' || testMode === 'heavy-rain'
     ? 'rain'
-    : testMode === 'fog' || testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'train' || testMode === 'night'
-      ? 'calm'
-      : scene
+    : testMode === 'snow-fade'
+      ? (testSnowActive ? 'snow' : 'calm')
+      : testMode === 'fog' || testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'train' || testMode === 'night' || testMode === 'meteor' || testMode === 'meteor-shower'
+        ? 'calm'
+        : scene
   const testFogEvent: RareEventState | null = testMode === 'fog'
     ? { kind: 'ground-fog', id: testEventId }
     : null
@@ -720,6 +741,11 @@ function App() {
   const testMoonVeilEvent: AliveSkyEvent | null = testMode === 'moon-veil'
     ? { id: testEventId, kind: 'moon-veil', duration: 26_000 }
     : null
+  const testMeteorEvent: AliveSkyEvent | null = testMode === 'meteor'
+    ? { id: testEventId, kind: 'shooting-star', startX: 22, startY: 18, travelX: 58, travelY: 78, duration: 3_200, direction: 1 }
+    : testMode === 'meteor-shower'
+      ? { id: testEventId, kind: 'meteor-shower', direction: 1, count: 7, duration: 8_000 }
+      : null
   const testTrainEvent: AmbientLifeEvent | null = testMode === 'train'
     ? {
         id: testEventId,
@@ -803,7 +829,12 @@ function App() {
             />
           ))}
           {testFogEvent && <RareGroundEventLayer key={`test-fog-${testFogEvent.id}`} event={testFogEvent} />}
-          <SnowScene active={displayScene === 'snow'} alive={aliveRuntimeOn} soundOn={soundOn} speed={aliveRuntimeOn ? weatherSpeed : 1} />
+          <SnowScene
+            active={displayScene === 'snow'}
+            alive={testMode === 'snow-fade' ? !testSnowActive : aliveRuntimeOn}
+            soundOn={soundOn}
+            speed={testMode === 'snow-fade' ? (testSnowActive ? 0.87 : 1) : aliveRuntimeOn ? weatherSpeed : 1}
+          />
           <RainScene
             active={displayScene === 'rain'}
             alive={aliveRuntimeOn}
@@ -822,7 +853,7 @@ function App() {
           />
         </div>
         <FirefliesLayer active={displayLayers.fireflies} visible abundance={aliveRuntimeOn ? fireflyMultiplier : 1} />
-        <AliveSkyEvents event={testMoonVeilEvent ?? (aliveRuntimeOn ? skyEvent : null)} />
+        <AliveSkyEvents event={testMeteorEvent ?? testMoonVeilEvent ?? (aliveRuntimeOn ? skyEvent : null)} />
         <StormLayer
           active={displayLayers.storm}
           scene={displayScene}
@@ -834,14 +865,6 @@ function App() {
           active={aliveRuntimeOn || testMode === 'train' || testMode === 'owl' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain'}
           soundOn={soundOn}
           phase={testMode === 'train' || testMode === 'owl' || testMode === 'night' ? 'calm' : testMode === 'rain' || testMode === 'heavy-rain' ? 'rain' : alivePhase}
-          foregroundActive={
-            testMode === 'train' ||
-            testMode === 'owl' ||
-            ambientLifeEvents.some((event) => event.kind === 'train') ||
-            aliveRareEvents.some((event) => event.kind === 'owl' || event.kind === 'owl-ufo' || event.kind === 'great-meteor' || event.kind === 'distant-storm') ||
-            (aliveRuntimeOn && skyEvent?.kind === 'meteor-impact') ||
-            displayScene === 'ember'
-          }
         />
       </div>
 

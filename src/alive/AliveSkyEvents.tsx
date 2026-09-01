@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import type { AliveSkyEvent } from './useAliveWorld'
+import { surfaceYAt } from '../world/worldState'
 
 type AliveSkyEventsProps = {
   event: AliveSkyEvent | null
@@ -115,6 +116,26 @@ function tailAngle(travelX: number, travelY: number) {
   return direction * angle
 }
 
+
+function liveSkyClipPath() {
+  if (typeof window === 'undefined') return undefined
+  const width = Math.max(1, window.innerWidth)
+  const height = Math.max(1, window.innerHeight)
+  const samples = 32
+  const points = ['0% 0%', '100% 0%']
+
+  // Trace the *live* world surface from right to left. surfaceYAt includes
+  // permanent terrain, standing water and snow, so routine meteors obey the
+  // same physical occlusion rule as the Great Meteor canvas.
+  for (let index = samples; index >= 0; index--) {
+    const x = (index / samples) * width
+    const y = Math.max(0, Math.min(height, surfaceYAt(x, width, height)))
+    points.push(`${(index / samples) * 100}% ${(y / height) * 100}%`)
+  }
+
+  return `polygon(${points.join(', ')})`
+}
+
 export function AliveSkyEvents({ event }: AliveSkyEventsProps) {
   if (!event || event.kind === 'meteor-impact' || event.kind === 'depth-flash') return null
 
@@ -148,7 +169,7 @@ export function AliveSkyEvents({ event }: AliveSkyEventsProps) {
     const duration = event.duration ?? 4200
 
     return (
-      <div key={event.id} className="alive-meteor-shower" aria-hidden="true">
+      <div key={event.id} className="alive-meteor-shower" style={{ clipPath: liveSkyClipPath() }} aria-hidden="true">
         {Array.from({ length: count }, (_, index) => {
           const a = seeded(event.id * 31 + index * 7.3)
           const b = seeded(event.id * 53 + index * 11.7)
@@ -184,17 +205,22 @@ export function AliveSkyEvents({ event }: AliveSkyEventsProps) {
   return (
     <div
       key={event.id}
-      className="alive-shooting-star"
-      style={{
-        '--alive-star-x': `${event.startX ?? 30}vw`,
-        '--alive-star-y': `${event.startY ?? 18}vh`,
-        '--alive-star-dx': `${event.travelX ?? 58}vw`,
-        '--alive-star-dy': `${event.travelY ?? 46}vh`,
-        '--alive-event-duration': `${event.duration ?? 1200}ms`,
-        '--alive-star-dir': `${event.direction ?? 1}`,
-        '--alive-tail-angle': `${tailAngle(event.travelX ?? 58, event.travelY ?? 46)}deg`,
-      } as CSSProperties}
+      className="alive-meteor-sky-clip"
+      style={{ clipPath: liveSkyClipPath() }}
       aria-hidden="true"
-    />
+    >
+      <i
+        className="alive-shooting-star"
+        style={{
+          '--alive-star-x': `${event.startX ?? 30}vw`,
+          '--alive-star-y': `${event.startY ?? 18}vh`,
+          '--alive-star-dx': `${event.travelX ?? 58}vw`,
+          '--alive-star-dy': `${event.travelY ?? 46}vh`,
+          '--alive-event-duration': `${event.duration ?? 1200}ms`,
+          '--alive-star-dir': `${event.direction ?? 1}`,
+          '--alive-tail-angle': `${tailAngle(event.travelX ?? 58, event.travelY ?? 46)}deg`,
+        } as CSSProperties}
+      />
+    </div>
   )
 }

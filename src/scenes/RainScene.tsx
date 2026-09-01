@@ -53,6 +53,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
   const activeRef = useRef(active)
   const aliveRef = useRef(alive)
   const soundOnRef = useRef(soundOn)
+  const speedRef = useRef(speed)
   const audioRef = useRef<{
     ctx: AudioContext
     steadyGain: GainNode
@@ -69,6 +70,10 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
   useEffect(() => {
     soundOnRef.current = soundOn
   }, [soundOn])
+
+  useEffect(() => {
+    speedRef.current = speed
+  }, [speed])
 
   useEffect(() => {
     if (!soundOn) {
@@ -225,7 +230,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       }
 
       if (snowDepth > 1.2) {
-        const melt = (0.415 + drop.speed * 0.0317) * Math.max(1, speed * 0.78)
+        const melt = (0.415 + drop.speed * 0.0317) * Math.max(1, speedRef.current * 0.78)
         pitchWorld.drifts[idx] = Math.max(0, pitchWorld.drifts[idx] - melt)
         pitchWorld.drifts[idx - 1] = Math.max(0, pitchWorld.drifts[idx - 1] - melt * 0.38)
         pitchWorld.drifts[idx + 1] = Math.max(0, pitchWorld.drifts[idx + 1] - melt * 0.38)
@@ -233,7 +238,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       }
       const remainingSnow = pitchWorld.drifts[idx]
       if (remainingSnow < 7) {
-        const collection = (0.055 + drop.speed * 0.006) * Math.max(1, speed * 0.45)
+        const collection = (0.055 + drop.speed * 0.006) * Math.max(1, speedRef.current * 0.45)
         pitchWorld.water[idx] = Math.min(9, pitchWorld.water[idx] + collection)
         pitchWorld.water[idx - 1] = Math.min(9, pitchWorld.water[idx - 1] + collection * 0.32)
         pitchWorld.water[idx + 1] = Math.min(9, pitchWorld.water[idx + 1] + collection * 0.32)
@@ -392,7 +397,8 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       frame += 1
       const dt = Math.min(32, time - lastTime)
       lastTime = time
-      simTime += dt * speed
+      const speedNow = speedRef.current
+      simTime += dt * speedNow
 
       const nowActive = activeRef.current
       if (nowActive && !wasActive && aliveRef.current) {
@@ -496,7 +502,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
         const materialDt = Math.min(66, materialCarry)
         materialCarry = 0
         materialFrame += 1
-        const scaledDt = (materialDt / 16.67) * speed
+        const scaledDt = (materialDt / 16.67) * speedNow
         const meltRate = (0.00390 + intensity * 0.00634) * scaledDt * rainDensity
         driftSnapshot.set(pitchWorld.drifts)
         const copy = driftSnapshot
@@ -510,7 +516,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
             const target = pitchWorld.drifts[i - 1] < pitchWorld.drifts[i + 1] ? i - 1 : i + 1
             const slope = pitchWorld.drifts[i] - pitchWorld.drifts[target]
             if (slope > 3.2) {
-              const slump = Math.min(0.045 * speed, (slope - 3.2) * 0.012 * speed)
+              const slump = Math.min(0.045 * speedNow, (slope - 3.2) * 0.012 * speedNow)
               pitchWorld.drifts[i] = Math.max(0, pitchWorld.drifts[i] - slump)
               pitchWorld.drifts[target] += slump * 0.42
             }
@@ -547,7 +553,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
           const currentY = snowSurfaceYAtIndex(i, height)
           const targetY = snowSurfaceYAtIndex(target, height)
           if (targetY >= currentY - 1.2) {
-            const flow = Math.min(snapshot[i] * 0.035 * speed, 0.045)
+            const flow = Math.min(snapshot[i] * 0.035 * speedNow, 0.045)
             pitchWorld.water[i] = Math.max(0, pitchWorld.water[i] - flow)
             pitchWorld.water[target] = Math.min(9, pitchWorld.water[target] + flow * 0.92)
           }
@@ -559,7 +565,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       for (let i = 0; i < drops.length; i++) {
         const drop = drops[i]
         const participating = drop.presence <= rainDensity
-        drop.y += drop.speed * (dt / 16.67) * (0.78 + intensity * 0.42) * Math.max(0.7, Math.sqrt(speed))
+        drop.y += drop.speed * (dt / 16.67) * (0.78 + intensity * 0.42) * Math.max(0.7, Math.sqrt(speedNow))
         drop.x += (stormWind * 0.34 + ambientGust * 0.08) * (dt / 16.67)
 
         if (drop.x < -30) drop.x = width + 20
@@ -660,7 +666,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
     }
-  }, [speed])
+  }, [])
 
   return <canvas className="scene-canvas" ref={canvasRef} aria-hidden="true" />
 }
