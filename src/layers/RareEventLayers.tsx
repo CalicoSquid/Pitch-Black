@@ -989,8 +989,12 @@ function playAbductedOwlCall(soundOn: boolean) {
   filter.frequency.exponentialRampToValueAtTime(430, now + duration)
   filter.Q.value = 0.5
   gain.gain.setValueAtTime(0.0001, now)
-  gain.gain.exponentialRampToValueAtTime(0.010, now + 0.08)
-  gain.gain.exponentialRampToValueAtTime(0.0045, now + 0.42)
+  // The real field-recorded arrival hoot is substantially stronger than the
+  // original synthesized owl. Keep the accepted abducted voice/timing intact,
+  // but restore its old perceptual relationship so the warped departure is
+  // actually audible after the real call rather than disappearing ~25 dB below it.
+  gain.gain.exponentialRampToValueAtTime(0.050, now + 0.08)
+  gain.gain.exponentialRampToValueAtTime(0.021, now + 0.42)
   gain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
   gain.connect(filter).connect(output)
 
