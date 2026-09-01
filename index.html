@@ -110,6 +110,35 @@
         }, delay)
       }())
     </script>
-    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Local production previews can leave a service worker behind on the same
+      // localhost origin that Vite later uses. Clear it before importing source
+      // modules so normal/IDE browsers cannot get stuck on an old build.
+      window.__tqwLocalCleanup = (function () {
+        var host = window.location.hostname
+        var local = host === 'localhost' || host === '127.0.0.1' || host === '::1'
+        if (!local) return Promise.resolve()
+
+        var jobs = []
+        if ('serviceWorker' in navigator) {
+          jobs.push(navigator.serviceWorker.getRegistrations().then(function (registrations) {
+            return Promise.all(registrations.map(function (registration) { return registration.unregister() }))
+          }))
+        }
+        if ('caches' in window) {
+          jobs.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.filter(function (key) {
+              return key.indexOf('this-quiet-world') === 0
+            }).map(function (key) { return caches.delete(key) }))
+          }))
+        }
+        return Promise.all(jobs).catch(function () {})
+      }())
+    </script>
+    <script type="module">
+      Promise.resolve(window.__tqwLocalCleanup).then(function () {
+        return import('/src/main.tsx')
+      })
+    </script>
   </body>
 </html>

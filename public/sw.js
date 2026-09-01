@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.57.0-owl-ufo'
+const CACHE_NAME = 'this-quiet-world-v1.58.4-train-character'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {
@@ -19,6 +19,11 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
+
+  // Vite development modules must always come directly from the dev server.
+  // A worker registered by a previous local production preview can otherwise
+  // keep serving stale /src modules even after Vite has restarted.
+  if (url.pathname.startsWith('/src/') || url.pathname.startsWith('/@') || url.pathname.startsWith('/node_modules/.vite/')) return
 
   if (request.mode === 'navigate') {
     event.respondWith(

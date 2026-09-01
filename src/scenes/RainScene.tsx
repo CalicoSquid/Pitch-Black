@@ -119,6 +119,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     if (!ctx) return
 
     let raf = 0
+    let idleTimer = 0
     let frame = 0
     let width = window.innerWidth
     let height = window.innerHeight
@@ -428,7 +429,9 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           ctx.clearRect(0, 0, width, height)
           idleCleared = true
         }
-        raf = requestAnimationFrame(draw)
+        idleTimer = window.setTimeout(() => {
+          raf = requestAnimationFrame(draw)
+        }, 200)
         return
       }
 
@@ -607,6 +610,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     return () => {
       cancelAnimationFrame(raf)
+      window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
     }
   }, [speed])

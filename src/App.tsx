@@ -6,7 +6,7 @@ import { AliveNightSky } from './alive/AliveNightSky'
 import { AliveAmbience } from './alive/AliveAmbience'
 import { AmbientLifeLayer } from './alive/AmbientLifeLayer'
 import { useAliveWorld } from './alive/useAliveWorld'
-import type { AliveSkyEvent } from './alive/useAliveWorld'
+import type { AliveSkyEvent, AmbientLifeEvent } from './alive/useAliveWorld'
 import type { LayerKey, LayerState, Scene } from './types'
 import {
   fadePitchAudioToSilence,
@@ -54,7 +54,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'aurora'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'aurora' | 'train'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -73,7 +73,7 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'aurora' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'aurora' || test === 'train' ? test : null
 }
 
 function readSharedWorld(): Partial<PitchPreferences> | null {
@@ -225,14 +225,16 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'aurora') return
+    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'aurora' && testMode !== 'train') return
     const interval = testMode === 'fog'
       ? 90_000
       : testMode === 'owl'
         ? 15_000
         : testMode === 'aurora'
           ? 100_000
-          : 30_000
+          : testMode === 'train'
+            ? 94_000
+            : 30_000
     const timer = window.setInterval(() => setTestEventId((id) => id + 1), interval)
     return () => window.clearInterval(timer)
   }, [testMode])
@@ -673,10 +675,12 @@ function App() {
       ? { moon: true, storm: true, fireflies: false }
     : testMode === 'moon-veil'
       ? { moon: true, storm: false, fireflies: false }
+    : testMode === 'train'
+      ? { moon: true, storm: false, fireflies: false }
     : testMode === 'owl' || testMode === 'aurora'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
-  const displayScene: Scene = testMode === 'fog' || testMode === 'owl' || testMode === 'aurora' ? 'calm' : scene
+  const displayScene: Scene = testMode === 'fog' || testMode === 'owl' || testMode === 'aurora' || testMode === 'train' ? 'calm' : scene
   const testFogEvent: RareEventState | null = testMode === 'fog'
     ? { kind: 'ground-fog', id: testEventId }
     : null
@@ -688,6 +692,20 @@ function App() {
     : null
   const testMoonVeilEvent: AliveSkyEvent | null = testMode === 'moon-veil'
     ? { id: testEventId, kind: 'moon-veil', duration: 26_000 }
+    : null
+  const testTrainEvent: AmbientLifeEvent | null = testMode === 'train'
+    ? {
+        id: testEventId,
+        kind: 'train',
+        duration: 90_000,
+        direction: testEventId % 2 === 0 ? -1 : 1,
+        startY: 80.0,
+        travelY: -3.1,
+        startScale: 1.05,
+        endScale: 0.76,
+        horn: true,
+        hornDelay: 12_000,
+      }
     : null
   const sleepTimerActive = sleepTimerEndAt !== null
   const blackoutActive = !aliveRuntimeOn && displayScene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
@@ -707,7 +725,7 @@ function App() {
       onPointerUp={handleWorldPointerUp}
     >
       <div className="scene-layer">
-        {(aliveRuntimeOn || testMode === 'aurora') && <AliveNightSky phase={alivePhase} />}
+        {(aliveRuntimeOn || testMode === 'aurora' || testMode === 'train') && <AliveNightSky phase={testMode === 'train' ? 'calm' : alivePhase} />}
         {(aliveRuntimeOn || import.meta.env.DEV) && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
           <RareSkyEventLayer
             key={`alive-rare-sky-${event.kind}-${event.id}`}
@@ -736,9 +754,18 @@ function App() {
             key={`ambient-life-${event.kind}-${event.id}`}
             event={event}
             soundOn={soundOn}
+            phase={alivePhase}
             onComplete={completeAmbientLifeEvent}
           />
         ))}
+        {testTrainEvent && (
+          <AmbientLifeLayer
+            key={`test-train-${testTrainEvent.id}`}
+            event={testTrainEvent}
+            soundOn={soundOn}
+            phase="calm"
+          />
+        )}
         <div className={`world-weather-layer ${displayScene === 'black' ? 'world-hidden' : ''}`}>
           <WorldBaseScene scene={displayScene} />
           {aliveRuntimeOn && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (

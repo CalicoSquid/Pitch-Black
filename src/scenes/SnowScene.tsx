@@ -114,6 +114,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     let frame = 0
     let raf = 0
+    let idleTimer = 0
     let width = window.innerWidth
     let height = window.innerHeight
     let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
@@ -601,7 +602,9 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           ctx.clearRect(0, 0, width, height)
           idleCleared = true
         }
-        raf = requestAnimationFrame(draw)
+        idleTimer = window.setTimeout(() => {
+          raf = requestAnimationFrame(draw)
+        }, 200)
         return
       }
 
@@ -729,6 +732,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     return () => {
       cancelAnimationFrame(raf)
+      window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resetCanvas)
     }
   }, [speed])

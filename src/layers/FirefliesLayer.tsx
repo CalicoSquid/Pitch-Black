@@ -89,6 +89,7 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
     let height = window.innerHeight
     let dpr = Math.min(window.devicePixelRatio || 1, 1.25)
     let raf = 0
+    let idleTimer = 0
     let last = performance.now()
     let wasActive = activeRef.current
     let lastAbundance = abundanceRef.current
@@ -440,6 +441,19 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
         nextSpawn = time + 2100 + Math.random() * 1900
       }
 
+      if (!isActive && fireflies.length === 0) {
+        fireflySignal.count = 0
+        if (!canvasCleared) {
+          ctx.clearRect(0, 0, width, height)
+          canvasCleared = true
+        }
+        cancelAnimationFrame(raf)
+        idleTimer = window.setTimeout(() => {
+          raf = requestAnimationFrame(draw)
+        }, 220)
+        return
+      }
+
       const render = visibleRef.current
       if (render) {
         ctx.clearRect(0, 0, width, height)
@@ -491,6 +505,7 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
       fireflySignal.count = 0
       fireflySignal.extinguishRequests.fill(0)
       cancelAnimationFrame(raf)
+      window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
     }
   }, [])

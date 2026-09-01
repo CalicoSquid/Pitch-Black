@@ -531,9 +531,9 @@ export function StormLayer({
     let height = window.innerHeight
     let dpr = Math.min(window.devicePixelRatio || 1, 1.25)
     let raf = 0
+    let idleTimer = 0
     let last = performance.now()
     let lastCloudFrame = 0
-    let lastIdleTick = 0
     let stormMix = activeRef.current ? 1 : 0
     let wasActive = activeRef.current
     const initialPhaseTime = performance.now()
@@ -951,8 +951,11 @@ export function StormLayer({
         stormSignal.wind = 0
         stormSignal.flash = 0
         pitchWorld.cloudCover += (0.12 - pitchWorld.cloudCover) * 0.18
-        if (time - lastIdleTick < 180) return
-        lastIdleTick = time
+        cancelAnimationFrame(raf)
+        idleTimer = window.setTimeout(() => {
+          raf = requestAnimationFrame(draw)
+        }, 180)
+        return
       }
 
       if (activeRef.current && !wasActive) {
@@ -1091,6 +1094,7 @@ export function StormLayer({
 
     return () => {
       cancelAnimationFrame(raf)
+      window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
       stormSignal.mix = 0
       stormSignal.wind = 0

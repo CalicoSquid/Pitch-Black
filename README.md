@@ -14,6 +14,35 @@ For a Git-connected Netlify site, deploy the repository/root folder as-is; Netli
 
 For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and upload the generated `dist` folder.
 
+## v1.58.4 — train character grounding
+
+- Visual-only train refinement; train audio is intentionally unchanged for the dedicated audio review next.
+- Replaced rectangular carriage slabs with subtly crowned roofs, softened body corners, articulated inter-car bellows, darker underframes/bogies, and a more tapered passenger-cab silhouette.
+- Darkened the train body substantially so the warm windows now carry most of the read and the vehicle feels embedded in the night rather than laid over it.
+- Softened window geometry and varied individual window intensity/width to reduce the row-of-blocks look without making the train brighter.
+- Added a tiny route-grade rotation so the consist follows the local contour instead of remaining mechanically level while the route rises/falls.
+- Kept the v1.58.1 route, hill occlusion, cadence, weather behavior, performance cleanup, and all approved Ambient Life / rare-event behavior unchanged.
+
+## v1.58.1 — train rethink + localhost/performance cleanup
+
+- Rebuilt the rare Ambient Life passenger train at a readable distant scale: a dark locomotive and 4–5 carriages with warm, unevenly lit windows.
+- The 70–120 second route now climbs and curves into perspective, passes behind a nearer invisible hill, briefly re-emerges, then disappears into a rising far ridge.
+- Train sightings use a persistent 2–4 hour wall-clock cadence, are never allowed to overlap the Airplane, and are suppressed by full Storm and hero events.
+- Rain attenuates and softly diffuses the windows, ground Fog naturally occludes the train through layer order, and active Snow receives a very faint warm surface pickup.
+- Sound stays distant but audible: filtered rolling rail texture with a 25% chance of one distant horn.
+- Added `?test=train` for immediate visual/audio iteration; the test crossing lasts 90 seconds and alternates direction on each repeat.
+- Includes the v1.57.3 control-idle fix unchanged.
+- Localhost now self-clears stale This Quiet World service workers/caches before Vite imports, and production workers never intercept Vite source-module paths.
+- Removed React StrictMode double-mounting from the local test harness and put dormant Snow/Rain/Fireflies/Storm/base-black canvases on low-frequency heartbeats without changing active rendering cadence.
+- Train audio is more legible while remaining distant; `?test=train` horns at ~12 seconds for fast review.
+
+## v1.57.3 — control idle fix
+
+- Fixed the bottom control dock staying visible after a button click because the focused button kept `:focus-within` active.
+- Dock visibility is now controlled solely by the existing 4.2-second activity timer, so it fades after inactivity even when the last interaction was with a control.
+- Keyboard, pointer, touch, wheel and legacy TV/projector activity still wake the controls through the existing idle hook.
+- No world, Alive, event, audio, terrain, persistence, rendering or control-layout behavior was changed.
+
 ## v1.57.2 — live baseline
 
 - Removed the visible developer Night Events lab and its Airplane / Owl UFO test buttons for the production baseline.
@@ -356,3 +385,4 @@ For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and
 - Reworked the normal owl call into two distinct rounded hoots with a short silence between them.
 - Owl eyes now shrink as they rise into the beam, adding a stronger sense of height and distance.
 - Saucer motion, event timing, 10% owl-abduction rarity, airplane behavior, and the departing mangled hoot are unchanged.
+
