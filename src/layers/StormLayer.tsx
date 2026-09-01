@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
+import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { publishLightningGroundStrike } from '../world/lightningSignal'
 import {
@@ -415,10 +416,10 @@ export function StormLayer({
     deepSource: AudioBufferSourceNode
     textureSource: AudioBufferSourceNode
   } | null>(null)
-  const thunderBankRef = useRef<{
+  const thunderAssetsRef = useRef<{
     ctx: AudioContext
-    distant: AudioBuffer[]
-    strike: AudioBuffer[]
+    distant: AudioBuffer
+    close: AudioBuffer
   } | null>(null)
 
   useEffect(() => {
@@ -522,6 +523,27 @@ export function StormLayer({
   }, [active, soundOn])
 
   useEffect(() => {
+    if (!active || !soundOn) return
+
+    const audioCtx = getPitchAudio()
+    if (!audioCtx) return
+
+    let cancelled = false
+    void Promise.all([
+      loadPitchAudioAsset(audioCtx, 'thunder-distant.mp3'),
+      loadPitchAudioAsset(audioCtx, 'thunder-close.mp3'),
+    ]).then(([distant, close]) => {
+      if (!cancelled) thunderAssetsRef.current = { ctx: audioCtx, distant, close }
+    }).catch(() => {
+      // Storm remains visually functional if a real-audio asset fails to load.
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [active, soundOn])
+
+  useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -530,6 +552,9 @@ export function StormLayer({
     let width = window.innerWidth
     let height = window.innerHeight
     let dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+    const thunderTest = import.meta.env.DEV
+      ? new URLSearchParams(window.location.search).get('thunder')
+      : null
     let raf = 0
     let idleTimer = 0
     let last = performance.now()
@@ -544,7 +569,7 @@ export function StormLayer({
     let nextGust = performance.now() + 3600
     let nextStrike = performance.now() + 5200 + Math.random() * 7600
     let queuedStrikeBurst = 0
-    let nextDistantThunder = performance.now() + 3800 + Math.random() * 4800
+    let nextDistantThunder = performance.now() + 6200 + Math.random() * 6200
     let flashStarted = -1
     let flashPower = 0
     let depthRevealStarted = -1
@@ -576,179 +601,90 @@ export function StormLayer({
       mainLayer = createStormDensityLayer(width, height, 'main')
     }
 
-    const buildThunderBuffer = (audioCtx: AudioContext, duration: number, strikeStyle: boolean, variation: number) => {
-      const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * duration), audioCtx.sampleRate)
-      const data = buffer.getChannelData(0)
-      let low = 0
-      let body = 0
-      let slow = 0
+    let lastThunderPlayedAt = Number.NEGATIVE_INFINITY
 
-      for (let i = 0; i < data.length; i++) {
-        const white = Math.random() * 2 - 1
-        low = low * (strikeStyle ? 0.984 : 0.990) + white * (strikeStyle ? 0.016 : 0.010)
-        body = body * 0.995 + low * 0.005
-        slow = slow * 0.999 + body * 0.001
-        const secondsAtSample = i / audioCtx.sampleRate
-        const attack = Math.min(1, secondsAtSample / (strikeStyle ? 0.13 : 0.44))
-        const decay = Math.exp(-secondsAtSample / (strikeStyle ? 1.85 + variation * 0.30 : 2.55 + variation * 0.45))
-        const rolling = 0.74 + Math.sin(secondsAtSample * (9.5 + variation * 2.3)) * 0.11 + Math.sin(secondsAtSample * (3.3 + variation)) * 0.09
-        const distantPulse = strikeStyle ? 1 : 0.90 + Math.sin(secondsAtSample * 1.25 + variation * 3.1) * 0.10
-        data[i] = (low * 0.30 + body * 0.64 + slow * 0.34) * attack * decay * rolling * distantPulse
-      }
-      return buffer
-    }
-
-    const getThunderBank = (audioCtx: AudioContext) => {
-      const current = thunderBankRef.current
+    const getThunderAssets = (audioCtx: AudioContext) => {
+      const current = thunderAssetsRef.current
       if (current?.ctx === audioCtx) return current
-
-      const bank = {
-        ctx: audioCtx,
-        distant: [
-          buildThunderBuffer(audioCtx, 5.0, false, 0.18),
-          buildThunderBuffer(audioCtx, 5.8, false, 0.72),
-        ],
-        strike: [
-          buildThunderBuffer(audioCtx, 4.2, true, 0.24),
-          buildThunderBuffer(audioCtx, 4.8, true, 0.81),
-        ],
-      }
-      thunderBankRef.current = bank
-      return bank
+      return null
     }
 
-    const playThunderBuffer = (
+    const playRealThunder = (
       audioCtx: AudioContext,
       buffer: AudioBuffer,
       delay: number,
-      bodyGainValue: number,
-      textureGainValue: number,
+      gainValue: number,
       rate: number,
-      bodyCutoff: number,
+      cutoff: number,
     ) => {
+      const source = audioCtx.createBufferSource()
+      const lowpass = audioCtx.createBiquadFilter()
+      const gain = audioCtx.createGain()
       const startTime = audioCtx.currentTime + delay
 
-      const bodySource = audioCtx.createBufferSource()
-      const bodyFilter = audioCtx.createBiquadFilter()
-      const bodyGain = audioCtx.createGain()
-      bodySource.buffer = buffer
-      bodySource.playbackRate.value = rate
-      bodyFilter.type = 'lowpass'
-      bodyFilter.frequency.value = bodyCutoff
-      bodyFilter.Q.value = 0.42
-      bodyGain.gain.value = bodyGainValue
-      bodySource.connect(bodyFilter).connect(bodyGain).connect(getPitchAudioTransientOutput(audioCtx))
-      bodySource.start(startTime)
+      source.buffer = buffer
+      source.playbackRate.value = rate
+      lowpass.type = 'lowpass'
+      lowpass.frequency.value = cutoff
+      lowpass.Q.value = 0.22
 
-      const textureSource = audioCtx.createBufferSource()
-      const textureFilter = audioCtx.createBiquadFilter()
-      const textureGain = audioCtx.createGain()
-      textureSource.buffer = buffer
-      textureSource.playbackRate.value = rate * (0.985 + Math.random() * 0.025)
-      textureFilter.type = 'bandpass'
-      textureFilter.frequency.value = 520 + Math.random() * 210
-      textureFilter.Q.value = 0.52
-      textureGain.gain.value = textureGainValue
-      textureSource.connect(textureFilter).connect(textureGain).connect(getPitchAudioTransientOutput(audioCtx))
-      textureSource.start(startTime + 0.035 + Math.random() * 0.055)
+      gain.gain.setValueAtTime(0.0001, startTime)
+      gain.gain.linearRampToValueAtTime(gainValue, startTime + 0.08)
+      const tailStart = startTime + Math.max(0.5, buffer.duration / Math.max(0.1, rate) - 0.55)
+      gain.gain.setValueAtTime(gainValue, tailStart)
+      gain.gain.linearRampToValueAtTime(0.0001, tailStart + 0.50)
+
+      source.connect(lowpass).connect(gain).connect(getPitchAudioTransientOutput(audioCtx))
+      source.start(startTime)
+      lastThunderPlayedAt = performance.now()
     }
 
     const thunder = (strength: number) => {
       if (!soundOnRef.current) return
       const audioCtx = getPitchAudio()
       if (!audioCtx) return
+      const assets = getThunderAssets(audioCtx)
+      if (!assets) return
 
-      const bank = getThunderBank(audioCtx)
-      const buffer = bank.strike[Math.random() < 0.5 ? 0 : 1]
-      // A visible terrain hit reads as very close. Keep the sound attached to the
-      // impact instead of waiting several seconds as though the bolt were miles away.
-      const delay = 0.10 + (1 - strength) * 0.16 + Math.random() * 0.10
-      const startTime = audioCtx.currentTime + delay
-      const rate = 0.90 + Math.random() * 0.08
+      // Strong grounded strikes occasionally earn the heavier, sustained recording.
+      // Most strikes use the more dynamic distant roll so Storm stays believable
+      // without turning a sleep scene into a sequence of jump scares.
+      const useClose = thunderTest === 'close' || (thunderTest !== 'distant' && strength > 0.88 && Math.random() < 0.46)
+      const buffer = useClose ? assets.close : assets.distant
+      const delay = useClose
+        ? 0.10 + Math.random() * 0.18
+        : 0.18 + (1 - strength) * 0.34 + Math.random() * 0.24
+      const gainValue = useClose
+        ? 0.052 + strength * 0.018
+        : 0.105 + strength * 0.030
+      const rate = useClose
+        ? 0.96 + Math.random() * 0.035
+        : 0.94 + Math.random() * 0.075
+      const cutoff = useClose
+        ? 3000 + Math.random() * 700
+        : 1850 + strength * 650 + Math.random() * 350
 
-      // Close-strike pressure wave. Deliberately low-passed: the previous short,
-      // bright band-pass transient sounded like a ruler being slapped on a desk.
-      const boomDuration = 0.72
-      const boomBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * boomDuration), audioCtx.sampleRate)
-      const boomData = boomBuffer.getChannelData(0)
-      let low = 0
-      for (let i = 0; i < boomData.length; i++) {
-        const t = i / audioCtx.sampleRate
-        const white = Math.random() * 2 - 1
-        low = low * 0.955 + white * 0.045
-        const attack = Math.min(1, t / 0.028)
-        const decay = Math.exp(-t / (0.22 + strength * 0.09))
-        boomData[i] = low * attack * decay
-      }
-
-      const boomSource = audioCtx.createBufferSource()
-      const boomFilter = audioCtx.createBiquadFilter()
-      const boomGain = audioCtx.createGain()
-      boomSource.buffer = boomBuffer
-      boomFilter.type = 'lowpass'
-      boomFilter.frequency.value = 150 + strength * 55
-      boomFilter.Q.value = 0.58
-      boomGain.gain.setValueAtTime(0.0001, startTime)
-      boomGain.gain.exponentialRampToValueAtTime(0.055 + strength * 0.025, startTime + 0.030)
-      boomGain.gain.exponentialRampToValueAtTime(0.0001, startTime + boomDuration)
-      boomSource.connect(boomFilter).connect(boomGain).connect(getPitchAudioTransientOutput(audioCtx))
-      boomSource.start(startTime)
-
-      // The broader thunder body arrives with the pressure wave and then rolls away.
-      playThunderBuffer(
-        audioCtx,
-        buffer,
-        delay + 0.025,
-        0.090 + strength * 0.038,
-        0.009 + strength * 0.006,
-        rate,
-        225 + strength * 50,
-      )
-
-      if (strength > 0.78 && Math.random() < 0.44) {
-        const tailBuffer = bank.distant[Math.random() < 0.5 ? 0 : 1]
-        playThunderBuffer(
-          audioCtx,
-          tailBuffer,
-          delay + 1.45 + Math.random() * 1.10,
-          0.024 + strength * 0.014,
-          0.006,
-          0.90 + Math.random() * 0.08,
-          180,
-        )
-      }
+      playRealThunder(audioCtx, buffer, delay, gainValue, rate, cutoff)
     }
 
-    const distantThunder = () => {
+    const distantThunder = (ambientOnly = false) => {
       if (!soundOnRef.current) return
+      if (ambientOnly && performance.now() - lastThunderPlayedAt < 11_500) return
+
       const audioCtx = getPitchAudio()
       if (!audioCtx) return
+      const assets = getThunderAssets(audioCtx)
+      if (!assets) return
 
-      const bank = getThunderBank(audioCtx)
-      const buffer = bank.distant[Math.random() < 0.5 ? 0 : 1]
-      const strength = 0.72 + Math.random() * 0.28
-      playThunderBuffer(
+      const strength = 0.68 + Math.random() * 0.25
+      playRealThunder(
         audioCtx,
-        buffer,
-        0.12 + Math.random() * 0.42,
-        0.032 + strength * 0.018,
-        0.006 + strength * 0.006,
-        0.90 + Math.random() * 0.14,
-        150 + Math.random() * 45,
+        assets.distant,
+        0.30 + Math.random() * 0.85,
+        0.078 + strength * 0.034,
+        0.93 + Math.random() * 0.09,
+        1450 + strength * 650 + Math.random() * 260,
       )
-
-      if (Math.random() < 0.24) {
-        const answerBuffer = bank.distant[Math.random() < 0.5 ? 0 : 1]
-        playThunderBuffer(
-          audioCtx,
-          answerBuffer,
-          2.0 + Math.random() * 2.2,
-          0.020 + Math.random() * 0.015,
-          0.004 + Math.random() * 0.004,
-          0.88 + Math.random() * 0.12,
-          145 + Math.random() * 35,
-        )
-      }
     }
 
     const strikeWorld = (x: number, strength: number) => {
@@ -825,12 +761,12 @@ export function StormLayer({
       flashStarted = time
       flashPower = 0.74 + Math.random() * 0.14
       forcedVisualUntil = time + 520
-      if (soundOnRef.current) distantThunder()
+      if (soundOnRef.current) distantThunder(true)
     }
 
     const strike = (time: number) => {
       const targetX = width * (0.14 + Math.random() * 0.72)
-      const grounded = Math.random() < groundStrikeChanceRef.current
+      const grounded = thunderTest === 'close' ? true : Math.random() < groundStrikeChanceRef.current
       const targetY = grounded
         ? surfaceYAt(targetX, width, height)
         : height * between(0.28, 0.62)
@@ -964,7 +900,7 @@ export function StormLayer({
         if (deepIdle) {
           nextStrike = time + 5200 + Math.random() * 7600
           queuedStrikeBurst = 0
-          nextDistantThunder = time + 3800 + Math.random() * 4800
+          nextDistantThunder = time + 6200 + Math.random() * 6200
           deepIdle = false
         }
       } else if (!activeRef.current && wasActive) {
@@ -1013,14 +949,16 @@ export function StormLayer({
       }
 
       if (activeRef.current && stormMix > 0.34 && time >= nextDistantThunder) {
-        distantThunder()
-        nextDistantThunder = time + 6200 + Math.random() * 8200
+        distantThunder(true)
+        // Real thunder has a long natural tail. Leave genuine quiet between rolls
+        // instead of layering samples every few seconds like the old synthetic bank.
+        nextDistantThunder = time + 18_000 + Math.random() * 18_000
       }
 
       if (!activeRef.current && stormMix < 0.08 && !deepIdle) {
         nextStrike = time + 5200 + Math.random() * 7600
         queuedStrikeBurst = 0
-        nextDistantThunder = time + 3800 + Math.random() * 4800
+        nextDistantThunder = time + 6200 + Math.random() * 6200
         deepIdle = true
       }
 

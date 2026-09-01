@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 
@@ -922,97 +923,56 @@ function playMeteorBoom(soundOn: boolean) {
   source.start()
 }
 
-function playOwlCall(soundOn: boolean) {
+function playOwlCall(soundOn: boolean, eventId: number) {
   if (!soundOn) return
   const ac = getPitchAudio()
   if (!ac) return
 
-  const now = ac.currentTime
-  const duration = 1.72
-  const output = getPitchAudioTransientOutput(ac)
+  // Real field recording: choose one of several naturally separated call clusters
+  // rather than replaying the exact same hoot every sighting. The visual timing stays
+  // unchanged; only the voice of the owl has moved from synthesis to recorded sound.
+  const callSlices = [
+    { offset: 1.0, duration: 6.2 },
+    { offset: 14.0, duration: 4.1 },
+    { offset: 22.9, duration: 4.4 },
+    { offset: 39.0, duration: 4.8 },
+    { offset: 45.1, duration: 3.7 },
+    { offset: 51.0, duration: 5.5 },
+  ]
+  const slice = callSlices[Math.abs(eventId) % callSlices.length]
 
-  // Two distinct, rounded hoots with a real pocket of silence between them.
-  // Keeping the oscillators continuous avoids clicks, while the envelope makes
-  // the call read as "hoot ... hoot" instead of one sustained synth hum.
-  const bodyGain = ac.createGain()
-  const bodyFilter = ac.createBiquadFilter()
-  bodyFilter.type = 'lowpass'
-  bodyFilter.frequency.value = 690
-  bodyFilter.Q.value = 0.62
-  bodyGain.gain.setValueAtTime(0.0001, now)
-  bodyGain.gain.exponentialRampToValueAtTime(0.027, now + 0.075)
-  bodyGain.gain.exponentialRampToValueAtTime(0.0105, now + 0.30)
-  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.53)
-  bodyGain.gain.setValueAtTime(0.0001, now + 0.70)
-  bodyGain.gain.exponentialRampToValueAtTime(0.030, now + 0.80)
-  bodyGain.gain.exponentialRampToValueAtTime(0.0115, now + 1.10)
-  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.49)
-  bodyGain.connect(bodyFilter).connect(output)
+  void loadPitchAudioAsset(ac, 'owl-field.mp3')
+    .then((buffer) => {
+      if (ac.state === 'closed') return
+      const duration = Math.min(slice.duration, Math.max(0.5, buffer.duration - slice.offset - 0.05))
+      if (duration <= 0.2) return
 
-  const fundamental = ac.createOscillator()
-  fundamental.type = 'sine'
-  fundamental.frequency.setValueAtTime(176, now)
-  fundamental.frequency.exponentialRampToValueAtTime(149, now + 0.48)
-  fundamental.frequency.setValueAtTime(181, now + 0.72)
-  fundamental.frequency.exponentialRampToValueAtTime(151, now + 1.48)
-  fundamental.connect(bodyGain)
+      const source = ac.createBufferSource()
+      const filter = ac.createBiquadFilter()
+      const gain = ac.createGain()
+      const output = getPitchAudioTransientOutput(ac)
+      source.buffer = buffer
+      filter.type = 'lowpass'
+      filter.frequency.value = 4200
+      filter.Q.value = 0.22
 
-  const lowBody = ac.createOscillator()
-  const lowGain = ac.createGain()
-  lowBody.type = 'triangle'
-  lowBody.frequency.setValueAtTime(88, now)
-  lowBody.frequency.exponentialRampToValueAtTime(75, now + 0.50)
-  lowBody.frequency.setValueAtTime(90, now + 0.72)
-  lowBody.frequency.exponentialRampToValueAtTime(76, now + 1.48)
-  lowGain.gain.value = 0.16
-  lowBody.connect(lowGain).connect(bodyGain)
-
-  // A very small second harmonic gives each hoot a throat/formant edge without
-  // turning the call bright or buzzy.
-  const throat = ac.createOscillator()
-  const throatGain = ac.createGain()
-  throat.type = 'sine'
-  throat.frequency.setValueAtTime(350, now)
-  throat.frequency.exponentialRampToValueAtTime(296, now + 0.48)
-  throat.frequency.setValueAtTime(360, now + 0.72)
-  throat.frequency.exponentialRampToValueAtTime(300, now + 1.48)
-  throatGain.gain.value = 0.075
-  throat.connect(throatGain).connect(bodyGain)
-
-  // Just enough filtered breath to stop the two notes feeling laboratory-clean.
-  const noiseBuffer = ac.createBuffer(1, Math.floor(ac.sampleRate * duration), ac.sampleRate)
-  const noise = noiseBuffer.getChannelData(0)
-  let smoothed = 0
-  for (let i = 0; i < noise.length; i++) {
-    const white = Math.random() * 2 - 1
-    smoothed = smoothed * 0.88 + white * 0.12
-    noise[i] = smoothed
-  }
-  const noiseSource = ac.createBufferSource()
-  const noiseFilter = ac.createBiquadFilter()
-  const noiseGain = ac.createGain()
-  noiseSource.buffer = noiseBuffer
-  noiseFilter.type = 'bandpass'
-  noiseFilter.frequency.value = 430
-  noiseFilter.Q.value = 0.82
-  noiseGain.gain.setValueAtTime(0.0001, now)
-  noiseGain.gain.exponentialRampToValueAtTime(0.0026, now + 0.09)
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.50)
-  noiseGain.gain.setValueAtTime(0.0001, now + 0.72)
-  noiseGain.gain.exponentialRampToValueAtTime(0.0028, now + 0.82)
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.46)
-  noiseSource.connect(noiseFilter).connect(noiseGain).connect(output)
-
-  fundamental.start(now)
-  lowBody.start(now)
-  throat.start(now)
-  noiseSource.start(now)
-  fundamental.stop(now + duration)
-  lowBody.stop(now + duration)
-  throat.stop(now + duration)
-  noiseSource.stop(now + duration)
+      const now = ac.currentTime
+      gain.gain.setValueAtTime(0.0001, now)
+      gain.gain.exponentialRampToValueAtTime(0.38, now + 0.12)
+      gain.gain.setValueAtTime(0.38, now + Math.max(0.15, duration - 0.55))
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
+      source.connect(filter).connect(gain).connect(output)
+      source.onended = () => {
+        try { source.disconnect() } catch { /* harmless */ }
+        try { filter.disconnect() } catch { /* harmless */ }
+        try { gain.disconnect() } catch { /* harmless */ }
+      }
+      source.start(now, slice.offset, duration)
+    })
+    .catch(() => {
+      // Silence is preferable to falling back to a synthetic animal call.
+    })
 }
-
 
 function playAbductedOwlCall(soundOn: boolean) {
   if (!soundOn) return
@@ -1147,8 +1107,12 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
           }, 12_300)
         }
         if (requested.kind === 'owl' || requested.kind === 'owl-ufo') {
+          if (soundRef.current) {
+            const owlAudio = getPitchAudio()
+            if (owlAudio) void loadPitchAudioAsset(owlAudio, 'owl-field.mp3').catch(() => undefined)
+          }
           owlTimer = window.setTimeout(() => {
-            playOwlCall(soundRef.current)
+            playOwlCall(soundRef.current, requested.id)
             owlTimer = null
           }, 5_350)
         }

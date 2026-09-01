@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
+import { loadPitchAudioAsset } from '../audio/audioAssets'
+import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { clearAmbientTrain, publishAmbientTrain } from '../world/ambientLifeSignal'
 import type { AlivePhase, AmbientLifeEvent, AmbientLifeEventKind } from './useAliveWorld'
 
@@ -17,11 +18,6 @@ function clamp01(value: number) {
 function smoothStep(value: number) {
   const t = clamp01(value)
   return t * t * (3 - 2 * t)
-}
-
-function seeded(seed: number) {
-  const n = Math.sin(seed * 12.9898 + 78.233) * 43758.5453
-  return n - Math.floor(n)
 }
 
 function Airplane({ event }: { event: AmbientLifeEvent }) {
@@ -143,109 +139,84 @@ function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
 
   useEffect(() => {
     if (kind !== 'train' || !soundOn) return
+
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
-    const output = getPitchAudioTransientOutput(audioCtx)
+
+    const output = getPitchAudioOutput(audioCtx)
     const durationSeconds = duration / 1000
     let disposed = false
-    let railTimer = 0
     let hornTimer = 0
+    let bedSource: AudioBufferSourceNode | null = null
+    let bedGain: GainNode | null = null
+    let hornSource: AudioBufferSourceNode | null = null
+    let hornGain: GainNode | null = null
 
-    // A low, narrow rolling bed: clearly audible in a quiet room, but still far
-    // below the level of full rain/snow ambience.
-    const bufferLength = Math.max(1, Math.floor(audioCtx.sampleRate * 2.2))
-    const buffer = audioCtx.createBuffer(1, bufferLength, audioCtx.sampleRate)
-    const data = buffer.getChannelData(0)
-    let brown = 0
-    for (let i = 0; i < bufferLength; i += 1) {
-      const white = Math.random() * 2 - 1
-      brown = (brown + 0.022 * white) / 1.022
-      data[i] = brown * 2.6
+    const disconnectBed = () => {
+      try { bedSource?.disconnect() } catch { /* harmless */ }
+      try { bedGain?.disconnect() } catch { /* harmless */ }
     }
 
-    const bed = audioCtx.createBufferSource()
-    const low = audioCtx.createBiquadFilter()
-    const band = audioCtx.createBiquadFilter()
-    const bedGain = audioCtx.createGain()
-    bed.buffer = buffer
-    bed.loop = true
-    low.type = 'lowpass'
-    low.frequency.value = 900
-    low.Q.value = 0.25
-    band.type = 'bandpass'
-    band.frequency.value = 290
-    band.Q.value = 0.48
-    bedGain.gain.value = 0.0001
-    bed.connect(low).connect(band).connect(bedGain).connect(output)
+    void loadPitchAudioAsset(audioCtx, 'distant-train-bed.mp3')
+      .then((buffer) => {
+        if (disposed || audioCtx.state === 'closed') return
 
-    const now = audioCtx.currentTime
-    bedGain.gain.setValueAtTime(0.0001, now)
-    bedGain.gain.linearRampToValueAtTime(0.0068, now + Math.min(3.2, durationSeconds * 0.08))
-    bedGain.gain.setValueAtTime(0.0068, now + durationSeconds * 0.30)
-    bedGain.gain.exponentialRampToValueAtTime(0.00115, now + Math.max(4, durationSeconds - 1.2))
-    bed.start()
+        bedSource = audioCtx.createBufferSource()
+        bedGain = audioCtx.createGain()
+        bedSource.buffer = buffer
+        bedSource.loop = false
+        bedSource.connect(bedGain).connect(output)
+        bedSource.onended = disconnectBed
 
-    const railTick = () => {
-      if (disposed || audioCtx.state === 'closed') return
-      const tickNow = audioCtx.currentTime
-      for (let hit = 0; hit < 2; hit += 1) {
-        const osc = audioCtx.createOscillator()
-        const filter = audioCtx.createBiquadFilter()
-        const gain = audioCtx.createGain()
-        const start = tickNow + hit * (0.115 + Math.random() * 0.035)
-        osc.type = 'triangle'
-        osc.frequency.setValueAtTime(148 + Math.random() * 34, start)
-        osc.frequency.exponentialRampToValueAtTime(78 + Math.random() * 18, start + 0.060)
-        filter.type = 'lowpass'
-        filter.frequency.value = 560
-        gain.gain.setValueAtTime(0.0001, start)
-        gain.gain.exponentialRampToValueAtTime(0.0048 + Math.random() * 0.0018, start + 0.008)
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.082)
-        osc.connect(filter).connect(gain).connect(output)
-        osc.start(start)
-        osc.stop(start + 0.10)
-      }
-      railTimer = window.setTimeout(railTick, 1_050 + Math.random() * 780)
-    }
-    railTimer = window.setTimeout(railTick, 650 + Math.random() * 700)
+        const now = audioCtx.currentTime
+        const fadeInEnd = now + Math.min(4.5, durationSeconds * 0.09)
+        const fadeOutStart = now + Math.max(5, durationSeconds - 7)
+        const audibleSeconds = Math.min(durationSeconds, Math.max(1, buffer.duration - 0.08))
+        const end = now + audibleSeconds
+        bedGain.gain.setValueAtTime(0, now)
+        bedGain.gain.linearRampToValueAtTime(0.18, fadeInEnd)
+        bedGain.gain.setValueAtTime(0.18, fadeOutStart)
+        bedGain.gain.linearRampToValueAtTime(0, end)
+        bedSource.start(now)
+        bedSource.stop(end + 0.15)
+      })
+      .catch(() => {
+        // The visual event should continue even if an optional recording fails.
+      })
 
     if (horn) {
-      const delay = hornDelay ?? Math.max(8_000, durationSeconds * (0.42 + seeded(id + 44.1) * 0.16) * 1000)
+      const delay = hornDelay ?? Math.max(8_000, duration * 0.44)
+      const hornBuffer = loadPitchAudioAsset(audioCtx, 'distant-train-horn.mp3')
       hornTimer = window.setTimeout(() => {
-        if (disposed || audioCtx.state === 'closed') return
-        const hornNow = audioCtx.currentTime
-        const hornGain = audioCtx.createGain()
-        const hornFilter = audioCtx.createBiquadFilter()
-        hornFilter.type = 'lowpass'
-        hornFilter.frequency.value = 820
-        hornGain.gain.setValueAtTime(0.0001, hornNow)
-        hornGain.gain.exponentialRampToValueAtTime(0.0082, hornNow + 0.55)
-        hornGain.gain.setTargetAtTime(0.0062, hornNow + 0.90, 0.38)
-        hornGain.gain.exponentialRampToValueAtTime(0.0001, hornNow + 4.25)
-        hornFilter.connect(hornGain).connect(output)
+        void hornBuffer
+          .then((buffer) => {
+            if (disposed || audioCtx.state === 'closed') return
 
-        const tones = [174, 232]
-        tones.forEach((frequency, index) => {
-          const osc = audioCtx.createOscillator()
-          osc.type = index === 0 ? 'sine' : 'triangle'
-          osc.frequency.value = frequency
-          osc.detune.value = index === 0 ? -4 : 5
-          osc.connect(hornFilter)
-          osc.start(hornNow)
-          osc.stop(hornNow + 4.45)
-        })
+            hornSource = audioCtx.createBufferSource()
+            hornGain = audioCtx.createGain()
+            hornSource.buffer = buffer
+            hornGain.gain.value = 0.30
+            hornSource.connect(hornGain).connect(output)
+            hornSource.onended = () => {
+              try { hornSource?.disconnect() } catch { /* harmless */ }
+              try { hornGain?.disconnect() } catch { /* harmless */ }
+            }
+            hornSource.start()
+          })
+          .catch(() => {
+            // No synthetic fallback: silence is better than an artificial horn.
+          })
       }, delay)
     }
 
     return () => {
       disposed = true
-      window.clearTimeout(railTimer)
       window.clearTimeout(hornTimer)
-      try { bed.stop() } catch { /* already stopped */ }
-      try { bed.disconnect() } catch { /* harmless */ }
-      try { low.disconnect() } catch { /* harmless */ }
-      try { band.disconnect() } catch { /* harmless */ }
-      try { bedGain.disconnect() } catch { /* harmless */ }
+      try { bedSource?.stop() } catch { /* already stopped */ }
+      try { hornSource?.stop() } catch { /* already stopped */ }
+      disconnectBed()
+      try { hornSource?.disconnect() } catch { /* harmless */ }
+      try { hornGain?.disconnect() } catch { /* harmless */ }
     }
   }, [duration, horn, hornDelay, id, kind, soundOn])
 }

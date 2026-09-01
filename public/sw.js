@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.58.4-train-character'
+const CACHE_NAME = 'this-quiet-world-v1.59.0-audio-production-ready'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {

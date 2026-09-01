@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { fireflySignal } from '../world/fireflySignal'
 import {
@@ -42,12 +43,23 @@ type Splash = {
   watery: boolean
 }
 
-export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean; speed: number; active: boolean; alive: boolean }) {
+function smoothStep(value: number) {
+  const t = Math.max(0, Math.min(1, value))
+  return t * t * (3 - 2 * t)
+}
+
+export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundOn: boolean; speed: number; active: boolean; alive: boolean; audioTest?: 'steady' | 'heavy' }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
   const aliveRef = useRef(alive)
   const soundOnRef = useRef(soundOn)
-  const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; source: AudioBufferSourceNode } | null>(null)
+  const audioRef = useRef<{
+    ctx: AudioContext
+    steadyGain: GainNode
+    heavyGain: GainNode
+    steadySource: AudioBufferSourceNode
+    heavySource: AudioBufferSourceNode
+  } | null>(null)
 
   useEffect(() => {
     activeRef.current = active
@@ -60,54 +72,71 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
   useEffect(() => {
     if (!soundOn) {
-      if (audioRef.current) {
-        const current = audioRef.current
-        current.gain.gain.setTargetAtTime(0, current.ctx.currentTime, 0.45)
+      const current = audioRef.current
+      if (current) {
+        const now = current.ctx.currentTime
+        current.steadyGain.gain.setTargetAtTime(0, now, 0.45)
+        current.heavyGain.gain.setTargetAtTime(0, now, 0.45)
         window.setTimeout(() => {
-          try { current.source.stop() } catch { /* already stopped */ }
+          try { current.steadySource.stop() } catch { /* already stopped */ }
+          try { current.heavySource.stop() } catch { /* already stopped */ }
           if (audioRef.current === current) audioRef.current = null
-        }, 700)
+        }, 800)
       }
       return
     }
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
-    const seconds = 4
-    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * seconds, audioCtx.sampleRate)
-    const data = buffer.getChannelData(0)
+    let disposed = false
 
-    let low = 0
-    let high = 0
-    for (let i = 0; i < data.length; i++) {
-      const white = Math.random() * 2 - 1
-      low = low * 0.94 + white * 0.06
-      high = white - low
-      const patter = Math.random() > 0.992 ? Math.random() * 0.45 : 0
-      data[i] = low * 0.18 + high * 0.035 + patter
-    }
+    const steadyPromise = loadPitchAudioAsset(audioCtx, 'rain-steady-loop.mp3')
+    const heavyPromise = loadPitchAudioAsset(audioCtx, 'rain-heavy-loop.mp3')
 
-    const source = audioCtx.createBufferSource()
-    source.buffer = buffer
-    source.loop = true
+    void Promise.all([steadyPromise, heavyPromise])
+      .then(([steadyBuffer, heavyBuffer]) => {
+        if (disposed || audioCtx.state === 'closed') return
 
-    const filter = audioCtx.createBiquadFilter()
-    filter.type = 'lowpass'
-    filter.frequency.value = 2100
+        const output = getPitchAudioOutput(audioCtx)
+        const steadySource = audioCtx.createBufferSource()
+        const heavySource = audioCtx.createBufferSource()
+        const steadyGain = audioCtx.createGain()
+        const heavyGain = audioCtx.createGain()
 
-    const gain = audioCtx.createGain()
-    gain.gain.value = 0
+        steadySource.buffer = steadyBuffer
+        steadySource.loop = true
+        steadySource.loopStart = 0
+        steadySource.loopEnd = steadyBuffer.duration
+        heavySource.buffer = heavyBuffer
+        heavySource.loop = true
+        heavySource.loopStart = 0
+        heavySource.loopEnd = heavyBuffer.duration
+        steadyGain.gain.value = 0
+        heavyGain.gain.value = 0
 
-    source.connect(filter).connect(gain).connect(getPitchAudioOutput(audioCtx))
-    source.start()
-    gain.gain.setTargetAtTime(0.045, audioCtx.currentTime, 1.1)
-    audioRef.current = { ctx: audioCtx, gain, source }
+        steadySource.connect(steadyGain).connect(output)
+        heavySource.connect(heavyGain).connect(output)
+
+        const now = audioCtx.currentTime
+        steadySource.start(now, Math.random() * Math.max(0.01, steadyBuffer.duration - 0.01))
+        heavySource.start(now, Math.random() * Math.max(0.01, heavyBuffer.duration - 0.01))
+        audioRef.current = { ctx: audioCtx, steadyGain, heavyGain, steadySource, heavySource }
+      })
+      .catch(() => {
+        // Real rain is optional audio; visual rain must keep working if loading fails.
+      })
 
     return () => {
-      gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.3)
+      disposed = true
+      const current = audioRef.current
+      if (!current || current.ctx !== audioCtx) return
+      const now = audioCtx.currentTime
+      current.steadyGain.gain.setTargetAtTime(0, now, 0.32)
+      current.heavyGain.gain.setTargetAtTime(0, now, 0.32)
       window.setTimeout(() => {
-        try { source.stop() } catch { /* already stopped */ }
-      }, 500)
+        try { current.steadySource.stop() } catch { /* already stopped */ }
+        try { current.heavySource.stop() } catch { /* already stopped */ }
+      }, 650)
       audioRef.current = null
     }
   }, [soundOn])
@@ -130,10 +159,12 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let driftSnapshot = new Float32Array(pitchWorld.drifts.length)
     let waterSnapshot = new Float32Array(pitchWorld.water.length)
     let idleCleared = false
-    let lastAudioGainNode: GainNode | null = null
-    let lastAudioTargetGain = Number.NaN
-    let intensity = 0.72
-    let targetIntensity = 0.72
+    let lastSteadyGainNode: GainNode | null = null
+    let lastHeavyGainNode: GainNode | null = null
+    let lastSteadyTargetGain = Number.NaN
+    let lastHeavyTargetGain = Number.NaN
+    let intensity = audioTest === 'heavy' ? 0.98 : audioTest === 'steady' ? 0.50 : 0.72
+    let targetIntensity = intensity
     let nextWeatherShift = performance.now() + 12000
     let curtainStart = performance.now() + 2200 + Math.random() * 3200
     let curtainDuration = 28000 + Math.random() * 17000
@@ -340,7 +371,7 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     }
 
     const updateWeather = (time: number) => {
-      if (time > nextWeatherShift) {
+      if (!audioTest && time > nextWeatherShift) {
         targetIntensity = 0.46 + Math.random() * 0.52
         nextWeatherShift = time + 9000 + Math.random() * 18000
       }
@@ -410,18 +441,34 @@ export function RainScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
       const currentAudio = audioRef.current
       if (currentAudio) {
-        const targetGain = soundOnRef.current ? 0.045 * audioDensity : 0
-        if (currentAudio.gain !== lastAudioGainNode) {
-          lastAudioGainNode = currentAudio.gain
-          lastAudioTargetGain = Number.NaN
+        // The steady field recording establishes the rain bed. The heavier recording
+        // only blooms when the procedural storm density/intensity actually rises,
+        // so the audio follows the same living weather rather than switching clips.
+        const heavyPresence = smoothStep((intensity - 0.58) / 0.34)
+        const steadyTarget = soundOnRef.current ? 0.34 * audioDensity : 0
+        const heavyTarget = soundOnRef.current ? 0.46 * audioDensity * heavyPresence : 0
+
+        if (currentAudio.steadyGain !== lastSteadyGainNode) {
+          lastSteadyGainNode = currentAudio.steadyGain
+          lastSteadyTargetGain = Number.NaN
         }
-        if (Math.abs(targetGain - lastAudioTargetGain) > 0.00002 || Number.isNaN(lastAudioTargetGain)) {
-          currentAudio.gain.gain.setTargetAtTime(targetGain, currentAudio.ctx.currentTime, 0.65)
-          lastAudioTargetGain = targetGain
+        if (currentAudio.heavyGain !== lastHeavyGainNode) {
+          lastHeavyGainNode = currentAudio.heavyGain
+          lastHeavyTargetGain = Number.NaN
+        }
+        if (Math.abs(steadyTarget - lastSteadyTargetGain) > 0.0005 || Number.isNaN(lastSteadyTargetGain)) {
+          currentAudio.steadyGain.gain.setTargetAtTime(steadyTarget, currentAudio.ctx.currentTime, 0.85)
+          lastSteadyTargetGain = steadyTarget
+        }
+        if (Math.abs(heavyTarget - lastHeavyTargetGain) > 0.0005 || Number.isNaN(lastHeavyTargetGain)) {
+          currentAudio.heavyGain.gain.setTargetAtTime(heavyTarget, currentAudio.ctx.currentTime, 1.15)
+          lastHeavyTargetGain = heavyTarget
         }
       } else {
-        lastAudioGainNode = null
-        lastAudioTargetGain = Number.NaN
+        lastSteadyGainNode = null
+        lastHeavyGainNode = null
+        lastSteadyTargetGain = Number.NaN
+        lastHeavyTargetGain = Number.NaN
       }
 
       if (weatherMix < 0.004 && !activeRef.current) {

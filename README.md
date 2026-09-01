@@ -14,6 +14,38 @@ For a Git-connected Netlify site, deploy the repository/root folder as-is; Netli
 
 For a manual drag-and-drop deployment, run `npm ci && npm run build` locally and upload the generated `dist` folder.
 
+## v1.59.0 — audio production readiness
+
+- Final audio lifecycle/startup pass on top of the approved real rain, heavy rain, owl, train and thunder mix.
+- When Sound is already enabled from a previous session, the complete ~7 MB production audio bank is now fetched/decoded up front so the first owl, train or thunder event cannot arrive late while its asset loads.
+- Browser autoplay policy is handled explicitly: a fresh page load may keep Web Audio suspended until one real user gesture, but the first ordinary pointer/touch/key interaction now unlocks audio in capture phase. Users never need a mute/unmute cycle just to wake the graph.
+- Autoplay-policy `AudioContext.resume()` rejection is intentionally swallowed until that legitimate user gesture rather than surfacing as an unhandled promise rejection.
+- No mix-level changes in this pass: v1.58.8 quiet-night/train levels and v1.58.9 real thunder levels are preserved exactly.
+- Fixed a pre-existing Snow startup artifact: its dormant procedural wind source now starts at true zero and only becomes audible when live snowfall density requests it.
+- Final mix audit confirms substantial headroom at full master volume; no limiter/compressor is required for launch.
+- Remaining non-blocking cleanup: Rain/Snow keep silent looping sources alive while Sound is on to preserve their long weather-release envelopes, and an already-running Train can drift slightly out of audiovisual sync after a long background suspension.
+- Production-rights check remains separate from technical readiness: source-page licenses for every shipped field recording must be retained/verified before public deployment.
+
+## v1.58.9 — real thunder
+
+- Replaced the rejected cricket-only loop with a cleaner real night ambience bed built from the stable middle of the newly supplied field recording.
+- Replaced Rain's procedural noise loop with two real field layers: steady rain as the foundation and heavy rain that blooms according to the existing live visual intensity.
+- Weather audio follows the existing gradual Alive transitions: night ambience falls away through Rain Front, steady rain rises with weather density, and the heavy layer disappears first as rain eases.
+- Replaced the normal synthetic owl hoot with real field-recorded call passages selected deterministically from several parts of the supplied owl recording. The intentionally mangled departing hoot in Owl Abduction remains procedural.
+- Train visual/audio and Ember audio remain locked and unchanged.
+- New ambience/rain/owl sources are test assets pending license/source-page confirmation before production deployment.
+- Audio audit routes: `?test=night`, `?test=rain`, `?test=heavy-rain`, `?test=owl`, and the existing `?test=train`. Turn Sound on before judging levels.
+
+## v1.58.6 — cricket cleanup trial
+
+- Replaced Alive's procedural night-air/cricket synthesis with the approved CC0 field recording. One repeated source cycle was isolated, circularly crossfaded into a seamless 2:08 loop, gently cleaned, and encoded as a lazy-loaded web asset.
+- Cricket ambience now breathes with Alive: full in Calm, softer in Clearing and Rain Front, and smoothly fades away during Rain, Snow, Cold Front and Storm rather than restarting on every phase change.
+- Replaced the train's synthetic brown-noise bed, oscillator clacks and oscillator horn with edited material from the approved CC0 distant-train field recording.
+- Split the train source into a darkened full-length environmental passage and a separate real two-blast distant horn. High frequencies were strongly reduced to suppress the source recording's bright daytime birds.
+- Real train audio uses the steady ambience bus rather than the cancellable transient bus, fixing the previous issue where an in-progress train could remain permanently silent after returning from a backgrounded tab.
+- `?test=train` now also enables the real cricket bed, with the real horn still arriving near the 12-second test mark.
+- No visual train, weather rendering, Ember audio, owl audio, event scheduling or interface behavior was changed.
+
 ## v1.58.4 — train character grounding
 
 - Visual-only train refinement; train audio is intentionally unchanged for the dedicated audio review next.

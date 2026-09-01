@@ -94,7 +94,9 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     gain.gain.value = 0
     source.connect(filter).connect(gain).connect(getPitchAudioOutput(audioCtx))
     source.start()
-    gain.gain.setTargetAtTime(0.035, audioCtx.currentTime, 1.2)
+    // Start genuinely silent. The live snowfall/audio-density loop below is the
+    // sole authority for raising Snow ambience, preventing a brief wind swell
+    // when Sound is enabled while Snow itself is inactive.
     audioRef.current = { ctx: audioCtx, gain, source }
 
     return () => {

@@ -1,96 +1,140 @@
-import { useEffect } from 'react'
-import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
+import { useEffect, useRef } from 'react'
+import { loadPitchAudioAsset } from '../audio/audioAssets'
+import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import type { AlivePhase } from './useAliveWorld'
 
-function between(min: number, max: number) {
+function nightLevel(phase: AlivePhase) {
+  if (phase === 'calm') return 0.045
+  if (phase === 'clearing') return 0.026
+  if (phase === 'rain-front') return 0.008
+  return 0
+}
+
+function randomBetween(min: number, max: number) {
   return min + Math.random() * (max - min)
 }
 
-function cricketsBelongHere(phase: AlivePhase) {
-  return phase === 'calm' || phase === 'clearing' || phase === 'rain-front'
-}
+/**
+ * TQW is quiet first. The real insect recording is now treated as a passing
+ * natural texture rather than a permanent primary soundtrack: long low-presence
+ * stretches alternate with gentle, restrained insect windows. Foreground events
+ * duck it further so ambience never fights the thing the user is noticing.
+ */
+export function AliveAmbience({
+  active,
+  soundOn,
+  phase,
+  foregroundActive = false,
+}: {
+  active: boolean
+  soundOn: boolean
+  phase: AlivePhase
+  foregroundActive?: boolean
+}) {
+  const phaseRef = useRef(phase)
+  const foregroundRef = useRef(foregroundActive)
+  const phaseGainRef = useRef<GainNode | null>(null)
+  const contextRef = useRef<AudioContext | null>(null)
+  phaseRef.current = phase
+  foregroundRef.current = foregroundActive
 
-export function AliveAmbience({ active, soundOn, phase }: { active: boolean; soundOn: boolean; phase: AlivePhase }) {
   useEffect(() => {
-    if (!active || !soundOn || !cricketsBelongHere(phase)) return
+    const audioCtx = contextRef.current
+    const phaseGain = phaseGainRef.current
+    if (!audioCtx || !phaseGain) return
+
+    const duck = foregroundActive ? 0.18 : 1
+    const target = active && soundOn ? nightLevel(phase) * duck : 0
+    phaseGain.gain.cancelScheduledValues(audioCtx.currentTime)
+    phaseGain.gain.setTargetAtTime(target, audioCtx.currentTime, foregroundActive ? 0.7 : 1.7)
+  }, [active, foregroundActive, phase, soundOn])
+
+  useEffect(() => {
+    if (!active || !soundOn) return
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
 
-    const output = getPitchAudioOutput(audioCtx)
     let disposed = false
-    let chirpTimer = 0
+    let source: AudioBufferSourceNode | null = null
+    let phaseGain: GainNode | null = null
+    let presenceGain: GainNode | null = null
+    let presenceTimer = 0
 
-    // A nearly subliminal bed of filtered night air prevents truly silent gaps.
-    const length = Math.max(1, Math.floor(audioCtx.sampleRate * 2.4))
-    const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate)
-    const data = buffer.getChannelData(0)
-    let brown = 0
-    for (let i = 0; i < length; i += 1) {
-      const white = Math.random() * 2 - 1
-      brown = (brown + 0.022 * white) / 1.022
-      data[i] = brown * 2.8
-    }
+    const schedulePresenceCycle = (startQuiet: boolean) => {
+      if (disposed || !presenceGain || audioCtx.state === 'closed') return
 
-    const bed = audioCtx.createBufferSource()
-    const bedFilter = audioCtx.createBiquadFilter()
-    const bedGain = audioCtx.createGain()
-    bed.buffer = buffer
-    bed.loop = true
-    bedFilter.type = 'bandpass'
-    bedFilter.frequency.value = 1550
-    bedFilter.Q.value = 0.42
-    bedGain.gain.value = 0.0032
-    bed.connect(bedFilter).connect(bedGain).connect(output)
-    bed.start()
-
-    const playCricket = () => {
-      if (disposed || audioCtx.state === 'closed') return
       const now = audioCtx.currentTime
-      const pulses = 3 + Math.floor(Math.random() * 3)
-      const baseFrequency = between(3100, 4250)
-      const spacing = between(0.055, 0.085)
+      const quietTarget = randomBetween(0.08, 0.15)
+      const presentTarget = randomBetween(0.28, 0.54)
 
-      for (let pulse = 0; pulse < pulses; pulse += 1) {
-        const start = now + pulse * spacing
-        const oscillator = audioCtx.createOscillator()
-        const filter = audioCtx.createBiquadFilter()
-        const gain = audioCtx.createGain()
-        oscillator.type = 'sine'
-        oscillator.frequency.setValueAtTime(baseFrequency * between(0.96, 1.04), start)
-        oscillator.frequency.exponentialRampToValueAtTime(baseFrequency * between(1.02, 1.08), start + 0.032)
-        filter.type = 'bandpass'
-        filter.frequency.value = baseFrequency
-        filter.Q.value = 4.5
-        gain.gain.setValueAtTime(0.0001, start)
-        gain.gain.exponentialRampToValueAtTime(between(0.007, 0.012), start + 0.009)
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.045)
-        oscillator.connect(filter).connect(gain).connect(getPitchAudioTransientOutput(audioCtx))
-        oscillator.start(start)
-        oscillator.stop(start + 0.055)
+      if (startQuiet) {
+        const fadeSeconds = randomBetween(7, 13)
+        presenceGain.gain.cancelScheduledValues(now)
+        presenceGain.gain.setTargetAtTime(quietTarget, now, fadeSeconds / 3.2)
+        const quietMs = randomBetween(35_000, 85_000)
+        presenceTimer = window.setTimeout(() => schedulePresenceCycle(false), quietMs)
+        return
       }
+
+      const fadeSeconds = randomBetween(7, 12)
+      presenceGain.gain.cancelScheduledValues(now)
+      presenceGain.gain.setTargetAtTime(presentTarget, now, fadeSeconds / 3.2)
+      const presentMs = randomBetween(18_000, 36_000)
+      presenceTimer = window.setTimeout(() => schedulePresenceCycle(true), presentMs)
     }
 
-    const scheduleCricket = (first = false) => {
-      const delay = first ? between(1100, 3200) : between(2500, 7600)
-      chirpTimer = window.setTimeout(() => {
-        if (disposed) return
-        playCricket()
-        scheduleCricket()
-      }, delay)
-    }
+    void loadPitchAudioAsset(audioCtx, 'night-ambience-loop.mp3')
+      .then((buffer) => {
+        if (disposed || audioCtx.state === 'closed') return
 
-    scheduleCricket(true)
+        source = audioCtx.createBufferSource()
+        presenceGain = audioCtx.createGain()
+        phaseGain = audioCtx.createGain()
+        source.buffer = buffer
+        source.loop = true
+        source.loopStart = 0
+        source.loopEnd = buffer.duration
+        presenceGain.gain.value = 0.20
+        phaseGain.gain.value = 0
+        source.connect(presenceGain).connect(phaseGain).connect(getPitchAudioOutput(audioCtx))
+
+        contextRef.current = audioCtx
+        phaseGainRef.current = phaseGain
+
+        const now = audioCtx.currentTime
+        const duck = foregroundRef.current ? 0.18 : 1
+        phaseGain.gain.setValueAtTime(0, now)
+        phaseGain.gain.setTargetAtTime(nightLevel(phaseRef.current) * duck, now, 1.8)
+        presenceGain.gain.setValueAtTime(0.22, now)
+        source.onended = () => {
+          try { source?.disconnect() } catch { /* harmless */ }
+          try { presenceGain?.disconnect() } catch { /* harmless */ }
+          try { phaseGain?.disconnect() } catch { /* harmless */ }
+        }
+        source.start(now, Math.random() * Math.max(0.01, buffer.duration - 0.01))
+
+        // Start audible enough to confirm the bed exists, then spend most of its
+        // life drifting between very low and modest presence.
+        presenceTimer = window.setTimeout(() => schedulePresenceCycle(true), randomBetween(18_000, 30_000))
+      })
+      .catch(() => {
+        // A failed optional ambience asset should never break the world.
+      })
 
     return () => {
       disposed = true
-      window.clearTimeout(chirpTimer)
-      try { bed.stop() } catch { /* already stopped */ }
-      try { bed.disconnect() } catch { /* harmless */ }
-      try { bedFilter.disconnect() } catch { /* harmless */ }
-      try { bedGain.disconnect() } catch { /* harmless */ }
+      window.clearTimeout(presenceTimer)
+      if (phaseGainRef.current === phaseGain) phaseGainRef.current = null
+      if (contextRef.current === audioCtx) contextRef.current = null
+
+      if (!source || !phaseGain || audioCtx.state === 'closed') return
+      const now = audioCtx.currentTime
+      phaseGain.gain.cancelScheduledValues(now)
+      phaseGain.gain.setTargetAtTime(0, now, 0.42)
+      try { source.stop(now + 1.8) } catch { /* already stopped */ }
     }
-  }, [active, soundOn, phase])
+  }, [active, soundOn])
 
   return null
 }

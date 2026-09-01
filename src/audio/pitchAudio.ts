@@ -76,7 +76,10 @@ export function unlockPitchAudio() {
     ensurePitchAudioMaster(pitchAudioContext)
 
     if (pitchAudioContext.state === 'suspended') {
-      void pitchAudioContext.resume()
+      // A returning session may have Sound persisted ON before the browser has
+      // received a fresh user gesture. That autoplay-policy rejection is normal;
+      // the global gesture unlock in App retries immediately on the first input.
+      void pitchAudioContext.resume().catch(() => {})
     }
     return pitchAudioContext
   } catch {

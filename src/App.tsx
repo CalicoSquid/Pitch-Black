@@ -16,6 +16,7 @@ import {
   suspendPitchAudio,
   unlockPitchAudio,
 } from './audio/pitchAudio'
+import { warmPitchAudioBank } from './audio/audioAssets'
 import { useIdleControls } from './hooks/useIdleControls'
 import { FirefliesLayer } from './layers/FirefliesLayer'
 import { GlobalMoon } from './layers/GlobalMoon'
@@ -54,7 +55,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'aurora' | 'train'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'aurora' | 'train' | 'night' | 'rain' | 'heavy-rain'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -73,7 +74,7 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'aurora' || test === 'train' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'aurora' || test === 'train' || test === 'night' || test === 'rain' || test === 'heavy-rain' ? test : null
 }
 
 function readSharedWorld(): Partial<PitchPreferences> | null {
@@ -365,30 +366,51 @@ function App() {
   }, [volume])
 
   useEffect(() => {
+    if (!soundOn || document.visibilityState !== 'visible') return
+    const audioCtx = unlockPitchAudio()
+    if (!audioCtx) return
+
+    // The complete real-audio bank is only ~7 MB. Decode it once when Sound is
+    // enabled so rare events never wait on their first network/decode round-trip.
+    // This does not start playback and is safe while autoplay policy keeps the
+    // context suspended; the first user gesture will resume the prepared graph.
+    void warmPitchAudioBank(audioCtx)
+  }, [soundOn])
+
+  useEffect(() => {
     // A hidden/backgrounded page should never keep sounding. Resume is attempted
     // when the page becomes visible again, while the gesture listeners remain as
     // a browser-policy fallback for mobile browsers that demand a fresh gesture.
+    const prepareEnabledAudio = () => {
+      if (!soundOn || document.visibilityState !== 'visible') return
+      const audioCtx = unlockPitchAudio()
+      if (audioCtx) void warmPitchAudioBank(audioCtx)
+    }
+
     const syncAudioVisibility = () => {
       if (document.visibilityState !== 'visible') {
         suspendPitchAudio()
         return
       }
-      if (soundOn) unlockPitchAudio()
+      prepareEnabledAudio()
     }
 
     const suspendForPageHide = () => suspendPitchAudio()
-    const unlockOnGesture = () => {
-      if (soundOn && document.visibilityState === 'visible') unlockPitchAudio()
-    }
+    const unlockOnGesture = () => prepareEnabledAudio()
 
     document.addEventListener('visibilitychange', syncAudioVisibility)
     window.addEventListener('pagehide', suspendForPageHide)
     window.addEventListener('pageshow', syncAudioVisibility)
-    window.addEventListener('pointerdown', unlockOnGesture, { passive: true })
-    window.addEventListener('mousedown', unlockOnGesture, { passive: true })
-    window.addEventListener('click', unlockOnGesture, { passive: true })
-    window.addEventListener('touchstart', unlockOnGesture, { passive: true })
-    window.addEventListener('keydown', unlockOnGesture)
+
+    // Capture phase makes the audio unlock happen before whichever control/world
+    // interaction the user actually intended. Sound persisted ON therefore needs
+    // one ordinary browser gesture after a fresh load, never a mute/unmute cycle.
+    document.addEventListener('pointerdown', unlockOnGesture, { capture: true, passive: true })
+    document.addEventListener('mousedown', unlockOnGesture, { capture: true, passive: true })
+    document.addEventListener('click', unlockOnGesture, { capture: true, passive: true })
+    document.addEventListener('touchstart', unlockOnGesture, { capture: true, passive: true })
+    document.addEventListener('touchend', unlockOnGesture, { capture: true, passive: true })
+    document.addEventListener('keydown', unlockOnGesture, true)
 
     syncAudioVisibility()
 
@@ -396,11 +418,12 @@ function App() {
       document.removeEventListener('visibilitychange', syncAudioVisibility)
       window.removeEventListener('pagehide', suspendForPageHide)
       window.removeEventListener('pageshow', syncAudioVisibility)
-      window.removeEventListener('pointerdown', unlockOnGesture)
-      window.removeEventListener('mousedown', unlockOnGesture)
-      window.removeEventListener('click', unlockOnGesture)
-      window.removeEventListener('touchstart', unlockOnGesture)
-      window.removeEventListener('keydown', unlockOnGesture)
+      document.removeEventListener('pointerdown', unlockOnGesture, true)
+      document.removeEventListener('mousedown', unlockOnGesture, true)
+      document.removeEventListener('click', unlockOnGesture, true)
+      document.removeEventListener('touchstart', unlockOnGesture, true)
+      document.removeEventListener('touchend', unlockOnGesture, true)
+      document.removeEventListener('keydown', unlockOnGesture, true)
     }
   }, [soundOn])
 
@@ -677,10 +700,14 @@ function App() {
       ? { moon: true, storm: false, fireflies: false }
     : testMode === 'train'
       ? { moon: true, storm: false, fireflies: false }
-    : testMode === 'owl' || testMode === 'aurora'
+    : testMode === 'owl' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
-  const displayScene: Scene = testMode === 'fog' || testMode === 'owl' || testMode === 'aurora' || testMode === 'train' ? 'calm' : scene
+  const displayScene: Scene = testMode === 'rain' || testMode === 'heavy-rain'
+    ? 'rain'
+    : testMode === 'fog' || testMode === 'owl' || testMode === 'aurora' || testMode === 'train' || testMode === 'night'
+      ? 'calm'
+      : scene
   const testFogEvent: RareEventState | null = testMode === 'fog'
     ? { kind: 'ground-fog', id: testEventId }
     : null
@@ -777,7 +804,13 @@ function App() {
           ))}
           {testFogEvent && <RareGroundEventLayer key={`test-fog-${testFogEvent.id}`} event={testFogEvent} />}
           <SnowScene active={displayScene === 'snow'} alive={aliveRuntimeOn} soundOn={soundOn} speed={aliveRuntimeOn ? weatherSpeed : 1} />
-          <RainScene active={displayScene === 'rain'} alive={aliveRuntimeOn} soundOn={soundOn} speed={aliveRuntimeOn ? weatherSpeed : 1} />
+          <RainScene
+            active={displayScene === 'rain'}
+            alive={aliveRuntimeOn}
+            soundOn={soundOn}
+            speed={aliveRuntimeOn ? weatherSpeed : 1}
+            audioTest={testMode === 'rain' ? 'steady' : testMode === 'heavy-rain' ? 'heavy' : undefined}
+          />
           <EmberScene
             active={displayScene === 'ember'}
             rainActive={displayScene === 'rain'}
@@ -797,7 +830,19 @@ function App() {
           groundStrikeChance={aliveRuntimeOn ? 0.14 : 0.42}
           depthRevealEventId={aliveRuntimeOn && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
         />
-        <AliveAmbience active={aliveRuntimeOn} soundOn={soundOn} phase={alivePhase} />
+        <AliveAmbience
+          active={aliveRuntimeOn || testMode === 'train' || testMode === 'owl' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain'}
+          soundOn={soundOn}
+          phase={testMode === 'train' || testMode === 'owl' || testMode === 'night' ? 'calm' : testMode === 'rain' || testMode === 'heavy-rain' ? 'rain' : alivePhase}
+          foregroundActive={
+            testMode === 'train' ||
+            testMode === 'owl' ||
+            ambientLifeEvents.some((event) => event.kind === 'train') ||
+            aliveRareEvents.some((event) => event.kind === 'owl' || event.kind === 'owl-ufo' || event.kind === 'great-meteor' || event.kind === 'distant-storm') ||
+            (aliveRuntimeOn && skyEvent?.kind === 'meteor-impact') ||
+            displayScene === 'ember'
+          }
+        />
       </div>
 
 
