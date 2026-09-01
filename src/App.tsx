@@ -55,7 +55,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'aurora' | 'train' | 'night' | 'rain' | 'heavy-rain'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-ufo' | 'aurora' | 'train' | 'night' | 'rain' | 'heavy-rain'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -74,7 +74,7 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'aurora' || test === 'train' || test === 'night' || test === 'rain' || test === 'heavy-rain' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-ufo' || test === 'aurora' || test === 'train' || test === 'night' || test === 'rain' || test === 'heavy-rain' ? test : null
 }
 
 function readSharedWorld(): Partial<PitchPreferences> | null {
@@ -226,11 +226,11 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'aurora' && testMode !== 'train') return
+    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'owl-ufo' && testMode !== 'aurora' && testMode !== 'train') return
     const interval = testMode === 'fog'
       ? 90_000
-      : testMode === 'owl'
-        ? 15_000
+      : testMode === 'owl' || testMode === 'owl-ufo'
+        ? 18_000
         : testMode === 'aurora'
           ? 100_000
           : testMode === 'train'
@@ -700,19 +700,19 @@ function App() {
       ? { moon: true, storm: false, fireflies: false }
     : testMode === 'train'
       ? { moon: true, storm: false, fireflies: false }
-    : testMode === 'owl' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain'
+    : testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
   const displayScene: Scene = testMode === 'rain' || testMode === 'heavy-rain'
     ? 'rain'
-    : testMode === 'fog' || testMode === 'owl' || testMode === 'aurora' || testMode === 'train' || testMode === 'night'
+    : testMode === 'fog' || testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'train' || testMode === 'night'
       ? 'calm'
       : scene
   const testFogEvent: RareEventState | null = testMode === 'fog'
     ? { kind: 'ground-fog', id: testEventId }
     : null
-  const testOwlEvent: RareEventState | null = testMode === 'owl'
-    ? { kind: 'owl', id: testEventId }
+  const testOwlEvent: RareEventState | null = testMode === 'owl' || testMode === 'owl-ufo'
+    ? { kind: testMode === 'owl-ufo' ? 'owl-ufo' : 'owl', id: testEventId }
     : null
   const testAuroraEvent: RareEventState | null = testMode === 'aurora'
     ? { kind: 'aurora', id: testEventId }
@@ -971,9 +971,9 @@ function App() {
           <span>Alive</span>
         </button>
         <div className="dock-divider" />
-        <button className={blackoutActive ? 'active' : ''} onClick={chooseBlackout} aria-label="Blackout: clear the visible world to pure black">
+        <button className={blackoutActive ? 'active' : ''} onClick={chooseBlackout} aria-label="Black: clear the visible world to pure black">
           <Circle size={17} strokeWidth={1.5} />
-          <span>Blackout</span>
+          <span>Black</span>
         </button>
         <div className="dock-divider" />
         <button className={`manual-world-control ${!aliveOn && scene === 'snow' ? 'active' : ''}`} onClick={() => chooseScene('snow')} aria-label="Snow scene">

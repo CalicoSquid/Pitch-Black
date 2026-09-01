@@ -1,3 +1,8 @@
+## v1.59.1 — Owl UFO QA hook + Black label
+
+- Added non-persistent `?test=owl-ufo` QA route to replay the locked Owl Abduction sequence, including the real initial owl call and procedural mangled departing hoot. Production rarity/scheduling is unchanged.
+- Renamed the visible control-dock label `Blackout` back to `Black`; behavior remains the same one-tap pure-black reset.
+
 # this quiet world
 
 A quiet persistent nighttime world for an unused screen.
