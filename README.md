@@ -1,3 +1,13 @@
+## v1.61.0 — world events everywhere
+
+- Decoupled the persistent nighttime event engine from Alive weather control. Rare events, Ambient Life and routine sky micro-events now continue through manually selected Rain, Snow, Ember and composed atmosphere states.
+- Alive still owns only autonomous environmental progression: choosing a manual scene keeps that scene fixed exactly as before, while returning to Alive reveals the persisted wall-clock weather phase that has continued underneath.
+- Event compatibility now follows the environment actually on screen in manual mode. Manual Rain is treated as Rain, manual Storm as Storm and manual Snow as Snow, preserving existing exclusions and interactions such as Lantern refusing Ember and using its rain behavior in manual Rain.
+- Pure Black is the sole event opt-out. Entering Black immediately clears any active sighting, but does not reset, pause or bank the long-term Aurora, Great Meteor, Airplane, Train or Lantern schedules; events due while Black is active are simply missed.
+- Routine event fireflies are now tracked separately from Alive's persistent layer state, allowing temporary firefly surges to appear in manual worlds without leaking hidden Alive weather layers. Moon halo/veil micro-events still respect a manually hidden Moon.
+- Switching between Alive and manual control no longer tears down the event scheduler, so event clocks keep their place across weather-control changes.
+- No UI layout, event renderer, rarity interval, weather duration, audio mix, Lantern animation or manual-scene behavior was redesigned in this pass.
+
 ## v1.59.1 — Owl UFO QA hook + Black label
 
 - Added non-persistent `?test=owl-ufo` QA route to replay the locked Owl Abduction sequence, including the real initial owl call and procedural mangled departing hoot. Production rarity/scheduling is unchanged.

@@ -15,3 +15,18 @@
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache"
+
+[[redirects]]
+  from = "/index.html"
+  to = "/"
+  status = 301
+
+[[redirects]]
+  from = "/about"
+  to = "/about/"
+  status = 301
+
+[[redirects]]
+  from = "/about/index.html"
+  to = "/about/"
+  status = 301

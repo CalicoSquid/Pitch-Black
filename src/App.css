@@ -1565,3 +1565,24 @@
     font-size: 10px;
   }
 }
+
+.utility-about-link {
+  display: inline-block;
+  margin: 1px 2px 0;
+  padding: 7px 0;
+  color: rgba(255,255,255,.32);
+  font-size: 9px;
+  line-height: 1.4;
+  letter-spacing: .045em;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .utility-about-link:hover { color: rgba(255,255,255,.48); }
+}
+
+.utility-about-link:focus-visible {
+  outline: 1px solid rgba(255,255,255,.13);
+  outline-offset: 3px;
+}

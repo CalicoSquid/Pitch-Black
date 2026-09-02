@@ -42,7 +42,11 @@ export type AliveSkyEvent = {
 
 type UseAliveWorldOptions = {
   enabled: boolean
+  autonomous: boolean
+  eventsEnabled: boolean
   scene: Scene
+  manualStormActive: boolean
+  manualMoonVisible: boolean
   setScene: Dispatch<SetStateAction<Scene>>
 }
 
@@ -424,10 +428,36 @@ function canHostFireflies() {
   return pitchWorld.wetness < 0.30 && averageSnowDepth() < 8
 }
 
-export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions) {
+function eventPhaseForManualWorld(scene: Scene, stormActive: boolean): AlivePhase {
+  if (stormActive) return 'storm'
+  if (scene === 'rain') return 'rain'
+  if (scene === 'snow') return 'snow'
+  return 'calm'
+}
+
+function sceneForAlivePhase(phase: AlivePhase): Scene {
+  if (phase === 'rain' || phase === 'storm') return 'rain'
+  if (phase === 'snow') return 'snow'
+  return 'calm'
+}
+
+function layersForAlivePhase(phase: AlivePhase): LayerState {
+  return { moon: true, storm: phase === 'storm', fireflies: false }
+}
+
+export function useAliveWorld({
+  enabled,
+  autonomous,
+  eventsEnabled,
+  scene,
+  manualStormActive,
+  manualMoonVisible,
+  setScene,
+}: UseAliveWorldOptions) {
   const [phase, setPhase] = useState<AlivePhase>('calm')
   const [weatherSpeed, setWeatherSpeed] = useState(1)
   const [fireflyMultiplier, setFireflyMultiplier] = useState(1)
+  const [eventFireflies, setEventFireflies] = useState(false)
   const [moonHalo, setMoonHalo] = useState(false)
   const [skyEvent, setSkyEvent] = useState<AliveSkyEvent | null>(null)
   const [aliveLayers, setAliveLayers] = useState<LayerState>(EMPTY_ALIVE_LAYERS)
@@ -439,6 +469,10 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
   const ambientLifeEventsRef = useRef<AmbientLifeEvent[]>([])
   const phaseRef = useRef<AlivePhase>('calm')
   const sceneRef = useRef<Scene>(scene)
+  const autonomousRef = useRef(autonomous)
+  const eventsEnabledRef = useRef(eventsEnabled)
+  const manualStormActiveRef = useRef(manualStormActive)
+  const manualMoonVisibleRef = useRef(manualMoonVisible)
   const timelineRef = useRef<AliveTimeline | null>(null)
   const heroScheduleRef = useRef<AliveHeroSchedule | null>(null)
   const ambientLifeScheduleRef = useRef<AmbientLifeSchedule | null>(null)
@@ -446,9 +480,18 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
   const rareEventIdRef = useRef(0)
   const ambientLifeIdRef = useRef(0)
 
-  useEffect(() => {
-    sceneRef.current = scene
-  }, [scene])
+  // Keep the event engine attached to the world rather than to Alive mode.
+  // These refs update synchronously with render so long-lived scheduler callbacks
+  // always judge the environment the user is actually looking at.
+  sceneRef.current = scene
+  autonomousRef.current = autonomous
+  eventsEnabledRef.current = eventsEnabled
+  manualStormActiveRef.current = manualStormActive
+  manualMoonVisibleRef.current = manualMoonVisible
+
+  const eventPhase = autonomous
+    ? phase
+    : eventPhaseForManualWorld(scene, manualStormActive)
 
   const patchAliveLayers = (patch: Partial<LayerState>) => {
     setAliveLayers((current) => {
@@ -475,6 +518,44 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
     })
   }, [])
 
+  // Black is the one deliberate escape hatch from the living world. Active
+  // presentations disappear immediately, but their long-term clocks are left
+  // alone so Black neither resets nor banks future sightings.
+  useEffect(() => {
+    if (eventsEnabled) return
+    rareEventsRef.current = []
+    ambientLifeEventsRef.current = []
+    setRareEvents([])
+    setAmbientLifeEvents([])
+    setSkyEvent(null)
+    setMoonHalo(false)
+    setFireflyMultiplier(1)
+    setEventFireflies(false)
+  }, [eventsEnabled])
+
+  // The Alive timeline keeps moving even while the user has taken manual
+  // control. Returning to Alive simply reveals the persisted phase that should
+  // be happening now; it does not restart the event engine or its clocks.
+  useEffect(() => {
+    if (!enabled || !autonomous) return
+    const current = timelineRef.current
+    if (!current) return
+
+    const resolved = resolveTimelineToNow(current, Date.now())
+    timelineRef.current = resolved
+    phaseRef.current = resolved.phase
+    setPhase(resolved.phase)
+    setWeatherSpeed(resolved.weatherSpeed)
+
+    const nextLayers = layersForAlivePhase(resolved.phase)
+    aliveLayersRef.current = nextLayers
+    setAliveLayers(nextLayers)
+    setMoonHalo(false)
+    setFireflyMultiplier(1)
+    setEventFireflies(false)
+    setScene(sceneForAlivePhase(resolved.phase))
+  }, [autonomous, enabled, setScene])
+
   useEffect(() => {
     if (!enabled) {
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS
@@ -483,6 +564,7 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)
       setFireflyMultiplier(1)
+      setEventFireflies(false)
       setSkyEvent(null)
       setRareEvents([])
       setAmbientLifeEvents([])
@@ -503,9 +585,18 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
     let lanternTimer = 0
     let disposed = false
 
+    const currentEventPhase = () => autonomousRef.current
+      ? phaseRef.current
+      : eventPhaseForManualWorld(sceneRef.current, manualStormActiveRef.current)
+
+    const moonVisibleForEvents = () => autonomousRef.current || manualMoonVisibleRef.current
+
     const emitSkyEvent = (event: Omit<AliveSkyEvent, 'id'>) => {
+      if (!eventsEnabledRef.current) return false
+      if (event.kind === 'moon-veil' && !moonVisibleForEvents()) return false
       eventIdRef.current += 1
       setSkyEvent({ ...event, id: eventIdRef.current })
+      return true
     }
 
     const clearRoutineMicroPresentation = () => {
@@ -513,10 +604,11 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       setSkyEvent(null)
       setMoonHalo(false)
       setFireflyMultiplier(1)
-      if (aliveLayersRef.current.fireflies) patchAliveLayers({ fireflies: false })
+      setEventFireflies(false)
     }
 
     const emitRareEvent = (kind: RareEventKind) => {
+      if (!eventsEnabledRef.current) return false
       const current = rareEventsRef.current
 
       // Hero sightings own the moment. Subtle rare events wait rather than
@@ -546,6 +638,7 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
     }
 
     const emitAmbientLifeEvent = (kind: AmbientLifeEventKind) => {
+      if (!eventsEnabledRef.current) return false
       // Ambient-life encounters are intentionally legible. Let one breathe at a time
       // rather than stacking long crossings or a ground encounter together.
       if (ambientLifeEventsRef.current.length > 0) return false
@@ -573,7 +666,7 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       const schedule = ambientLifeScheduleRef.current
       if (!schedule) return
       const now = Date.now()
-      const currentPhase = phaseRef.current
+      const currentPhase = currentEventPhase()
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
       const quietEnough = rareEventsRef.current.length === 0
       if (document.visibilityState === 'visible' && compatible && quietEnough) emitAmbientLifeEvent('airplane')
@@ -588,7 +681,7 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       const schedule = ambientLifeScheduleRef.current
       if (!schedule) return
       const now = Date.now()
-      const currentPhase = phaseRef.current
+      const currentPhase = currentEventPhase()
       const compatible = currentPhase !== 'storm'
       const heroActive = rareEventsRef.current.some((event) => isAliveHeroKind(event.kind))
       if (document.visibilityState === 'visible' && compatible && !heroActive) emitAmbientLifeEvent('train')
@@ -642,7 +735,7 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       if (Math.random() >= 0.64 || pitchWorld.wetness < 0.16) return
       fogTimer = window.setTimeout(() => {
         if (disposed) return
-        if ((phaseRef.current === 'clearing' || phaseRef.current === 'calm') && pitchWorld.wetness >= 0.10) {
+        if (autonomousRef.current && (phaseRef.current === 'clearing' || phaseRef.current === 'calm') && pitchWorld.wetness >= 0.10) {
           emitRareEvent('ground-fog')
         }
       }, between(10, 38) * SECOND)
@@ -655,36 +748,39 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       phaseRef.current = timeline.phase
       setPhase(timeline.phase)
       setWeatherSpeed(timeline.weatherSpeed)
-      setMoonHalo(false)
-      setFireflyMultiplier(1)
+      if (autonomousRef.current) {
+        setMoonHalo(false)
+        setFireflyMultiplier(1)
+        setEventFireflies(false)
+      }
 
       if (timeline.phase === 'calm') {
-        setScene('calm')
+        if (autonomousRef.current) setScene('calm')
         patchAliveLayers({ storm: false, fireflies: false })
       } else if (timeline.phase === 'rain-front') {
-        setScene('calm')
+        if (autonomousRef.current) setScene('calm')
         patchAliveLayers({ storm: false, fireflies: false })
         // A front that is already underway when Alive resumes should still look
         // like a front rather than a mysterious calm pause.
-        if (enteringLive) emitSkyEvent({ kind: 'moon-veil', duration: between(18_000, 32_000) })
+        if (enteringLive && autonomousRef.current) emitSkyEvent({ kind: 'moon-veil', duration: between(18_000, 32_000) })
       } else if (timeline.phase === 'rain') {
-        setScene('rain')
+        if (autonomousRef.current) setScene('rain')
         patchAliveLayers({ storm: false, fireflies: false })
       } else if (timeline.phase === 'storm') {
-        setScene('rain')
+        if (autonomousRef.current) setScene('rain')
         patchAliveLayers({ storm: true, fireflies: false })
       } else if (timeline.phase === 'clearing') {
-        setScene('calm')
+        if (autonomousRef.current) setScene('calm')
         patchAliveLayers({ storm: false, fireflies: false })
-        if (enteringLive && (previousPhase === 'rain' || previousPhase === 'storm')) {
+        if (enteringLive && autonomousRef.current && (previousPhase === 'rain' || previousPhase === 'storm')) {
           scheduleFogAfterRain()
         }
       } else if (timeline.phase === 'cold-front') {
-        setScene('calm')
+        if (autonomousRef.current) setScene('calm')
         patchAliveLayers({ storm: false, fireflies: false })
-        if (enteringLive) emitSkyEvent({ kind: 'moon-veil', duration: between(20_000, 38_000) })
+        if (enteringLive && autonomousRef.current) emitSkyEvent({ kind: 'moon-veil', duration: between(20_000, 38_000) })
       } else {
-        setScene('snow')
+        if (autonomousRef.current) setScene('snow')
         patchAliveLayers({ storm: false, fireflies: false })
       }
     }
@@ -712,6 +808,11 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
 
     function runMicroEvent() {
       if (disposed) return
+      if (!eventsEnabledRef.current) {
+        clearRoutineMicroPresentation()
+        scheduleMicro()
+        return
+      }
 
       // Rare events are a distinct tier above the routine Alive garnish. Let
       // the rare sighting breathe, then try the normal micro stream again.
@@ -725,8 +826,8 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       // allowing a long firefly/halo timer to be cancelled and left stuck on.
       setMoonHalo(false)
       setFireflyMultiplier(1)
-      if (aliveLayersRef.current.fireflies) patchAliveLayers({ fireflies: false })
-      const currentPhase = phaseRef.current
+      setEventFireflies(false)
+      const currentPhase = currentEventPhase()
 
       if (currentPhase === 'storm') {
         // StormLayer already provides frequent cloud motion, flashes, forks and
@@ -752,15 +853,15 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
 
       const roll = Math.random()
 
-      if (roll < 0.20) {
+      if (roll < 0.20 && moonVisibleForEvents()) {
         setMoonHalo(true)
         microEndTimer = window.setTimeout(() => setMoonHalo(false), between(24, 48) * SECOND)
       } else if (roll < 0.37 && canHostFireflies()) {
-        patchAliveLayers({ fireflies: true })
+        setEventFireflies(true)
         setFireflyMultiplier(between(1.55, 2.25))
         microEndTimer = window.setTimeout(() => {
           setFireflyMultiplier(1)
-          patchAliveLayers({ fireflies: false })
+          setEventFireflies(false)
         }, between(70, 180) * SECOND)
       } else if (roll < 0.55) {
         emitSkyEvent({
@@ -793,7 +894,11 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
 
     function runDistantStorm() {
       if (disposed) return
-      const currentPhase = phaseRef.current
+      if (!eventsEnabledRef.current) {
+        scheduleDistantStorm()
+        return
+      }
+      const currentPhase = currentEventPhase()
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
       if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent('distant-storm')) {
         scheduleDistantStorm(true)
@@ -804,7 +909,11 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
 
     function runImpossibleStar() {
       if (disposed) return
-      const currentPhase = phaseRef.current
+      if (!eventsEnabledRef.current) {
+        scheduleImpossibleStar()
+        return
+      }
+      const currentPhase = currentEventPhase()
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front'
       if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent('impossible-star')) {
         scheduleImpossibleStar(true)
@@ -815,7 +924,11 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
 
     function runOwl() {
       if (disposed) return
-      const currentPhase = phaseRef.current
+      if (!eventsEnabledRef.current) {
+        scheduleOwl()
+        return
+      }
+      const currentPhase = currentEventPhase()
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
       const owlKind: RareEventKind = Math.random() < 0.10 ? 'owl-ufo' : 'owl'
       if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent(owlKind)) {
@@ -842,7 +955,7 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
 
       // A backgrounded tab does not bank a hero event for later. The world keeps
       // living; if nobody saw that scheduled sighting, it simply becomes a missed one.
-      if (document.visibilityState !== 'visible') {
+      if (document.visibilityState !== 'visible' || !eventsEnabledRef.current) {
         heroScheduleRef.current = resolveHeroScheduleToNow(schedule, now + 1)
         scheduleHeroTimers()
         return
@@ -928,6 +1041,7 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)
       setFireflyMultiplier(1)
+      setEventFireflies(false)
       setSkyEvent(null)
       setRareEvents([])
       setAmbientLifeEvents([])
@@ -936,8 +1050,10 @@ export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions
 
   return {
     phase,
+    eventPhase,
     weatherSpeed,
     fireflyMultiplier,
+    eventFireflies,
     moonHalo,
     skyEvent,
     aliveLayers,

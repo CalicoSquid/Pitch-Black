@@ -1,0 +1,21 @@
+# This Quiet World
+
+> This Quiet World is a free, ad-free ambient sleep website and living black screen at https://thisquiet.world/.
+
+## Canonical pages
+- Home / app: https://thisquiet.world/
+- About and how it works: https://thisquiet.world/about/
+
+## What it is
+This Quiet World is designed for sleep and quiet bedside use. The screen remains predominantly black while a small nighttime world can show rain, snow, storms, embers, moonlight, fireflies, standing water, ice and occasional rare events. Optional audio includes quiet night ambience and weather sounds. It also includes a dim bedside clock and fullscreen mode.
+
+## Alive and manual control
+Alive lets weather and persistent world state change autonomously over time. Manual controls let the user choose broad environmental states directly. Occasional nighttime events belong to the world itself and continue in either case; the pure Black state suppresses them.
+
+## Product facts
+- Free to use.
+- No ads.
+- No account required.
+- Runs in a modern web browser.
+- Sound is optional.
+- Canonical domain: thisquiet.world

@@ -189,6 +189,10 @@ function App() {
   const [aliveOn, setAliveOn] = useState(initialPreferences.aliveOn)
   const aliveRuntimeOn = aliveOn && testMode === null
   const [layers, setLayers] = useState<LayerState>(initialPreferences.layers)
+  // Events belong to the world, not to Alive mode. Pure Black is the sole
+  // opt-out; a black base with Moon/Storm/Fireflies is still a composed world.
+  const manualBlack = !aliveOn && scene === 'black' && !layers.moon && !layers.storm && !layers.fireflies
+  const worldEventsActive = testMode === null && !manualBlack
   const [showUtilities, setShowUtilities] = useState(false)
   const [fullscreenOn, setFullscreenOn] = useState(false)
   const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null)
@@ -216,8 +220,10 @@ function App() {
   const controlsVisible = useIdleControls(4200)
   const {
     phase: alivePhase,
+    eventPhase,
     weatherSpeed,
     fireflyMultiplier,
+    eventFireflies,
     moonHalo,
     skyEvent,
     aliveLayers,
@@ -226,8 +232,12 @@ function App() {
     ambientLifeEvents,
     completeAmbientLifeEvent,
   } = useAliveWorld({
-    enabled: aliveRuntimeOn,
+    enabled: testMode === null,
+    autonomous: aliveRuntimeOn,
+    eventsEnabled: worldEventsActive,
     scene,
+    manualStormActive: layers.storm,
+    manualMoonVisible: layers.moon,
     setScene,
   })
 
@@ -829,7 +839,7 @@ function App() {
     >
       <div className="scene-layer">
         {(aliveRuntimeOn || testMode === 'aurora' || testMode === 'train' || testMode === 'lantern') && <AliveNightSky phase={testMode === 'train' || testMode === 'lantern' ? 'calm' : alivePhase} />}
-        {(aliveRuntimeOn || import.meta.env.DEV) && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
+        {worldEventsActive && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
           <RareSkyEventLayer
             key={`alive-rare-sky-${event.kind}-${event.id}`}
             event={event}
@@ -851,13 +861,13 @@ function App() {
             soundOn={false}
           />
         )}
-        <GlobalMoon visible={displayLayers.moon} halo={aliveRuntimeOn && moonHalo} />
-        {ambientLifeEvents.map((event) => (
+        <GlobalMoon visible={displayLayers.moon} halo={worldEventsActive && displayLayers.moon && moonHalo} />
+        {worldEventsActive && ambientLifeEvents.map((event) => (
           <AmbientLifeLayer
             key={`ambient-life-${event.kind}-${event.id}`}
             event={event}
             soundOn={soundOn}
-            phase={alivePhase}
+            phase={eventPhase}
             onComplete={completeAmbientLifeEvent}
           />
         ))}
@@ -879,7 +889,7 @@ function App() {
         )}
         <div className={`world-weather-layer ${displayScene === 'black' ? 'world-hidden' : ''}`}>
           <WorldBaseScene scene={displayScene} />
-          {aliveRuntimeOn && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (
+          {worldEventsActive && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (
             <RareGroundEventLayer
               key={`alive-rare-ground-${event.kind}-${event.id}`}
               event={event}
@@ -907,18 +917,22 @@ function App() {
             speed={1}
             soundOn={soundOn}
             visible={displayScene !== 'black'}
-            externalMeteorId={aliveRuntimeOn && skyEvent?.kind === 'meteor-impact' ? skyEvent.id : 0}
+            externalMeteorId={worldEventsActive && skyEvent?.kind === 'meteor-impact' ? skyEvent.id : 0}
           />
         </div>
-        <FirefliesLayer active={displayLayers.fireflies} visible abundance={aliveRuntimeOn ? fireflyMultiplier : 1} />
-        <AliveSkyEvents event={testMeteorEvent ?? testMoonVeilEvent ?? (aliveRuntimeOn ? skyEvent : null)} />
+        <FirefliesLayer
+          active={displayLayers.fireflies || (worldEventsActive && eventFireflies)}
+          visible
+          abundance={worldEventsActive && eventFireflies ? fireflyMultiplier : 1}
+        />
+        <AliveSkyEvents event={testMeteorEvent ?? testMoonVeilEvent ?? (worldEventsActive ? skyEvent : null)} />
         <StormLayer
           active={displayLayers.storm}
           scene={displayScene}
           soundOn={soundOn}
           groundStrikeChance={testMode === 'lantern' && lanternTest.reaction === 'lightning' ? 0 : aliveRuntimeOn ? 0.14 : 0.42}
           forceFirstGroundStrikeAfterMs={testMode === 'lantern' && lanternTest.reaction === 'lightning' ? 22_000 : undefined}
-          depthRevealEventId={aliveRuntimeOn && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
+          depthRevealEventId={worldEventsActive && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
         />
         <AliveAmbience
           active={aliveRuntimeOn || testMode === 'train' || testMode === 'owl' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain'}
@@ -1042,9 +1056,11 @@ function App() {
             fireflies, gentle night sounds, a dim bedside clock and fullscreen mode.
           </p>
           <p>
-            Choose a scene yourself, or let <strong>Alive</strong> carry the weather, water,
-            ice and rare nighttime events forward on its own. No account, feed or distractions.
+            Choose a scene yourself, or let <strong>Alive</strong> carry the weather, water and
+            ice forward on its own. The quiet nighttime events belong to the world either way.
+            No account, feed or distractions.
           </p>
+          <a className="utility-about-link" href="/about/">About &amp; how it works</a>
         </div>
       </section>
 

@@ -1,5 +1,5 @@
-const CACHE_NAME = 'this-quiet-world-v1.59.0-audio-production-ready'
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
+const CACHE_NAME = 'this-quiet-world-v1.61.0-world-events'
+const APP_SHELL = ['/', '/index.html', '/about/', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)))
@@ -26,14 +26,16 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/src/') || url.pathname.startsWith('/@') || url.pathname.startsWith('/node_modules/.vite/')) return
 
   if (request.mode === 'navigate') {
+    const isAbout = url.pathname === '/about/' || url.pathname === '/about/index.html'
+    const cacheKey = isAbout ? '/about/' : '/index.html'
     event.respondWith(
       fetch(request)
         .then((response) => {
           const copy = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy))
+          caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, copy))
           return response
         })
-        .catch(() => caches.match('/index.html')),
+        .catch(() => caches.match(cacheKey).then((cached) => cached || caches.match('/index.html'))),
     )
     return
   }
