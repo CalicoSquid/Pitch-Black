@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import { fireflySignal } from '../world/fireflySignal'
 import { lightningGroundStrikeSignal } from '../world/lightningSignal'
 import { ensureWorld, pitchWorld, snowSurfaceYAtIndex, stormSignal } from '../world/worldState'
@@ -12,14 +13,19 @@ type Flake = {
   vx: number
   drift: number
   phase: number
-  alpha: number
   depth: number
   rotation: number
   spin: number
-  seed: number
+  seedSin: number
+  seedCos: number
   arms: number
   branch: number
   presence: number
+  farRadius: number
+  renderRadius: number
+  lineWidth: number
+  farFillStyle: string
+  strokeStyle: string
 }
 
 type WindState = {
@@ -42,6 +48,34 @@ type LoosePowder = {
   swirl: number
 }
 
+const SNOW_ARM_COUNT = 6
+const SNOW_ARM_COS = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.cos((Math.PI * 2 * arm) / SNOW_ARM_COUNT))
+const SNOW_ARM_SIN = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.sin((Math.PI * 2 * arm) / SNOW_ARM_COUNT))
+const SNOW_BRANCH_PLUS_COS = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.cos((Math.PI * 2 * arm) / SNOW_ARM_COUNT + 0.72))
+const SNOW_BRANCH_PLUS_SIN = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.sin((Math.PI * 2 * arm) / SNOW_ARM_COUNT + 0.72))
+const SNOW_BRANCH_MINUS_COS = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.cos((Math.PI * 2 * arm) / SNOW_ARM_COUNT - 0.72))
+const SNOW_BRANCH_MINUS_SIN = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.sin((Math.PI * 2 * arm) / SNOW_ARM_COUNT - 0.72))
+const INTEGER_COS = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.cos(arm))
+const INTEGER_SIN = Array.from({ length: SNOW_ARM_COUNT }, (_, arm) => Math.sin(arm))
+const snowNoiseBufferCache = new WeakMap<AudioContext, AudioBuffer>()
+
+function getSnowNoiseBuffer(audioCtx: AudioContext) {
+  const cached = snowNoiseBufferCache.get(audioCtx)
+  if (cached) return cached
+
+  const seconds = 3
+  const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * seconds, audioCtx.sampleRate)
+  const data = buffer.getChannelData(0)
+  let last = 0
+  for (let i = 0; i < data.length; i++) {
+    const white = Math.random() * 2 - 1
+    last = last * 0.985 + white * 0.015
+    data[i] = last * 0.7
+  }
+  snowNoiseBufferCache.set(audioCtx, buffer)
+  return buffer
+}
+
 
 export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean; speed: number; active: boolean; alive: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -49,6 +83,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
   const aliveRef = useRef(alive)
   const soundOnRef = useRef(soundOn)
   const speedRef = useRef(speed)
+  const audioReadyNonce = usePitchAudioReadyNonce()
   const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; source: AudioBufferSourceNode } | null>(null)
 
   useEffect(() => {
@@ -79,15 +114,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
-    const seconds = 3
-    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * seconds, audioCtx.sampleRate)
-    const data = buffer.getChannelData(0)
-    let last = 0
-    for (let i = 0; i < data.length; i++) {
-      const white = Math.random() * 2 - 1
-      last = last * 0.985 + white * 0.015
-      data[i] = last * 0.7
-    }
+    const buffer = getSnowNoiseBuffer(audioCtx)
 
     const source = audioCtx.createBufferSource()
     source.buffer = buffer
@@ -111,7 +138,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       }, 500)
       audioRef.current = null
     }
-  }, [soundOn])
+  }, [soundOn, audioReadyNonce])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -146,7 +173,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let nextSnowfallShift = performance.now() + 12000
     const driftPatternPhase = Math.random() * Math.PI * 2
 
-    const snowDepthCeiling = () => Math.min(52, Math.max(28, height * 0.06))
+    let snowDepthCeiling = Math.min(52, Math.max(28, height * 0.06))
 
     const driftCapAt = (index: number, windShift = 0) => {
       const sample = index - windShift
@@ -155,14 +182,15 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       const long = Math.sin(sample * 0.018 + driftPatternPhase * 0.67 + 2.2) * 0.26
       const shaped = Math.max(0, Math.min(1, 0.50 + broad + middle + long))
       const soft = shaped * shaped * (3 - 2 * shaped)
-      const ceiling = snowDepthCeiling()
-      return 7 + soft * (ceiling - 7)
+      return 7 + soft * (snowDepthCeiling - 7)
     }
 
 
     const createFlake = (randomY = false): Flake => {
       const depth = Math.random()
       const size = 0.65 + depth * 2.5
+      const alpha = 0.12 + depth * 0.34
+      const seed = Math.random() * 1000
       return {
         x: Math.random() * width,
         y: randomY ? Math.random() * height : -16 - Math.random() * 90,
@@ -171,20 +199,26 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         vx: -0.025 + Math.random() * 0.05,
         drift: 0.05 + Math.random() * 0.25,
         phase: Math.random() * Math.PI * 2,
-        alpha: 0.12 + depth * 0.34,
         depth,
         rotation: Math.random() * Math.PI * 2,
         spin: (-0.002 + Math.random() * 0.004) * (0.5 + depth),
-        seed: Math.random() * 1000,
-        arms: 6,
+        seedSin: Math.sin(seed),
+        seedCos: Math.cos(seed),
+        arms: SNOW_ARM_COUNT,
         branch: 0.42 + Math.random() * 0.28,
         presence: Math.random(),
+        farRadius: Math.max(0.55, size * 0.48),
+        renderRadius: size * (1.25 + depth * 0.65),
+        lineWidth: Math.max(0.32, 0.36 + depth * 0.28),
+        farFillStyle: `rgba(226, 233, 239, ${alpha * 0.65})`,
+        strokeStyle: `rgba(231, 237, 242, ${alpha})`,
       }
     }
 
     const resetCanvas = () => {
       width = window.innerWidth
       height = window.innerHeight
+      snowDepthCeiling = Math.min(52, Math.max(28, height * 0.06))
       dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
@@ -463,22 +497,21 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
       if (f.depth < 0.26) {
         ctx.beginPath()
-        ctx.arc(0, 0, Math.max(0.55, f.size * 0.48), 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(226, 233, 239, ${f.alpha * 0.65})`
+        ctx.arc(0, 0, f.farRadius, 0, Math.PI * 2)
+        ctx.fillStyle = f.farFillStyle
         ctx.fill()
         ctx.restore()
         return
       }
 
-      const radius = f.size * (1.25 + f.depth * 0.65)
-      ctx.strokeStyle = `rgba(231, 237, 242, ${f.alpha})`
-      ctx.lineWidth = Math.max(0.32, 0.36 + f.depth * 0.28)
+      const radius = f.renderRadius
+      ctx.strokeStyle = f.strokeStyle
+      ctx.lineWidth = f.lineWidth
       ctx.lineCap = 'round'
 
       for (let arm = 0; arm < f.arms; arm++) {
-        const angle = (Math.PI * 2 * arm) / f.arms
-        const ex = Math.cos(angle) * radius
-        const ey = Math.sin(angle) * radius
+        const ex = SNOW_ARM_COS[arm] * radius
+        const ey = SNOW_ARM_SIN[arm] * radius
         ctx.beginPath()
         ctx.moveTo(0, 0)
         ctx.lineTo(ex, ey)
@@ -486,13 +519,12 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         if (f.depth > 0.55) {
           const bx = ex * f.branch
           const by = ey * f.branch
-          const branchLength = radius * (0.18 + ((Math.sin(f.seed + arm) + 1) * 0.04))
-          const a1 = angle + 0.72
-          const a2 = angle - 0.72
+          const seedWave = f.seedSin * INTEGER_COS[arm] + f.seedCos * INTEGER_SIN[arm]
+          const branchLength = radius * (0.18 + ((seedWave + 1) * 0.04))
           ctx.moveTo(bx, by)
-          ctx.lineTo(bx - Math.cos(a1) * branchLength, by - Math.sin(a1) * branchLength)
+          ctx.lineTo(bx - SNOW_BRANCH_PLUS_COS[arm] * branchLength, by - SNOW_BRANCH_PLUS_SIN[arm] * branchLength)
           ctx.moveTo(bx, by)
-          ctx.lineTo(bx - Math.cos(a2) * branchLength, by - Math.sin(a2) * branchLength)
+          ctx.lineTo(bx - SNOW_BRANCH_MINUS_COS[arm] * branchLength, by - SNOW_BRANCH_MINUS_SIN[arm] * branchLength)
         }
         ctx.stroke()
       }
@@ -622,13 +654,14 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       consumeLightningStrike()
       updateWind(simTime)
       const activeWind = effectiveWind()
+      const motionScale = Math.min(2.05, Math.max(0.75, 0.82 + Math.sqrt(speedNow) * 0.43))
+      const verticalWind = Math.abs(activeWind) * 0.06
 
       for (let i = 0; i < flakes.length; i++) {
         const f = flakes[i]
-        const motionScale = Math.min(2.05, Math.max(0.75, 0.82 + Math.sqrt(speedNow) * 0.43))
         const sway = Math.sin(simTime * 0.00028 + f.phase + f.y * 0.009) * f.drift
         f.x += (f.vx + sway + activeWind * (0.12 + f.depth * 0.48)) * motionScale
-        f.y += (f.vy + Math.abs(activeWind) * 0.06) * motionScale
+        f.y += (f.vy + verticalWind) * motionScale
         f.rotation += (f.spin + activeWind * 0.0006) * motionScale
 
         if (f.x < -24) f.x = width + 24

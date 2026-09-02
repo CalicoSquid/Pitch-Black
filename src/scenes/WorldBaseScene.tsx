@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
-import { ambientTrainSignal } from '../world/ambientLifeSignal'
-import { ensureWorld, pitchWorld, worldIndexAt } from '../world/worldState'
+import { ambientLanternSignal, ambientTrainSignal } from '../world/ambientLifeSignal'
+import { ensureWorld, pitchWorld, standingWaterSurfaceY, worldIndexAt } from '../world/worldState'
 import {
   createTerrainRenderCache,
   drawFrozenSkin,
   drawStandingWater,
   drawTerrain,
   invalidateTerrainRenderCache,
+  type TerrainRenderCache,
 } from '../world/worldRendering'
 
 function clamp01(value: number) {
@@ -342,6 +343,156 @@ function drawTrainTracksideCues(ctx: CanvasRenderingContext2D, width: number, he
 
   ctx.restore()
 }
+
+
+function drawAmbientLantern(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cache: TerrainRenderCache,
+) {
+  if (!ambientLanternSignal.active || ambientLanternSignal.alpha < 0.002) return
+  if (cache.groundY.length < 3 || cache.snowY.length < 3) return
+
+  const signal = ambientLanternSignal
+  const direction = signal.direction
+  const scale = signal.scale * Math.max(0.92, Math.min(1.08, width / 1200))
+  const seed = signal.id * 0.714 + direction * 0.22
+  const stepPhase = signal.walking ? signal.stepPhase : 0
+  const alternatingFoot = signal.stepIndex % 2 === 0 ? 1 : -1
+  const stepSeed = seed + signal.stepIndex * 5.37
+  const phaseSkew = (seeded(stepSeed + 11.2) - 0.5) * 0.11
+  const gaitPhase = clamp01(stepPhase + phaseSkew * Math.sin(stepPhase * Math.PI))
+  const transfer = Math.sin(gaitPhase * Math.PI)
+  const plant = Math.cos(gaitPhase * Math.PI * 2)
+  const reactionEnergy = signal.reaction === 'panic' ? 1.52 : signal.reaction === 'returning' ? 1.10 : 1
+  const swayAmount = (0.72 + seeded(stepSeed + 3.8) * 0.56) * reactionEnergy
+  const swingAmount = (0.68 + seeded(stepSeed + 7.1) * 0.72) * reactionEnergy
+  const bobAmount = (0.72 + seeded(stepSeed + 9.6) * 0.50) * reactionEnergy
+  const bodySway = alternatingFoot * transfer * swayAmount
+  const handSwing = alternatingFoot * Math.sin(gaitPhase * Math.PI + 0.16 + phaseSkew) * swingAmount
+  const handHeight = (15.6 + seeded(seed + 1.3) * 2.8) * scale
+  const lanternOffsetX = direction * (4.4 + seeded(seed + 4.4) * 1.5) + handSwing * 1.72 * scale
+  const startleJolt = signal.reaction === 'panic' && !signal.walking ? -1.9 * scale : 0
+  const lanternBob = signal.walking
+    ? (-transfer * 1.28 * bobAmount + plant * 0.18) * scale
+    : 0.18 * Math.sin(signal.progress * Math.PI * 7.3 + seed) + startleJolt
+  const centerX = signal.x
+  const index = worldIndexAt(centerX, width)
+  const groundY = cache.groundY[index]
+  const snowY = cache.snowY[index]
+  const waterY = standingWaterSurfaceY(height)
+  const pooled = Number.isFinite(waterY) && groundY > waterY + 0.25
+  const waterFill = pooled ? Math.max(0, Math.min(1, pitchWorld.water[index] * 0.55 + pitchWorld.waterLevel * 1.18)) : 0
+  const iceFill = pooled ? Math.max(0, Math.min(1, pitchWorld.ice[index])) : 0
+  let surfaceY = snowY
+  if (pooled && Math.max(waterFill, iceFill) > 0.05) surfaceY = Math.min(surfaceY, waterY)
+
+  const lanternX = centerX + lanternOffsetX
+  const lanternY = surfaceY - handHeight + lanternBob
+  const alpha = signal.alpha
+  const warmAlpha = alpha * (0.74 + seeded(seed + 5.7) * 0.12)
+  const coreRadius = (1.85 + seeded(seed + 8.2) * 0.24) * scale
+  const glowRadius = coreRadius * 5.4
+
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  if (pooled && Math.max(waterFill, iceFill) > 0.05) {
+    const reflectAlpha = alpha * (waterFill > iceFill ? 0.30 + waterFill * 0.18 : 0.15 + iceFill * 0.10)
+    const reflectedY = waterY + (waterY - lanternY) * (waterFill > iceFill ? 0.94 : 0.84)
+    const reflectRadius = glowRadius * (waterFill > iceFill ? 0.58 : 0.40)
+    const reflectWidth = (4.8 + scale * 2.5) * (waterFill > iceFill ? 1 : 0.92)
+
+    const reflectGlow = ctx.createRadialGradient(lanternX, reflectedY, 0, lanternX, reflectedY, reflectRadius)
+    reflectGlow.addColorStop(0, `rgba(255, 214, 148, ${reflectAlpha * 0.20})`)
+    reflectGlow.addColorStop(0.55, `rgba(236, 156, 72, ${reflectAlpha * 0.08})`)
+    reflectGlow.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = reflectGlow
+    ctx.beginPath()
+    ctx.ellipse(lanternX, reflectedY, reflectWidth, Math.max(2.4, reflectRadius * 0.82), 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Keep the reflection watery: broken horizontal glints only. A vertical line
+    // reads as a glowing pole beneath the lantern rather than reflected light.
+    const glintCount = waterFill > iceFill ? 3 : 2
+    for (let glint = 0; glint < glintCount; glint += 1) {
+      const depth = glint / Math.max(1, glintCount - 1)
+      const glintY = waterY + 0.35 + depth * reflectRadius * 0.78
+      const wobble = Math.sin(signal.progress * Math.PI * 13.2 + seed + glint * 2.1) * (0.8 + depth * 0.9) * scale
+      const halfWidth = reflectWidth * (0.62 - depth * 0.17)
+      ctx.strokeStyle = waterFill > iceFill
+        ? `rgba(245, 193, 116, ${reflectAlpha * (0.42 - depth * 0.12)})`
+        : `rgba(218, 229, 237, ${reflectAlpha * (0.24 - depth * 0.07)})`
+      ctx.lineWidth = waterFill > iceFill ? 0.62 : 0.48
+      ctx.beginPath()
+      ctx.moveTo(lanternX - halfWidth + wobble, glintY)
+      ctx.lineTo(lanternX - halfWidth * 0.18 + wobble * 0.35, glintY)
+      ctx.moveTo(lanternX + halfWidth * 0.12 + wobble * 0.18, glintY)
+      ctx.lineTo(lanternX + halfWidth * 0.78 + wobble, glintY)
+      ctx.stroke()
+    }
+  }
+
+  const groundGlow = ctx.createRadialGradient(centerX + direction * 1.4 * scale, surfaceY + 0.8, 0, centerX + direction * 1.4 * scale, surfaceY + 0.8, 14.5 * scale)
+  groundGlow.addColorStop(0, `rgba(255, 193, 116, ${warmAlpha * 0.082})`)
+  groundGlow.addColorStop(0.52, `rgba(229, 144, 67, ${warmAlpha * 0.032})`)
+  groundGlow.addColorStop(1, 'rgba(0, 0, 0, 0)')
+  ctx.fillStyle = groundGlow
+  ctx.beginPath()
+  ctx.ellipse(centerX + direction * 1.4 * scale, surfaceY + 0.8, 14.5 * scale, 4.6 * scale, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // The carrier stays invisible. A narrow moving bite out of the lantern aura is
+  // enough to imply a body occupying space without ever drawing a person sprite.
+  ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.34})`
+  ctx.beginPath()
+  ctx.ellipse(
+    centerX - direction * 0.55 * scale + bodySway * 0.32 * scale,
+    surfaceY - handHeight * 0.48,
+    2.25 * scale,
+    handHeight * 0.50,
+    direction * -0.035,
+    0,
+    Math.PI * 2,
+  )
+  ctx.fill()
+
+  ctx.strokeStyle = `rgba(31, 24, 14, ${alpha * 0.58})`
+  ctx.lineWidth = 0.72 * scale
+  ctx.beginPath()
+  ctx.moveTo(centerX + direction * 0.35 * scale, surfaceY - handHeight * 0.60)
+  ctx.lineTo(lanternX - direction * 0.20 * scale, lanternY + coreRadius * 0.55)
+  ctx.stroke()
+
+  ctx.strokeStyle = `rgba(40, 30, 18, ${alpha * 0.56})`
+  ctx.lineWidth = 0.72 * scale
+  ctx.beginPath()
+  ctx.moveTo(lanternX - coreRadius * 0.72, lanternY - coreRadius * 0.92)
+  ctx.quadraticCurveTo(lanternX, lanternY - coreRadius * 1.95, lanternX + coreRadius * 0.72, lanternY - coreRadius * 0.92)
+  ctx.stroke()
+
+  const glow = ctx.createRadialGradient(lanternX, lanternY, 0, lanternX, lanternY, glowRadius)
+  glow.addColorStop(0, `rgba(255, 236, 194, ${warmAlpha * 0.88})`)
+  glow.addColorStop(0.22, `rgba(255, 196, 116, ${warmAlpha * 0.46})`)
+  glow.addColorStop(0.58, `rgba(236, 141, 56, ${warmAlpha * 0.12})`)
+  glow.addColorStop(1, 'rgba(0, 0, 0, 0)')
+  ctx.fillStyle = glow
+  ctx.beginPath()
+  ctx.arc(lanternX, lanternY, glowRadius, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.fillStyle = `rgba(28, 20, 10, ${alpha * 0.62})`
+  ctx.fillRect(lanternX - coreRadius * 0.92, lanternY - coreRadius * 1.10, coreRadius * 1.84, coreRadius * 2.1)
+  ctx.fillStyle = `rgba(255, 204, 126, ${warmAlpha})`
+  ctx.fillRect(lanternX - coreRadius * 0.46, lanternY - coreRadius * 0.60, coreRadius * 0.92, coreRadius * 1.22)
+  ctx.fillStyle = `rgba(255, 244, 220, ${warmAlpha * 0.72})`
+  ctx.fillRect(lanternX - coreRadius * 0.14, lanternY - coreRadius * 0.28, coreRadius * 0.28, coreRadius * 0.56)
+
+  ctx.restore()
+}
+
 function drawTrainSnowReflection(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -463,7 +614,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
           ctx.clearRect(0, 0, width, height)
           idleCleared = true
         }
-        if (!ambientTrainSignal.active && pitchWorld.waterLevel <= 0.0001 && pitchWorld.wetness <= 0.001) {
+        if (!ambientTrainSignal.active && !ambientLanternSignal.active && pitchWorld.waterLevel <= 0.0001 && pitchWorld.wetness <= 0.001) {
           cancelAnimationFrame(raf)
           idleTimer = window.setTimeout(() => {
             raf = requestAnimationFrame(draw)
@@ -481,6 +632,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
       drawStandingWater(ctx, width, height, Math.max(0.20, light), terrainCache.groundY)
       drawAmbientTrain(ctx, width, height)
       drawTrainTracksideCues(ctx, width, height)
+      drawAmbientLantern(ctx, width, height, terrainCache)
     }
 
     resize()

@@ -7,6 +7,27 @@ let pitchAudioMuteGain: GainNode | null = null
 let pitchAudioTransientGain: GainNode | null = null
 let pitchAudioMuted = false
 let pitchAudioVolume = 1
+let pitchAudioNeedsReadySignal = true
+
+export const PITCH_AUDIO_READY_EVENT = 'tqw:pitch-audio-ready'
+
+function signalPitchAudioReady(audioCtx: AudioContext) {
+  if (!pitchAudioNeedsReadySignal || audioCtx.state !== 'running') return
+  pitchAudioNeedsReadySignal = false
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(PITCH_AUDIO_READY_EVENT))
+
+  // Let React rebuild the persistent loop sources before reopening the master bus.
+  // This prevents a stale pre-background rain/storm gain from leaking for a frame
+  // when the AudioContext resumes.
+  const outputGain = pitchAudioOutputGain
+  if (outputGain) {
+    window.setTimeout(() => {
+      if (pitchAudioContext !== audioCtx || audioCtx.state !== 'running') return
+      outputGain.gain.cancelScheduledValues(audioCtx.currentTime)
+      outputGain.gain.setTargetAtTime(pitchAudioVolume, audioCtx.currentTime, 0.045)
+    }, 90)
+  }
+}
 
 function ensurePitchAudioMaster(audioCtx: AudioContext) {
   if (!pitchAudioOutputGain || !pitchAudioFadeGain || !pitchAudioMuteGain) {
@@ -71,15 +92,24 @@ export function unlockPitchAudio() {
       pitchAudioFadeGain = null
       pitchAudioMuteGain = null
       pitchAudioTransientGain = null
+      pitchAudioNeedsReadySignal = true
     }
 
-    ensurePitchAudioMaster(pitchAudioContext)
+    const masterOutput = ensurePitchAudioMaster(pitchAudioContext)
+    if (pitchAudioNeedsReadySignal && pitchAudioContext.state !== 'running') {
+      masterOutput.gain.value = 0
+    }
 
-    if (pitchAudioContext.state === 'suspended') {
+    if (pitchAudioContext.state === 'running') {
+      signalPitchAudioReady(pitchAudioContext)
+    } else if (pitchAudioContext.state === 'suspended') {
       // A returning session may have Sound persisted ON before the browser has
       // received a fresh user gesture. That autoplay-policy rejection is normal;
       // the global gesture unlock in App retries immediately on the first input.
-      void pitchAudioContext.resume().catch(() => {})
+      const contextToResume = pitchAudioContext
+      void contextToResume.resume()
+        .then(() => signalPitchAudioReady(contextToResume))
+        .catch(() => {})
     }
     return pitchAudioContext
   } catch {
@@ -89,10 +119,15 @@ export function unlockPitchAudio() {
 
 export function suspendPitchAudio() {
   const audioCtx = pitchAudioContext
+  pitchAudioNeedsReadySignal = true
   cancelPitchAudioTransients()
   if (!audioCtx || audioCtx.state !== 'running') return
 
   try {
+    if (pitchAudioOutputGain) {
+      pitchAudioOutputGain.gain.cancelScheduledValues(audioCtx.currentTime)
+      pitchAudioOutputGain.gain.setValueAtTime(0, audioCtx.currentTime)
+    }
     void audioCtx.suspend()
   } catch {
     // Browser audio lifecycle support varies; suspension failure is harmless.
@@ -127,7 +162,7 @@ export function setPitchAudioVolume(volume: number) {
   pitchAudioVolume = Math.min(1, Math.max(0, volume))
   const audioCtx = pitchAudioContext
   const outputGain = pitchAudioOutputGain
-  if (!audioCtx || !outputGain) return
+  if (!audioCtx || !outputGain || pitchAudioNeedsReadySignal) return
 
   outputGain.gain.cancelScheduledValues(audioCtx.currentTime)
   outputGain.gain.setTargetAtTime(pitchAudioVolume, audioCtx.currentTime, 0.045)

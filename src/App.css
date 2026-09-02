@@ -1492,3 +1492,76 @@
 @media (prefers-reduced-motion: reduce) {
   .ambient-airplane { display: none; }
 }
+
+
+/* v1.60.2 — conservative UI/UX polish. No control-model changes: this only
+   tightens hierarchy, keyboard behavior and touch comfort around the existing UI. */
+.control-dock:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.control-dock button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.13);
+}
+
+.control-dock button.active {
+  color: rgba(255,255,255,.70);
+}
+
+.control-dock .alive-control.active {
+  background: rgba(255,255,255,.055);
+  color: rgba(255,255,255,.74);
+}
+
+/* Black is a manual choice just like the scene and atmosphere controls. It
+   should recede while Alive owns the world instead of looking independently live. */
+.control-dock.alive-running .manual-world-control {
+  opacity: .40;
+}
+
+.control-dock.alive-running .manual-world-control:hover,
+.control-dock.alive-running .manual-world-control:focus-visible {
+  opacity: .90;
+}
+
+.sleep-timer-options button {
+  min-height: 36px;
+}
+
+.volume-row input[type='range'] {
+  height: 28px;
+}
+
+.utility-toggle-row,
+.utility-actions button {
+  min-height: 40px;
+}
+
+.utility-panel button:focus-visible,
+.utility-panel input:focus-visible {
+  outline: 1px solid rgba(255,255,255,.13);
+  outline-offset: 2px;
+}
+
+.utility-about p {
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+@media (max-width: 620px) {
+  .sleep-timer-options button {
+    min-height: 38px;
+  }
+
+  .utility-toggle-row,
+  .utility-actions button {
+    min-height: 42px;
+  }
+
+  .utility-about p {
+    font-size: 10px;
+  }
+}

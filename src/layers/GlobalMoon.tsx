@@ -62,6 +62,11 @@ export function GlobalMoon({ visible, halo = false }: { visible: boolean; halo?:
           </clipPath>
         </defs>
 
+        {/* The physical lunar disc occludes the star field even on the unlit side.
+            Without this matte, stars behind the SVG read as if they are painted
+            on top of the moon during crescent / quarter phases. */}
+        <circle cx="100" cy="100" r="96" fill="rgba(0, 0, 0, 0.992)" />
+
         {/* Faint earthshine keeps the lunar body readable without faking the phase. */}
         <g clipPath="url(#moon-disc-clip)" opacity="0.075">
           <image href="/moon-texture.png" x="4" y="4" width="192" height="192" preserveAspectRatio="xMidYMid slice" />

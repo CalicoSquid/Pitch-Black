@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
-import { publishLightningGroundStrike } from '../world/lightningSignal'
+import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
+import { publishLightningGroundStrike, publishLightningIgnition } from '../world/lightningSignal'
 import {
   ensureWorld,
   pitchWorld,
@@ -395,19 +396,23 @@ export function StormLayer({
   scene,
   soundOn,
   groundStrikeChance = 0.42,
+  forceFirstGroundStrikeAfterMs,
   depthRevealEventId = 0,
 }: {
   active: boolean
   scene: Scene
   soundOn: boolean
   groundStrikeChance?: number
+  forceFirstGroundStrikeAfterMs?: number
   depthRevealEventId?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const activeRef = useRef(active)
   const sceneRef = useRef(scene)
+  const audioReadyNonce = usePitchAudioReadyNonce()
   const soundOnRef = useRef(soundOn)
   const groundStrikeChanceRef = useRef(groundStrikeChance)
+  const forceFirstGroundStrikeAfterMsRef = useRef(forceFirstGroundStrikeAfterMs)
   const depthRevealEventIdRef = useRef(depthRevealEventId)
   const rumbleRef = useRef<{
     ctx: AudioContext
@@ -437,6 +442,10 @@ export function StormLayer({
   useEffect(() => {
     groundStrikeChanceRef.current = Math.max(0, Math.min(1, groundStrikeChance))
   }, [groundStrikeChance])
+
+  useEffect(() => {
+    forceFirstGroundStrikeAfterMsRef.current = forceFirstGroundStrikeAfterMs
+  }, [forceFirstGroundStrikeAfterMs])
 
   useEffect(() => {
     depthRevealEventIdRef.current = depthRevealEventId
@@ -520,7 +529,7 @@ export function StormLayer({
       }, 3600)
       if (rumbleRef.current?.deepSource === deepSource) rumbleRef.current = null
     }
-  }, [active, soundOn])
+  }, [active, soundOn, audioReadyNonce])
 
   useEffect(() => {
     if (!active || !soundOn) return
@@ -541,7 +550,7 @@ export function StormLayer({
     return () => {
       cancelled = true
     }
-  }, [active, soundOn])
+  }, [active, soundOn, audioReadyNonce])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -568,6 +577,7 @@ export function StormLayer({
     let gustTarget = 0
     let nextGust = performance.now() + 3600
     let nextStrike = performance.now() + 5200 + Math.random() * 7600
+    let forcedGroundStrikeDone = false
     let queuedStrikeBurst = 0
     let nextDistantThunder = performance.now() + 6200 + Math.random() * 6200
     let flashStarted = -1
@@ -646,28 +656,31 @@ export function StormLayer({
       const assets = getThunderAssets(audioCtx)
       if (!assets) return
 
-      // Strong grounded strikes occasionally earn the heavier, sustained recording.
-      // Most strikes use the more dynamic distant roll so Storm stays believable
-      // without turning a sleep scene into a sequence of jump scares.
-      const useClose = thunderTest === 'close' || (thunderTest !== 'distant' && strength > 0.88 && Math.random() < 0.46)
+      // The visual strike's strength is its apparent proximity. Small/thin bolts
+      // now produce clearly quieter, later, duller thunder; large nearby bolts are
+      // louder and arrive quickly. This gives the eye and ear one shared distance cue.
+      const proximity = clamp01((strength - 0.40) / 0.60)
+      const presence = Math.pow(proximity, 1.55)
+      const useClose = thunderTest === 'close'
+        || (thunderTest !== 'distant' && proximity > 0.80 && Math.random() < 0.62)
       const buffer = useClose ? assets.close : assets.distant
-      const delay = useClose
-        ? 0.10 + Math.random() * 0.18
-        : 0.18 + (1 - strength) * 0.34 + Math.random() * 0.24
+      const delay = thunderTest === 'close'
+        ? 0.08 + Math.random() * 0.10
+        : 0.16 + (1 - proximity) * 1.55 + Math.random() * 0.22
       const gainValue = useClose
-        ? 0.052 + strength * 0.018
-        : 0.105 + strength * 0.030
+        ? 0.070 + presence * 0.050
+        : 0.026 + presence * 0.084
       const rate = useClose
-        ? 0.96 + Math.random() * 0.035
-        : 0.94 + Math.random() * 0.075
+        ? 0.955 + proximity * 0.035 + Math.random() * 0.018
+        : 0.905 + proximity * 0.075 + Math.random() * 0.045
       const cutoff = useClose
-        ? 3000 + Math.random() * 700
-        : 1850 + strength * 650 + Math.random() * 350
+        ? 2350 + proximity * 1550 + Math.random() * 280
+        : 1050 + proximity * 1500 + Math.random() * 260
 
       playRealThunder(audioCtx, buffer, delay, gainValue, rate, cutoff)
     }
 
-    const distantThunder = (ambientOnly = false) => {
+    const distantThunder = (ambientOnly = false, strikeStrength?: number) => {
       if (!soundOnRef.current) return
       if (ambientOnly && performance.now() - lastThunderPlayedAt < 11_500) return
 
@@ -676,14 +689,16 @@ export function StormLayer({
       const assets = getThunderAssets(audioCtx)
       if (!assets) return
 
-      const strength = 0.68 + Math.random() * 0.25
+      const strength = strikeStrength ?? (0.42 + Math.random() * 0.28)
+      const proximity = clamp01((strength - 0.34) / 0.66)
+      const presence = Math.pow(proximity, 1.45)
       playRealThunder(
         audioCtx,
         assets.distant,
-        0.30 + Math.random() * 0.85,
-        0.078 + strength * 0.034,
-        0.93 + Math.random() * 0.09,
-        1450 + strength * 650 + Math.random() * 260,
+        ambientOnly ? 0.55 + Math.random() * 1.10 : 0.35 + (1 - proximity) * 1.35 + Math.random() * 0.32,
+        ambientOnly ? 0.036 + presence * 0.032 : 0.024 + presence * 0.076,
+        0.90 + proximity * 0.07 + Math.random() * 0.035,
+        900 + proximity * 1350 + Math.random() * 240,
       )
     }
 
@@ -747,6 +762,11 @@ export function StormLayer({
       }
 
       publishLightningGroundStrike(idx, x, strength, strikeScene)
+      if (strikeScene === 'snow' || strikeScene === 'rain') {
+        // This is the stronger semantic event: the strike has actually seeded
+        // the persistent ember field, rather than merely touching terrain.
+        publishLightningIgnition(idx, x, strength, strikeScene)
+      }
       saveWorld()
     }
 
@@ -766,11 +786,24 @@ export function StormLayer({
 
     const strike = (time: number) => {
       const targetX = width * (0.14 + Math.random() * 0.72)
-      const grounded = thunderTest === 'close' ? true : Math.random() < groundStrikeChanceRef.current
+      const forcedDelay = forceFirstGroundStrikeAfterMsRef.current
+      const forceGroundNow = !forcedGroundStrikeDone
+        && typeof forcedDelay === 'number'
+        && forcedDelay >= 0
+        && time - activationTime >= forcedDelay
+      const suppressNaturalGroundBeforeForced = typeof forcedDelay === 'number' && forcedDelay >= 0 && !forcedGroundStrikeDone
+      const grounded = thunderTest === 'close'
+        ? true
+        : forceGroundNow
+          ? true
+          : suppressNaturalGroundBeforeForced
+            ? false
+            : Math.random() < groundStrikeChanceRef.current
+      if (forceGroundNow) forcedGroundStrikeDone = true
       const targetY = grounded
         ? surfaceYAt(targetX, width, height)
         : height * between(0.28, 0.62)
-      const strength = 0.70 + Math.random() * 0.30
+      const strength = 0.40 + Math.random() * 0.60
       const startX = targetX + (Math.random() - 0.5) * width * 0.16
       const segments = 9
 
@@ -784,7 +817,7 @@ export function StormLayer({
       }
       main.push({ x: targetX, y: targetY })
 
-      boltPaths = [{ points: main, alpha: 0.48, width: 0.68 }]
+      boltPaths = [{ points: main, alpha: 0.30 + strength * 0.26, width: 0.36 + strength * 0.62 }]
       const forkCount = Math.random() < 0.78 ? 1 + (Math.random() < 0.38 ? 1 : 0) + (Math.random() < 0.16 ? 1 : 0) : 0
       for (let branch = 0; branch < forkCount; branch++) {
         const originIndex = 2 + Math.floor(Math.random() * Math.max(1, main.length - 5))
@@ -799,11 +832,15 @@ export function StormLayer({
           by += (targetY - origin.y) * (0.11 + Math.random() * 0.14)
           branchPoints.push({ x: bx, y: Math.min(targetY - 10, by) })
         }
-        boltPaths.push({ points: branchPoints, alpha: 0.28 + Math.random() * 0.14, width: 0.34 + Math.random() * 0.18 })
+        boltPaths.push({
+          points: branchPoints,
+          alpha: (0.20 + Math.random() * 0.13) * (0.72 + strength * 0.34),
+          width: (0.25 + Math.random() * 0.16) * (0.78 + strength * 0.40),
+        })
       }
 
       flashStarted = time
-      flashPower = 0.92 + strength * 0.16
+      flashPower = 0.70 + strength * 0.38
       boltUntil = time + 210
       // Only an occasional strong strike exposes the hidden landscape. The
       // cooldown prevents a burst of lightning from repeating the trick.
@@ -815,7 +852,7 @@ export function StormLayer({
         strikeWorld(targetX, strength)
         thunder(strength)
       } else {
-        distantThunder()
+        distantThunder(false, strength)
       }
     }
 
@@ -1026,14 +1063,45 @@ export function StormLayer({
       }
     }
 
+    const resetTransientStormFrame = () => {
+      flashStarted = -1
+      flashPower = 0
+      depthRevealStarted = -1
+      depthRevealPower = 0
+      forcedVisualUntil = -1
+      boltUntil = -1
+      boltPaths = []
+      queuedStrikeBurst = 0
+      stormSignal.flash = 0
+      ctx.clearRect(0, 0, width, height)
+      canvasCleared = true
+    }
+
+    const syncStormVisibility = () => {
+      // Browsers can freeze canvas/audio callbacks at arbitrary points while a tab
+      // is hidden. Never resume the literal last lightning frame when returning.
+      resetTransientStormFrame()
+      if (document.visibilityState === 'visible') {
+        const now = performance.now()
+        last = now
+        lastCloudFrame = now
+        nextStrike = now + 5200 + Math.random() * 7600
+        nextDistantThunder = now + 6200 + Math.random() * 6200
+      }
+    }
+
     resize()
     window.addEventListener('resize', resize)
+    document.addEventListener('visibilitychange', syncStormVisibility)
+    window.addEventListener('pageshow', syncStormVisibility)
     raf = requestAnimationFrame(draw)
 
     return () => {
       cancelAnimationFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      document.removeEventListener('visibilitychange', syncStormVisibility)
+      window.removeEventListener('pageshow', syncStormVisibility)
       stormSignal.mix = 0
       stormSignal.wind = 0
       stormSignal.flash = 0

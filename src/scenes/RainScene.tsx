@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import { fireflySignal } from '../world/fireflySignal'
+import { ambientLanternSignal } from '../world/ambientLifeSignal'
 import {
   ensureWorld,
   pitchWorld,
@@ -43,6 +45,19 @@ type Splash = {
   watery: boolean
 }
 
+type UmbrellaFrame = {
+  active: boolean
+  carrierX: number
+  carrierSurfaceY: number
+  scale: number
+  canopyX: number
+  canopyCrownY: number
+  canopyRadiusX: number
+  canopyDrop: number
+  alpha: number
+  id: number
+}
+
 function smoothStep(value: number) {
   const t = Math.max(0, Math.min(1, value))
   return t * t * (3 - 2 * t)
@@ -54,6 +69,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
   const aliveRef = useRef(alive)
   const soundOnRef = useRef(soundOn)
   const speedRef = useRef(speed)
+  const audioReadyNonce = usePitchAudioReadyNonce()
   const audioRef = useRef<{
     ctx: AudioContext
     steadyGain: GainNode
@@ -144,7 +160,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       }, 650)
       audioRef.current = null
     }
-  }, [soundOn])
+  }, [soundOn, audioReadyNonce])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -180,6 +196,18 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
     let gustDuration = 3000 + Math.random() * 5000
     let gustDirection = Math.random() < 0.5 ? -1 : 1
     let gustStrength = 0.18 + Math.random() * 0.20
+    const umbrellaFrame: UmbrellaFrame = {
+      active: false,
+      carrierX: 0,
+      carrierSurfaceY: 0,
+      scale: 1,
+      canopyX: 0,
+      canopyCrownY: 0,
+      canopyRadiusX: 1,
+      canopyDrop: 0,
+      alpha: 0,
+      id: 0,
+    }
 
     const waterline = () => worldBaseY(height)
 
@@ -277,22 +305,146 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       }
     }
 
-    const drawWater = () => {
-      // The old bottom-of-screen water strip is intentionally gone.
-      // Persistent pools are now rendered against the raised terrain surface.
+    const updateUmbrellaFrame = () => {
+      const active = ambientLanternSignal.active && ambientLanternSignal.alpha > 0.02
+      umbrellaFrame.active = active
+      if (!active) return umbrellaFrame
+
+      const carrierX = ambientLanternSignal.x
+      const carrierSurfaceY = surfaceYAt(carrierX, width, height)
+      const scale = ambientLanternSignal.scale * Math.max(0.92, Math.min(1.08, width / 1200))
+      umbrellaFrame.carrierX = carrierX
+      umbrellaFrame.carrierSurfaceY = carrierSurfaceY
+      umbrellaFrame.scale = scale
+      umbrellaFrame.canopyX = carrierX - ambientLanternSignal.direction * 1.0 * scale
+      umbrellaFrame.canopyCrownY = carrierSurfaceY - 34.5 * scale
+      umbrellaFrame.canopyRadiusX = 22.5 * scale
+      umbrellaFrame.canopyDrop = 6.2 * scale
+      umbrellaFrame.alpha = ambientLanternSignal.alpha
+      umbrellaFrame.id = ambientLanternSignal.id
+      return umbrellaFrame
     }
 
-    const drawDrop = (drop: RainDrop, curtainLift: number, ambientGust: number) => {
-      const stormWind = stormSignal.wind * stormSignal.mix
+    const canopyYAt = (umbrella: UmbrellaFrame, x: number) => {
+      const nx = (x - umbrella.canopyX) / Math.max(1, umbrella.canopyRadiusX)
+      if (Math.abs(nx) > 1) return Number.POSITIVE_INFINITY
+      return umbrella.canopyCrownY + umbrella.canopyDrop * (1 - Math.sqrt(Math.max(0, 1 - nx * nx)))
+    }
+
+    const drawDrop = (
+      drop: RainDrop,
+      curtainLift: number,
+      ambientGust: number,
+      stormWind: number,
+      umbrella: UmbrellaFrame,
+    ) => {
       const slant = drop.length * (0.08 + drop.slantBias + ambientGust * 0.04 + stormWind * 0.10)
       const rainAlpha = Math.min(0.56, drop.alpha * (0.72 + intensity * 0.38) * curtainLift)
+      const ax = drop.x
+      const ay = drop.y
+      const bx = drop.x - slant
+      const by = drop.y + drop.length
+
+      // The walker carries an invisible umbrella in rain. Geometry is resolved
+      // once per frame, then reused for every drop so the locked visual costs no
+      // repeated terrain lookup / closure allocation in the particle hot loop.
+      if (umbrella.active) {
+        const canopyX = umbrella.canopyX
+        const canopyRadiusX = umbrella.canopyRadiusX
+
+        const midX = (ax + bx) * 0.5
+        const midY = (ay + by) * 0.5
+        const midCanopyY = canopyYAt(umbrella, midX)
+        if (
+          Number.isFinite(midCanopyY) &&
+          midY > midCanopyY + 0.8 &&
+          midY < umbrella.carrierSurfaceY + 1 &&
+          Math.abs(midX - canopyX) < canopyRadiusX * 0.78
+        ) return
+
+        let hitT = -1
+        let hitX = 0
+        let hitY = 0
+        const samples = 12
+        for (let i = 0; i <= samples; i += 1) {
+          const t = i / samples
+          const x = ax + (bx - ax) * t
+          const y = ay + (by - ay) * t
+          const canopyY = canopyYAt(umbrella, x)
+          if (Number.isFinite(canopyY) && y >= canopyY - 0.6 && y <= canopyY + 2.6) {
+            hitT = t
+            hitX = x
+            hitY = canopyY
+            break
+          }
+        }
+
+        if (hitT >= 0) {
+          if (hitT > 0.04) {
+            ctx.beginPath()
+            ctx.moveTo(ax, ay)
+            ctx.lineTo(hitX, hitY)
+            ctx.strokeStyle = `rgba(196, 213, 226, ${rainAlpha})`
+            ctx.lineWidth = drop.width
+            ctx.stroke()
+          }
+
+          const side = hitX >= canopyX ? 1 : -1
+          const edgeBias = Math.min(1, Math.abs(hitX - canopyX) / Math.max(1, canopyRadiusX))
+          ctx.beginPath()
+          ctx.moveTo(hitX, hitY)
+          ctx.lineTo(
+            hitX + side * (4.6 + edgeBias * 3.4 + drop.width * 1.4),
+            hitY + 2.0 + drop.width * 1.4,
+          )
+          ctx.strokeStyle = `rgba(196, 213, 226, ${rainAlpha * 0.72})`
+          ctx.lineWidth = Math.max(0.44, drop.width * 0.76)
+          ctx.stroke()
+          return
+        }
+      }
+
       ctx.beginPath()
-      ctx.moveTo(drop.x, drop.y)
-      ctx.lineTo(drop.x - slant, drop.y + drop.length)
+      ctx.moveTo(ax, ay)
+      ctx.lineTo(bx, by)
       ctx.strokeStyle = `rgba(196, 213, 226, ${rainAlpha})`
       ctx.lineWidth = drop.width
-      ctx.lineCap = 'round'
       ctx.stroke()
+    }
+
+
+
+    const drawUmbrellaRunoff = (time: number, rainDensity: number, umbrella: UmbrellaFrame) => {
+      if (!umbrella.active) return
+
+      const scale = umbrella.scale
+      const canopyX = umbrella.canopyX
+      const radiusX = umbrella.canopyRadiusX
+      const edgeNorm = 0.93
+      const edgeY = umbrella.canopyCrownY + umbrella.canopyDrop * (1 - Math.sqrt(Math.max(0, 1 - edgeNorm * edgeNorm)))
+      const baseAlpha = umbrella.alpha * (0.12 + rainDensity * 0.16)
+
+      for (const side of [-1, 1]) {
+        const seed = umbrella.id * 0.37 + side * 1.9
+        const speed = 0.72 + (Math.sin(seed * 4.3) * 0.5 + 0.5) * 0.44
+        const phase = ((time * 0.001 * speed + seed * 0.83) % 1 + 1) % 1
+        if (phase > 0.72) continue
+
+        const fall = phase / 0.72
+        const edgeX = canopyX + side * radiusX * edgeNorm
+        const x = edgeX + side * fall * 3.1 * scale
+        const y = edgeY + fall * 10.5 * scale
+        const alpha = baseAlpha * Math.sin(fall * Math.PI)
+        if (alpha <= 0.006) continue
+
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + side * 0.7 * scale, y + (2.2 + fall * 1.8) * scale)
+        ctx.strokeStyle = `rgba(196, 213, 226, ${alpha})`
+        ctx.lineWidth = 0.48
+        ctx.lineCap = 'round'
+        ctx.stroke()
+      }
     }
 
     const curtainLiftAt = (x: number, time: number) => {
@@ -492,7 +644,6 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       ctx.clearRect(0, 0, width, height)
       ctx.globalAlpha = visualAlpha
       updateWeather(simTime)
-      drawWater()
 
       // Material evolution does not need particle-frame cadence. Running the
       // small terrain/ice grid at ~30 Hz preserves its real-time rates while
@@ -562,11 +713,16 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
 
       const stormWind = stormSignal.wind * stormSignal.mix
       const ambientGust = ambientGustAt(time)
+      const frameScale = dt / 16.67
+      const fallScale = frameScale * (0.78 + intensity * 0.42) * Math.max(0.7, Math.sqrt(speedNow))
+      const driftScale = (stormWind * 0.34 + ambientGust * 0.08) * frameScale
+      const umbrella = updateUmbrellaFrame()
+      ctx.lineCap = 'round'
       for (let i = 0; i < drops.length; i++) {
         const drop = drops[i]
         const participating = drop.presence <= rainDensity
-        drop.y += drop.speed * (dt / 16.67) * (0.78 + intensity * 0.42) * Math.max(0.7, Math.sqrt(speedNow))
-        drop.x += (stormWind * 0.34 + ambientGust * 0.08) * (dt / 16.67)
+        drop.y += drop.speed * fallScale
+        drop.x += driftScale
 
         if (drop.x < -30) drop.x = width + 20
         if (drop.x > width + 30) drop.x = -20
@@ -578,13 +734,17 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
 
         const surface = surfaceYAt(drop.x, width, height)
         if (drop.y + drop.length >= surface) {
-          if (participating && Math.random() < intensity * rainDensity * 0.96) impact(drop)
+          const shelteredAtGround = umbrella.active
+            && Math.abs(drop.x - umbrella.carrierX) < 16.5 * umbrella.scale
+          if (!shelteredAtGround && participating && Math.random() < intensity * rainDensity * 0.96) impact(drop)
           drops[i] = makeDrop(false)
           continue
         }
 
-        if (participating) drawDrop(drop, curtainLiftAt(drop.x, time), ambientGust)
+        if (participating) drawDrop(drop, curtainLiftAt(drop.x, time), ambientGust, stormWind, umbrella)
       }
+
+      drawUmbrellaRunoff(time, rainDensity, umbrella)
 
       let rippleWrite = 0
       for (let rippleRead = 0; rippleRead < ripples.length; rippleRead++) {
@@ -657,14 +817,43 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       raf = requestAnimationFrame(draw)
     }
 
+    const syncRainVisibility = () => {
+      // RAF weather envelopes deliberately decay slowly while the page is visible,
+      // but they must not preserve an old rain tail across minutes spent in another
+      // tab. If Alive has moved on while hidden, return immediately to the real state.
+      if (document.visibilityState === 'visible' && !activeRef.current) {
+        weatherMix = 0
+        audioWeatherMix = 0
+        ripples.length = 0
+        splashes.length = 0
+        ctx.clearRect(0, 0, width, height)
+        idleCleared = true
+      }
+
+      const currentAudio = audioRef.current
+      if (currentAudio && (document.visibilityState !== 'visible' || !activeRef.current)) {
+        const now = currentAudio.ctx.currentTime
+        currentAudio.steadyGain.gain.cancelScheduledValues(now)
+        currentAudio.heavyGain.gain.cancelScheduledValues(now)
+        currentAudio.steadyGain.gain.setValueAtTime(0, now)
+        currentAudio.heavyGain.gain.setValueAtTime(0, now)
+        lastSteadyTargetGain = 0
+        lastHeavyTargetGain = 0
+      }
+    }
+
     resize()
     window.addEventListener('resize', resize)
+    document.addEventListener('visibilitychange', syncRainVisibility)
+    window.addEventListener('pageshow', syncRainVisibility)
     raf = requestAnimationFrame(draw)
 
     return () => {
       cancelAnimationFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      document.removeEventListener('visibilitychange', syncRainVisibility)
+      window.removeEventListener('pageshow', syncRainVisibility)
     }
   }, [])
 

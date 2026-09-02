@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Circle, Clock3, Expand, Moon, Snowflake, CloudRain, CloudLightning, Flame, Sparkles, Volume2, VolumeX, Orbit } from 'lucide-react'
+import { Circle, Clock3, Expand, Shrink, Moon, Snowflake, CloudRain, CloudLightning, Flame, Sparkles, Volume2, VolumeX, Orbit } from 'lucide-react'
 import './App.css'
 import { AliveSkyEvents } from './alive/AliveSkyEvents'
 import { AliveNightSky } from './alive/AliveNightSky'
@@ -55,7 +55,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-ufo' | 'aurora' | 'train' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-ufo' | 'aurora' | 'train' | 'lantern' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -74,7 +74,18 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-ufo' || test === 'aurora' || test === 'train' || test === 'night' || test === 'rain' || test === 'heavy-rain' || test === 'snow-fade' || test === 'meteor' || test === 'meteor-shower' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-ufo' || test === 'aurora' || test === 'train' || test === 'lantern' || test === 'night' || test === 'rain' || test === 'heavy-rain' || test === 'snow-fade' || test === 'meteor' || test === 'meteor-shower' ? test : null
+}
+
+function readLanternTestOptions() {
+  if (typeof window === 'undefined') return { reaction: null, weather: null } as const
+  const params = new URLSearchParams(window.location.search)
+  const reaction = params.get('reaction')
+  const weather = params.get('weather')
+  return {
+    reaction: reaction === 'owl' || reaction === 'lightning' ? reaction : null,
+    weather: weather === 'rain' || weather === 'snow' || weather === 'ember' ? weather : null,
+  } as const
 }
 
 function readSharedWorld(): Partial<PitchPreferences> | null {
@@ -169,6 +180,7 @@ function formatSleepRemaining(milliseconds: number) {
 
 function App() {
   const testMode = readVisualTestMode()
+  const lanternTest = testMode === 'lantern' ? readLanternTestOptions() : { reaction: null, weather: null }
   const [initialPreferences] = useState(loadPreferences)
   const [scene, setScene] = useState<Scene>(initialPreferences.scene)
   const [showClock, setShowClock] = useState(initialPreferences.showClock)
@@ -196,6 +208,7 @@ function App() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEventLike | null>(null)
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared'>('idle')
   const [testEventId, setTestEventId] = useState(51_100)
+  const [testLanternOwlId, setTestLanternOwlId] = useState<number | null>(null)
   const [testSnowActive, setTestSnowActive] = useState(testMode === 'snow-fade')
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
   const shareStatusTimerRef = useRef<number | null>(null)
@@ -214,6 +227,7 @@ function App() {
     completeAmbientLifeEvent,
   } = useAliveWorld({
     enabled: aliveRuntimeOn,
+    scene,
     setScene,
   })
 
@@ -243,7 +257,7 @@ function App() {
   }, [testMode])
 
   useEffect(() => {
-    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'owl-ufo' && testMode !== 'aurora' && testMode !== 'train' && testMode !== 'meteor' && testMode !== 'meteor-shower') return
+    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'owl-ufo' && testMode !== 'aurora' && testMode !== 'train' && testMode !== 'lantern' && testMode !== 'meteor' && testMode !== 'meteor-shower') return
     const interval = testMode === 'fog'
       ? 90_000
       : testMode === 'owl' || testMode === 'owl-ufo'
@@ -254,10 +268,23 @@ function App() {
             ? 11_000
           : testMode === 'train'
             ? 94_000
-            : 30_000
+            : testMode === 'lantern'
+              ? 138_000
+              : 30_000
     const timer = window.setInterval(() => setTestEventId((id) => id + 1), interval)
     return () => window.clearInterval(timer)
   }, [testMode])
+
+
+  useEffect(() => {
+    if (testMode !== 'lantern' || lanternTest.reaction !== 'owl') {
+      setTestLanternOwlId(null)
+      return
+    }
+    setTestLanternOwlId(null)
+    const timer = window.setTimeout(() => setTestLanternOwlId(testEventId + 90_000), 31_000)
+    return () => window.clearTimeout(timer)
+  }, [lanternTest.reaction, testEventId, testMode])
 
   const dismissFirstVisit = useCallback(() => {
     setFirstVisit(false)
@@ -303,6 +330,15 @@ function App() {
   useEffect(() => () => {
     if (shareStatusTimerRef.current !== null) window.clearTimeout(shareStatusTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    if (!showUtilities) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowUtilities(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [showUtilities])
 
   useEffect(() => {
     const id = window.setInterval(saveWorld, 15000)
@@ -717,8 +753,8 @@ function App() {
       ? { moon: true, storm: true, fireflies: false }
     : testMode === 'moon-veil'
       ? { moon: true, storm: false, fireflies: false }
-    : testMode === 'train'
-      ? { moon: true, storm: false, fireflies: false }
+    : testMode === 'train' || testMode === 'lantern'
+      ? { moon: true, storm: testMode === 'lantern' && lanternTest.reaction === 'lightning', fireflies: false }
     : testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain' || testMode === 'meteor' || testMode === 'meteor-shower'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
@@ -726,15 +762,19 @@ function App() {
     ? 'rain'
     : testMode === 'snow-fade'
       ? (testSnowActive ? 'snow' : 'calm')
-      : testMode === 'fog' || testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'train' || testMode === 'night' || testMode === 'meteor' || testMode === 'meteor-shower'
-        ? 'calm'
-        : scene
+      : testMode === 'lantern'
+        ? (lanternTest.weather ?? (lanternTest.reaction === 'lightning' ? 'rain' : 'calm'))
+        : testMode === 'fog' || testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'train' || testMode === 'night' || testMode === 'meteor' || testMode === 'meteor-shower'
+          ? 'calm'
+          : scene
   const testFogEvent: RareEventState | null = testMode === 'fog'
     ? { kind: 'ground-fog', id: testEventId }
     : null
   const testOwlEvent: RareEventState | null = testMode === 'owl' || testMode === 'owl-ufo'
     ? { kind: testMode === 'owl-ufo' ? 'owl-ufo' : 'owl', id: testEventId }
-    : null
+    : testMode === 'lantern' && testLanternOwlId !== null
+      ? { kind: 'owl', id: testLanternOwlId }
+      : null
   const testAuroraEvent: RareEventState | null = testMode === 'aurora'
     ? { kind: 'aurora', id: testEventId }
     : null
@@ -760,6 +800,16 @@ function App() {
         hornDelay: 12_000,
       }
     : null
+  const testLanternEvent: AmbientLifeEvent | null = testMode === 'lantern' && lanternTest.weather !== 'ember'
+    ? {
+        id: testEventId,
+        kind: 'lantern',
+        duration: 132_000,
+        direction: testEventId % 2 === 0 ? -1 : 1,
+        startScale: 0.98,
+        endScale: 1.04,
+      }
+    : null
   const sleepTimerActive = sleepTimerEndAt !== null
   const blackoutActive = !aliveRuntimeOn && displayScene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
   const interfaceAwake = controlsVisible || showUtilities || firstVisit
@@ -778,7 +828,7 @@ function App() {
       onPointerUp={handleWorldPointerUp}
     >
       <div className="scene-layer">
-        {(aliveRuntimeOn || testMode === 'aurora' || testMode === 'train') && <AliveNightSky phase={testMode === 'train' ? 'calm' : alivePhase} />}
+        {(aliveRuntimeOn || testMode === 'aurora' || testMode === 'train' || testMode === 'lantern') && <AliveNightSky phase={testMode === 'train' || testMode === 'lantern' ? 'calm' : alivePhase} />}
         {(aliveRuntimeOn || import.meta.env.DEV) && aliveRareEvents.filter((event) => event.kind !== 'ground-fog').map((event) => (
           <RareSkyEventLayer
             key={`alive-rare-sky-${event.kind}-${event.id}`}
@@ -817,6 +867,14 @@ function App() {
             event={testTrainEvent}
             soundOn={soundOn}
             phase="calm"
+          />
+        )}
+        {testLanternEvent && (
+          <AmbientLifeLayer
+            key={`test-lantern-${testLanternEvent.id}`}
+            event={testLanternEvent}
+            soundOn={soundOn}
+            phase={lanternTest.weather === 'snow' ? 'snow' : lanternTest.reaction === 'lightning' || lanternTest.weather === 'rain' ? 'rain' : 'calm'}
           />
         )}
         <div className={`world-weather-layer ${displayScene === 'black' ? 'world-hidden' : ''}`}>
@@ -858,7 +916,8 @@ function App() {
           active={displayLayers.storm}
           scene={displayScene}
           soundOn={soundOn}
-          groundStrikeChance={aliveRuntimeOn ? 0.14 : 0.42}
+          groundStrikeChance={testMode === 'lantern' && lanternTest.reaction === 'lightning' ? 0 : aliveRuntimeOn ? 0.14 : 0.42}
+          forceFirstGroundStrikeAfterMs={testMode === 'lantern' && lanternTest.reaction === 'lightning' ? 22_000 : undefined}
           depthRevealEventId={aliveRuntimeOn && skyEvent?.kind === 'depth-flash' ? skyEvent.id : 0}
         />
         <AliveAmbience
@@ -888,6 +947,7 @@ function App() {
         id="pitchblack-utilities"
         className={`utility-panel ${showUtilities ? 'visible' : ''}`}
         aria-hidden={!showUtilities}
+        inert={!showUtilities}
         aria-label="This quiet world settings"
       >
         <div className="utility-section">
@@ -989,62 +1049,63 @@ function App() {
       </section>
 
       <nav className={`control-dock ${interfaceAwake ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
-        <button className={`alive-control ${aliveOn ? 'active alive-active' : ''}`} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
+        <button type="button" className={`alive-control ${aliveOn ? 'active alive-active' : ''}`} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
           <Orbit size={17} strokeWidth={1.5} />
           <span>Alive</span>
         </button>
-        <div className="dock-divider" />
-        <button className={blackoutActive ? 'active' : ''} onClick={chooseBlackout} aria-label="Black: clear the visible world to pure black">
+        <div className="dock-divider" aria-hidden="true" />
+        <button type="button" className={`manual-world-control ${blackoutActive ? 'active' : ''}`} onClick={chooseBlackout} aria-label="Black: clear the visible world to pure black" aria-pressed={blackoutActive}>
           <Circle size={17} strokeWidth={1.5} />
           <span>Black</span>
         </button>
-        <div className="dock-divider" />
-        <button className={`manual-world-control ${!aliveOn && scene === 'snow' ? 'active' : ''}`} onClick={() => chooseScene('snow')} aria-label="Snow scene">
+        <div className="dock-divider" aria-hidden="true" />
+        <button type="button" className={`manual-world-control ${!aliveOn && scene === 'snow' ? 'active' : ''}`} onClick={() => chooseScene('snow')} aria-label="Snow scene" aria-pressed={!aliveOn && scene === 'snow'}>
           <Snowflake size={17} strokeWidth={1.5} />
           <span>Snow</span>
         </button>
-        <button className={`manual-world-control ${!aliveOn && scene === 'rain' ? 'active' : ''}`} onClick={() => chooseScene('rain')} aria-label="Rain scene">
+        <button type="button" className={`manual-world-control ${!aliveOn && scene === 'rain' ? 'active' : ''}`} onClick={() => chooseScene('rain')} aria-label="Rain scene" aria-pressed={!aliveOn && scene === 'rain'}>
           <CloudRain size={17} strokeWidth={1.5} />
           <span>Rain</span>
         </button>
-        <button className={`manual-world-control ${!aliveOn && scene === 'ember' ? 'active' : ''}`} onClick={() => chooseScene('ember')} aria-label="Ember scene">
+        <button type="button" className={`manual-world-control ${!aliveOn && scene === 'ember' ? 'active' : ''}`} onClick={() => chooseScene('ember')} aria-label="Ember scene" aria-pressed={!aliveOn && scene === 'ember'}>
           <Flame size={17} strokeWidth={1.5} />
           <span>Ember</span>
         </button>
-        <div className="dock-divider" />
-        <button className={`manual-world-control ${!aliveOn && layers.moon ? 'active' : ''}`} onClick={() => toggleLayer('moon')} aria-label="Toggle moon">
+        <div className="dock-divider" aria-hidden="true" />
+        <button type="button" className={`manual-world-control ${!aliveOn && layers.moon ? 'active' : ''}`} onClick={() => toggleLayer('moon')} aria-label="Toggle moon" aria-pressed={!aliveOn && layers.moon}>
           <Moon size={17} strokeWidth={1.5} />
           <span>Moon</span>
         </button>
-        <button className={`manual-world-control ${!aliveOn && layers.storm ? 'active' : ''}`} onClick={() => toggleLayer('storm')} aria-label="Toggle storm layer">
+        <button type="button" className={`manual-world-control ${!aliveOn && layers.storm ? 'active' : ''}`} onClick={() => toggleLayer('storm')} aria-label="Toggle storm layer" aria-pressed={!aliveOn && layers.storm}>
           <CloudLightning size={17} strokeWidth={1.5} />
           <span>Storm</span>
         </button>
-        <button className={`manual-world-control ${!aliveOn && layers.fireflies ? 'active' : ''}`} onClick={() => toggleLayer('fireflies')} aria-label="Toggle fireflies layer">
+        <button type="button" className={`manual-world-control ${!aliveOn && layers.fireflies ? 'active' : ''}`} onClick={() => toggleLayer('fireflies')} aria-label="Toggle fireflies layer" aria-pressed={!aliveOn && layers.fireflies}>
           <Sparkles size={17} strokeWidth={1.5} />
           <span>Fireflies</span>
         </button>
-        <div className="dock-divider" />
-        <button className={showClock ? 'active' : ''} onClick={() => setShowClock((value) => !value)} aria-label="Toggle clock">
+        <div className="dock-divider" aria-hidden="true" />
+        <button type="button" className={showClock ? 'active' : ''} onClick={() => setShowClock((value) => !value)} aria-label="Toggle clock" aria-pressed={showClock}>
           <Clock3 size={17} strokeWidth={1.5} />
           <span>Clock</span>
         </button>
-        <button className={soundOn ? 'active' : ''} onClick={toggleSound} aria-label={soundOn ? 'Mute all sound' : 'Enable all sound'}>
+        <button type="button" className={soundOn ? 'active' : ''} onClick={toggleSound} aria-label={soundOn ? 'Mute all sound' : 'Enable all sound'} aria-pressed={soundOn}>
           {soundOn ? <Volume2 size={17} strokeWidth={1.5} /> : <VolumeX size={17} strokeWidth={1.5} />}
           <span>{soundOn ? 'Sound' : 'Muted'}</span>
         </button>
-        <button className={fullscreenOn ? 'active' : ''} onClick={() => void goFullscreen()} aria-label={fullscreenOn ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreenOn}>
-          <Expand size={17} strokeWidth={1.5} />
+        <button type="button" className={fullscreenOn ? 'active' : ''} onClick={() => void goFullscreen()} aria-label={fullscreenOn ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreenOn}>
+          {fullscreenOn ? <Shrink size={17} strokeWidth={1.5} /> : <Expand size={17} strokeWidth={1.5} />}
           <span>Fullscreen</span>
         </button>
         <button
+          type="button"
           className={`more-control ${showUtilities ? 'active' : ''}`}
           onClick={() => setShowUtilities((value) => !value)}
           aria-expanded={showUtilities}
           aria-controls="pitchblack-utilities"
           aria-label="More settings"
         >
-          <b className="more-glyph" aria-hidden="true">•••</b>
+          <span className="more-glyph" aria-hidden="true">•••</span>
           <span>More</span>
         </button>
       </nav>

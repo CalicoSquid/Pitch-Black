@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
+import { publishAmbientOwlHoot } from '../world/ambientLifeSignal'
 
 export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl' | 'owl-ufo'
 
@@ -1116,6 +1117,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
             if (owlAudio) void loadPitchAudioAsset(owlAudio, 'owl-field.mp3').catch(() => undefined)
           }
           owlTimer = window.setTimeout(() => {
+            publishAmbientOwlHoot()
             playOwlCall(soundRef.current, requested.id)
             owlTimer = null
           }, 5_350)

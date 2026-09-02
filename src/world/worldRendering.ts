@@ -11,6 +11,15 @@ export type TerrainRenderCache = {
   snowDepth: Float64Array
   groundY: Float64Array
   snowY: Float64Array
+  groundWidth: number
+  groundHeight: number
+  gridX: Float64Array
+  gridWidth: number
+  textureX: Float64Array
+  textureIndex: Int32Array
+  textureFrac: Float64Array
+  textureWidth: number
+  textureStep: number
   gradient: CanvasGradient | null
   gradientHeight: number
 }
@@ -20,6 +29,15 @@ export function createTerrainRenderCache(): TerrainRenderCache {
     snowDepth: new Float64Array(0),
     groundY: new Float64Array(0),
     snowY: new Float64Array(0),
+    groundWidth: -1,
+    groundHeight: -1,
+    gridX: new Float64Array(0),
+    gridWidth: -1,
+    textureX: new Float64Array(0),
+    textureIndex: new Int32Array(0),
+    textureFrac: new Float64Array(0),
+    textureWidth: -1,
+    textureStep: -1,
     gradient: null,
     gradientHeight: -1,
   }
@@ -28,6 +46,11 @@ export function createTerrainRenderCache(): TerrainRenderCache {
 export function invalidateTerrainRenderCache(cache: TerrainRenderCache) {
   cache.gradient = null
   cache.gradientHeight = -1
+  cache.groundWidth = -1
+  cache.groundHeight = -1
+  cache.gridWidth = -1
+  cache.textureWidth = -1
+  cache.textureStep = -1
 }
 
 export function drawFrozenSkin(
@@ -179,9 +202,26 @@ export function drawTerrain(
     cache.snowDepth = new Float64Array(snow.length)
     cache.groundY = new Float64Array(snow.length)
     cache.snowY = new Float64Array(snow.length)
+    cache.groundWidth = -1
+    cache.groundHeight = -1
+    cache.gridX = new Float64Array(snow.length)
+    cache.gridWidth = -1
+  }
+
+  if (cache.gridWidth !== width) {
+    for (let i = 0; i < cache.gridX.length; i++) cache.gridX[i] = Math.min(width, i * 6)
+    cache.gridWidth = width
   }
 
   const baseY = worldBaseY(height)
+  if (cache.groundWidth !== width || cache.groundHeight !== height) {
+    for (let i = 0; i < ground.length; i++) {
+      cache.groundY[i] = baseY - ground[i] - terrainClearanceLiftAtIndex(i)
+    }
+    cache.groundWidth = width
+    cache.groundHeight = height
+  }
+
   for (let i = 0; i < snow.length; i++) {
     const a = snow[Math.max(0, i - 2)]
     const b = snow[Math.max(0, i - 1)]
@@ -191,11 +231,9 @@ export function drawTerrain(
     const base = (a + b * 2 + c * 3 + d * 2 + e) / 9
     const shimmer = Math.sin(time * 0.00022 + i * 0.31) * Math.min(0.32, base * 0.008)
     const depth = Math.max(0, base + shimmer)
-    const groundY = baseY - ground[i] - terrainClearanceLiftAtIndex(i)
 
     cache.snowDepth[i] = depth
-    cache.groundY[i] = groundY
-    cache.snowY[i] = groundY - depth
+    cache.snowY[i] = cache.groundY[i] - depth
   }
 
   const groundY = cache.groundY
@@ -205,7 +243,7 @@ export function drawTerrain(
   ctx.beginPath()
   ctx.moveTo(0, groundY[0])
   for (let i = 1; i < ground.length; i++) {
-    const x = Math.min(width, i * 6)
+    const x = cache.gridX[i]
     ctx.lineTo(x, groundY[i])
   }
   ctx.lineTo(width, height)
@@ -218,15 +256,15 @@ export function drawTerrain(
   ctx.beginPath()
   ctx.moveTo(0, snowY[0])
   for (let i = 1; i < snow.length; i++) {
-    const x = Math.min(width, i * 6)
-    const prevX = Math.min(width, (i - 1) * 6)
+    const x = cache.gridX[i]
+    const prevX = cache.gridX[i - 1]
     const prevY = snowY[i - 1]
     const y = snowY[i]
     ctx.quadraticCurveTo(prevX, prevY, (prevX + x) / 2, (prevY + y) / 2)
   }
 
   for (let i = snow.length - 1; i >= 0; i--) {
-    const x = Math.min(width, i * 6)
+    const x = cache.gridX[i]
     ctx.lineTo(x, groundY[i])
   }
   ctx.closePath()
@@ -246,14 +284,33 @@ export function drawTerrain(
   ctx.fill()
   ctx.globalAlpha = previousAlpha
 
-  // Fine snow texture follows the raised snow surface.
+  // Fine snow texture follows the raised snow surface. Its horizontal samples
+  // and seeded noise are resize-static, so keep those out of the render hot path.
   const step = Math.max(10, Math.floor(width / 110))
-  for (let x = 4; x < width; x += step) {
-    const idx = worldIndexAt(x, width)
+  if (cache.textureWidth !== width || cache.textureStep !== step) {
+    const count = Math.max(0, Math.ceil((width - 4) / step))
+    cache.textureX = new Float64Array(count)
+    cache.textureIndex = new Int32Array(count)
+    cache.textureFrac = new Float64Array(count)
+    let sample = 0
+    for (let x = 4; x < width; x += step) {
+      const n = Math.sin(x * 12.9898 + 78.233) * 43758.5453
+      const frac = n - Math.floor(n)
+      cache.textureX[sample] = x
+      cache.textureIndex[sample] = worldIndexAt(x, width)
+      cache.textureFrac[sample] = frac
+      sample += 1
+    }
+    cache.textureWidth = width
+    cache.textureStep = step
+  }
+
+  for (let sample = 0; sample < cache.textureX.length; sample++) {
+    const x = cache.textureX[sample]
+    const idx = cache.textureIndex[sample]
     const depth = cache.snowDepth[idx]
     if (depth < 1.2) continue
-    const n = Math.sin(x * 12.9898 + 78.233) * 43758.5453
-    const frac = n - Math.floor(n)
+    const frac = cache.textureFrac[sample]
     const y = snowY[idx] + 1.5 + frac * Math.min(7, depth * 0.22)
 
     ctx.beginPath()
@@ -265,8 +322,8 @@ export function drawTerrain(
   ctx.beginPath()
   ctx.moveTo(0, snowY[0])
   for (let i = 1; i < snow.length; i++) {
-    const x = Math.min(width, i * 6)
-    const prevX = Math.min(width, (i - 1) * 6)
+    const x = cache.gridX[i]
+    const prevX = cache.gridX[i - 1]
     const prevY = snowY[i - 1]
     const y = snowY[i]
     ctx.quadraticCurveTo(prevX, prevY, (prevX + x) / 2, (prevY + y) / 2)
@@ -279,7 +336,7 @@ export function drawTerrain(
     ctx.beginPath()
     ctx.moveTo(0, snowY[0] + 1)
     for (let i = 1; i < snow.length; i++) {
-      const x = Math.min(width, i * 6)
+      const x = cache.gridX[i]
       ctx.lineTo(x, snowY[i] + 1)
     }
     ctx.strokeStyle = `rgba(177, 198, 211, ${Math.min(0.055, wet * 0.055)})`

@@ -13,7 +13,7 @@ export type AlivePhase =
   | 'cold-front'
   | 'snow'
 
-export type AmbientLifeEventKind = 'airplane' | 'train'
+export type AmbientLifeEventKind = 'airplane' | 'train' | 'lantern'
 
 export type AmbientLifeEvent = {
   id: number
@@ -42,6 +42,7 @@ export type AliveSkyEvent = {
 
 type UseAliveWorldOptions = {
   enabled: boolean
+  scene: Scene
   setScene: Dispatch<SetStateAction<Scene>>
 }
 
@@ -60,9 +61,10 @@ type AliveHeroSchedule = {
 }
 
 type AmbientLifeSchedule = {
-  version: 3
+  version: 4
   airplaneNextAt: number
   trainNextAt: number
+  lanternNextAt: number
 }
 
 const SECOND = 1_000
@@ -70,7 +72,7 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const ALIVE_TIMELINE_STORAGE_KEY = 'this-quiet-world-alive-timeline-v1'
 const ALIVE_HERO_STORAGE_KEY = 'this-quiet-world-alive-hero-events-v1'
-const ALIVE_LIFE_STORAGE_KEY = 'this-quiet-world-alive-life-events-v3'
+const ALIVE_LIFE_STORAGE_KEY = 'this-quiet-world-alive-life-events-v4'
 const EMPTY_ALIVE_LAYERS: LayerState = { moon: false, storm: false, fireflies: false }
 
 function between(min: number, max: number) {
@@ -91,6 +93,10 @@ function nextAirplaneAt(from: number) {
 
 function nextTrainAt(from: number) {
   return from + between(2, 4) * HOUR
+}
+
+function nextLanternAt(from: number) {
+  return from + between(70, 140) * MINUTE
 }
 
 
@@ -302,9 +308,10 @@ function readAmbientLifeSchedule(): AmbientLifeSchedule | null {
     const raw = window.localStorage.getItem(ALIVE_LIFE_STORAGE_KEY)
     if (!raw) return null
     const saved = JSON.parse(raw) as Partial<AmbientLifeSchedule>
-    if (saved.version !== 3) return null
+    if (saved.version !== 4) return null
     if (typeof saved.airplaneNextAt !== 'number' || !Number.isFinite(saved.airplaneNextAt)) return null
     if (typeof saved.trainNextAt !== 'number' || !Number.isFinite(saved.trainNextAt)) return null
+    if (typeof saved.lanternNextAt !== 'number' || !Number.isFinite(saved.lanternNextAt)) return null
     return saved as AmbientLifeSchedule
   } catch {
     return null
@@ -322,15 +329,17 @@ function saveAmbientLifeSchedule(schedule: AmbientLifeSchedule) {
 
 function makeAmbientLifeSchedule(now: number): AmbientLifeSchedule {
   return {
-    version: 3,
+    version: 4,
     airplaneNextAt: nextAirplaneAt(now),
     trainNextAt: nextTrainAt(now),
+    lanternNextAt: nextLanternAt(now),
   }
 }
 
 function resolveAmbientLifeScheduleToNow(schedule: AmbientLifeSchedule, now: number) {
   let airplaneNextAt = schedule.airplaneNextAt
   let trainNextAt = schedule.trainNextAt
+  let lanternNextAt = schedule.lanternNextAt
   let guard = 0
 
   while (airplaneNextAt <= now && guard < 2048) {
@@ -344,9 +353,15 @@ function resolveAmbientLifeScheduleToNow(schedule: AmbientLifeSchedule, now: num
     guard += 1
   }
 
-  const resolved = airplaneNextAt <= now || trainNextAt <= now
+  guard = 0
+  while (lanternNextAt <= now && guard < 2048) {
+    lanternNextAt = nextLanternAt(lanternNextAt)
+    guard += 1
+  }
+
+  const resolved = airplaneNextAt <= now || trainNextAt <= now || lanternNextAt <= now
     ? makeAmbientLifeSchedule(now)
-    : { version: 3 as const, airplaneNextAt, trainNextAt }
+    : { version: 4 as const, airplaneNextAt, trainNextAt, lanternNextAt }
   saveAmbientLifeSchedule(resolved)
   return resolved
 }
@@ -365,6 +380,17 @@ function makeAmbientLifeEvent(kind: AmbientLifeEventKind, id: number): AmbientLi
       startScale: between(1.03, 1.09),
       endScale: between(0.72, 0.82),
       horn: Math.random() < 0.25,
+    }
+  }
+
+  if (kind === 'lantern') {
+    return {
+      id,
+      kind,
+      direction,
+      duration: between(122_000, 164_000),
+      startScale: between(0.94, 1.05),
+      endScale: between(0.96, 1.08),
     }
   }
 
@@ -398,7 +424,7 @@ function canHostFireflies() {
   return pitchWorld.wetness < 0.30 && averageSnowDepth() < 8
 }
 
-export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
+export function useAliveWorld({ enabled, scene, setScene }: UseAliveWorldOptions) {
   const [phase, setPhase] = useState<AlivePhase>('calm')
   const [weatherSpeed, setWeatherSpeed] = useState(1)
   const [fireflyMultiplier, setFireflyMultiplier] = useState(1)
@@ -412,12 +438,17 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
   const rareEventsRef = useRef<RareEventState[]>([])
   const ambientLifeEventsRef = useRef<AmbientLifeEvent[]>([])
   const phaseRef = useRef<AlivePhase>('calm')
+  const sceneRef = useRef<Scene>(scene)
   const timelineRef = useRef<AliveTimeline | null>(null)
   const heroScheduleRef = useRef<AliveHeroSchedule | null>(null)
   const ambientLifeScheduleRef = useRef<AmbientLifeSchedule | null>(null)
   const eventIdRef = useRef(0)
   const rareEventIdRef = useRef(0)
   const ambientLifeIdRef = useRef(0)
+
+  useEffect(() => {
+    sceneRef.current = scene
+  }, [scene])
 
   const patchAliveLayers = (patch: Partial<LayerState>) => {
     setAliveLayers((current) => {
@@ -469,6 +500,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     let fogTimer = 0
     let airplaneTimer = 0
     let trainTimer = 0
+    let lanternTimer = 0
     let disposed = false
 
     const emitSkyEvent = (event: Omit<AliveSkyEvent, 'id'>) => {
@@ -498,10 +530,9 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       }
 
       clearRoutineMicroPresentation()
-      if (isAliveHeroKind(kind) && ambientLifeEventsRef.current.some((event) => event.kind === 'train')) {
-        const ambientNext = ambientLifeEventsRef.current.filter((event) => event.kind !== 'train')
-        ambientLifeEventsRef.current = ambientNext
-        setAmbientLifeEvents(ambientNext)
+      if (isAliveHeroKind(kind) && ambientLifeEventsRef.current.length > 0) {
+        ambientLifeEventsRef.current = []
+        setAmbientLifeEvents([])
       }
       rareEventIdRef.current += 1
       const event = { kind, id: rareEventIdRef.current }
@@ -515,11 +546,9 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     }
 
     const emitAmbientLifeEvent = (kind: AmbientLifeEventKind) => {
-      // Plane and train are both long, legible crossings. Never let them compete
-      // for the same patch of sky even though future ambient-life kinds may coexist.
-      if ((kind === 'airplane' || kind === 'train') && ambientLifeEventsRef.current.some((event) => event.kind === 'airplane' || event.kind === 'train')) {
-        return false
-      }
+      // Ambient-life encounters are intentionally legible. Let one breathe at a time
+      // rather than stacking long crossings or a ground encounter together.
+      if (ambientLifeEventsRef.current.length > 0) return false
       ambientLifeIdRef.current += 1
       const event = makeAmbientLifeEvent(kind, ambientLifeIdRef.current)
       const next = [...ambientLifeEventsRef.current, event]
@@ -531,10 +560,12 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
     const scheduleAmbientLifeTimers = () => {
       window.clearTimeout(airplaneTimer)
       window.clearTimeout(trainTimer)
+      window.clearTimeout(lanternTimer)
       const schedule = ambientLifeScheduleRef.current
       if (!schedule) return
       airplaneTimer = window.setTimeout(runAirplane, Math.max(0, schedule.airplaneNextAt - Date.now()))
       trainTimer = window.setTimeout(runTrain, Math.max(0, schedule.trainNextAt - Date.now()))
+      lanternTimer = window.setTimeout(runLantern, Math.max(0, schedule.lanternNextAt - Date.now()))
     }
 
     function runAirplane() {
@@ -562,6 +593,20 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       const heroActive = rareEventsRef.current.some((event) => isAliveHeroKind(event.kind))
       if (document.visibilityState === 'visible' && compatible && !heroActive) emitAmbientLifeEvent('train')
       const nextSchedule = { ...schedule, trainNextAt: nextTrainAt(now) }
+      ambientLifeScheduleRef.current = nextSchedule
+      saveAmbientLifeSchedule(nextSchedule)
+      scheduleAmbientLifeTimers()
+    }
+
+    function runLantern() {
+      if (disposed) return
+      const schedule = ambientLifeScheduleRef.current
+      if (!schedule) return
+      const now = Date.now()
+      const quietEnough = rareEventsRef.current.length === 0
+      const safeGround = sceneRef.current !== 'ember'
+      if (document.visibilityState === 'visible' && quietEnough && safeGround) emitAmbientLifeEvent('lantern')
+      const nextSchedule = { ...schedule, lanternNextAt: nextLanternAt(now) }
       ambientLifeScheduleRef.current = nextSchedule
       saveAmbientLifeSchedule(nextSchedule)
       scheduleAmbientLifeTimers()
@@ -874,6 +919,7 @@ export function useAliveWorld({ enabled, setScene }: UseAliveWorldOptions) {
       window.clearTimeout(fogTimer)
       window.clearTimeout(airplaneTimer)
       window.clearTimeout(trainTimer)
+      window.clearTimeout(lanternTimer)
       window.removeEventListener('pageshow', syncAfterVisibilityChange)
       document.removeEventListener('visibilitychange', syncAfterVisibilityChange)
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS

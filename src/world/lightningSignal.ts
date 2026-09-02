@@ -28,3 +28,37 @@ export function publishLightningGroundStrike(
   lightningGroundStrikeSignal.scene = scene
   lightningGroundStrikeSignal.version += 1
 }
+
+export type LightningIgnitionSignal = {
+  version: number
+  index: number
+  x: number
+  strength: number
+  scene: Scene
+}
+
+/**
+ * Separate from a generic ground strike: this only advances when the strike
+ * actually seeds the persistent ember/fire field. Ambient actors can therefore
+ * react to the consequence, not merely to a bolt touching terrain.
+ */
+export const lightningIgnitionSignal: LightningIgnitionSignal = {
+  version: 0,
+  index: 0,
+  x: 0,
+  strength: 0,
+  scene: 'black',
+}
+
+export function publishLightningIgnition(
+  index: number,
+  x: number,
+  strength: number,
+  scene: Scene,
+) {
+  lightningIgnitionSignal.index = index
+  lightningIgnitionSignal.x = x
+  lightningIgnitionSignal.strength = strength
+  lightningIgnitionSignal.scene = scene
+  lightningIgnitionSignal.version += 1
+}

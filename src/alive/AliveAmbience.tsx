@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import type { AlivePhase } from './useAliveWorld'
 
 function nightLevel(phase: AlivePhase) {
@@ -24,6 +25,7 @@ export function AliveAmbience({
   soundOn: boolean
   phase: AlivePhase
 }) {
+  const audioReadyNonce = usePitchAudioReadyNonce()
   const phaseRef = useRef(phase)
   const phaseGainRef = useRef<GainNode | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
@@ -95,7 +97,7 @@ export function AliveAmbience({
       phaseGain.gain.setTargetAtTime(0, now, 0.42)
       try { source.stop(now + 1.8) } catch { /* already stopped */ }
     }
-  }, [active, soundOn])
+  }, [active, soundOn, audioReadyNonce])
 
   return null
 }

@@ -724,18 +724,24 @@ export function EmberScene({
         ctx.fillRect(0, 0, width, height)
       }
 
-      for (const fragment of fragments) {
+      const dtScale = dt / 16.67
+      let fragmentWrite = 0
+      for (let fragmentRead = 0; fragmentRead < fragments.length; fragmentRead++) {
+        const fragment = fragments[fragmentRead]
         if (fragment.life <= 0) continue
-        fragment.vy += 0.11 * (dt / 16.67)
-        fragment.x += fragment.vx * (dt / 16.67)
-        fragment.y += fragment.vy * (dt / 16.67)
-        fragment.life -= 0.018 * (dt / 16.67)
+        fragment.vy += 0.11 * dtScale
+        fragment.x += fragment.vx * dtScale
+        fragment.y += fragment.vy * dtScale
+        fragment.life -= 0.018 * dtScale
+        if (fragment.life <= 0) continue
 
         if (render) {
-          ctx.fillStyle = `rgba(224, 91, 35, ${Math.max(0, fragment.life) * 0.52})`
+          ctx.fillStyle = `rgba(224, 91, 35, ${fragment.life * 0.52})`
           ctx.fillRect(fragment.x, fragment.y, fragment.size, fragment.size)
         }
+        fragments[fragmentWrite++] = fragment
       }
+      fragments.length = fragmentWrite
     }
 
     const drawFire = (time: number, dt: number, render: boolean) => {
@@ -875,48 +881,65 @@ export function EmberScene({
         }
       }
 
-      for (const particle of sparks) {
+      const dtScale = dt / 16.67
+
+      let sparkWrite = 0
+      for (let sparkRead = 0; sparkRead < sparks.length; sparkRead++) {
+        const particle = sparks[sparkRead]
         if (particle.life <= 0) continue
-        particle.x += particle.vx * (dt / 16.67)
-        particle.y += particle.vy * (dt / 16.67)
-        particle.vy += 0.018 * (dt / 16.67)
-        particle.life -= 0.015 * (dt / 16.67)
+        particle.x += particle.vx * dtScale
+        particle.y += particle.vy * dtScale
+        particle.vy += 0.018 * dtScale
+        particle.life -= 0.015 * dtScale
+        if (particle.life <= 0) continue
 
         if (render) {
-          ctx.fillStyle = `rgba(241, 121, 46, ${Math.max(0, particle.life) * 0.72})`
+          ctx.fillStyle = `rgba(241, 121, 46, ${particle.life * 0.72})`
           ctx.fillRect(particle.x, particle.y, particle.size, particle.size)
         }
+        sparks[sparkWrite++] = particle
       }
+      sparks.length = sparkWrite
 
-      for (const plume of steam) {
+      let steamWrite = 0
+      for (let steamRead = 0; steamRead < steam.length; steamRead++) {
+        const plume = steam[steamRead]
         if (plume.life <= 0) continue
-        plume.x += plume.vx * (dt / 16.67)
-        plume.y += plume.vy * (dt / 16.67)
+        plume.x += plume.vx * dtScale
+        plume.y += plume.vy * dtScale
         plume.vx += Math.sin(t * 2.2 + plume.y * 0.03) * 0.002
-        plume.life -= 0.0065 * (dt / 16.67)
+        plume.life -= 0.0065 * dtScale
+        if (plume.life <= 0) continue
 
         if (render) {
           ctx.beginPath()
           ctx.ellipse(plume.x, plume.y, plume.size, plume.size * 0.42, 0, 0, Math.PI * 2)
-          ctx.fillStyle = `rgba(188, 193, 198, ${Math.max(0, plume.life) * plume.opacity})`
+          ctx.fillStyle = `rgba(188, 193, 198, ${plume.life * plume.opacity})`
           ctx.fill()
         }
+        steam[steamWrite++] = plume
       }
+      steam.length = steamWrite
 
-      for (const plume of smoke) {
+      let smokeWrite = 0
+      for (let smokeRead = 0; smokeRead < smoke.length; smokeRead++) {
+        const plume = smoke[smokeRead]
         if (plume.life <= 0) continue
-        plume.x += plume.vx * (dt / 16.67)
-        plume.y += plume.vy * (dt / 16.67)
+        plume.x += plume.vx * dtScale
+        plume.y += plume.vy * dtScale
         plume.vx += Math.sin(t * 1.6 + plume.y * 0.02) * 0.0015
-        plume.life -= 0.0048 * (dt / 16.67)
+        plume.life -= 0.0048 * dtScale
+        if (plume.life <= 0) continue
 
         if (render) {
           ctx.beginPath()
           ctx.ellipse(plume.x, plume.y, plume.size, plume.size * 0.58, 0, 0, Math.PI * 2)
-          ctx.fillStyle = `rgba(70, 62, 58, ${Math.max(0, plume.life) * 0.040})`
+          ctx.fillStyle = `rgba(70, 62, 58, ${plume.life * 0.040})`
           ctx.fill()
         }
+        smoke[smokeWrite++] = plume
       }
+      smoke.length = smokeWrite
     }
 
     resize()
