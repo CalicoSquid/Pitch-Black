@@ -921,6 +921,11 @@ function playMeteorBoom(soundOn: boolean) {
   filter.frequency.value = 165
   gain.gain.value = 0.095
   source.connect(filter).connect(gain).connect(getPitchAudioTransientOutput(ac))
+  source.onended = () => {
+    try { source.disconnect() } catch { /* harmless */ }
+    try { filter.disconnect() } catch { /* harmless */ }
+    try { gain.disconnect() } catch { /* harmless */ }
+  }
   source.start()
 }
 
@@ -1014,6 +1019,27 @@ function playAbductedOwlCall(soundOn: boolean) {
   bodyGain.gain.value = 0.12
   body.connect(bodyGain).connect(gain)
 
+  let ended = 0
+  const disconnectVoice = () => {
+    try { voice.disconnect() } catch { /* harmless */ }
+    ended += 1
+    if (ended >= 2) {
+      try { bodyGain.disconnect() } catch { /* harmless */ }
+      try { gain.disconnect() } catch { /* harmless */ }
+      try { filter.disconnect() } catch { /* harmless */ }
+    }
+  }
+  const disconnectBody = () => {
+    try { body.disconnect() } catch { /* harmless */ }
+    ended += 1
+    if (ended >= 2) {
+      try { bodyGain.disconnect() } catch { /* harmless */ }
+      try { gain.disconnect() } catch { /* harmless */ }
+      try { filter.disconnect() } catch { /* harmless */ }
+    }
+  }
+  voice.onended = disconnectVoice
+  body.onended = disconnectBody
   voice.start(now)
   body.start(now)
   voice.stop(now + duration)

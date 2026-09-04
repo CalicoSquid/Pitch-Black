@@ -1,3 +1,11 @@
+## v1.61.1 — overnight stability
+
+- Fixed Ember's long-session lifecycle so a meteor/lightning ignition no longer leaves the full world fire simulation awake forever after every visible/fuel-bearing trace has cooled.
+- Ember now drops to a lightweight 5 Hz wake-check while genuinely dormant and returns to normal cadence immediately for a new meteor, lightning strike, scene activation or reset. The accepted meteor, fire, char, steam and weather-interaction behaviour is unchanged while active.
+- Completed Ember impacts now release their transient meteor state instead of retaining a permanent completed-impact latch.
+- Tightened Web Audio lifecycle cleanup across Ember, Rain, Snow, Storm and rare-event one-shots: stopped/completed sources, filters and gains explicitly disconnect instead of relying on eventual browser garbage collection.
+- No visual design, event rarity, weather timing, audio level/mix, UI or world-event compatibility changes in this pass.
+
 ## v1.61.0 — world events everywhere
 
 - Decoupled the persistent nighttime event engine from Alive weather control. Rare events, Ambient Life and routine sky micro-events now continue through manually selected Rain, Snow, Ember and composed atmosphere states.

@@ -418,6 +418,8 @@ export function StormLayer({
     ctx: AudioContext
     deepGain: GainNode
     textureGain: GainNode
+    deepFilter: BiquadFilterNode
+    textureFilter: BiquadFilterNode
     deepSource: AudioBufferSourceNode
     textureSource: AudioBufferSourceNode
   } | null>(null)
@@ -460,6 +462,12 @@ export function StormLayer({
         window.setTimeout(() => {
           try { current.deepSource.stop() } catch { /* already stopped */ }
           try { current.textureSource.stop() } catch { /* already stopped */ }
+          try { current.deepSource.disconnect() } catch { /* harmless */ }
+          try { current.textureSource.disconnect() } catch { /* harmless */ }
+          try { current.deepFilter.disconnect() } catch { /* harmless */ }
+          try { current.textureFilter.disconnect() } catch { /* harmless */ }
+          try { current.deepGain.disconnect() } catch { /* harmless */ }
+          try { current.textureGain.disconnect() } catch { /* harmless */ }
           if (rumbleRef.current === current) rumbleRef.current = null
         }, 4600)
       }
@@ -518,7 +526,7 @@ export function StormLayer({
     textureSource.start(audioCtx.currentTime + 0.37)
     deepGain.gain.setTargetAtTime(0.019, audioCtx.currentTime, 3.1)
     textureGain.gain.setTargetAtTime(0.0045, audioCtx.currentTime, 3.5)
-    rumbleRef.current = { ctx: audioCtx, deepGain, textureGain, deepSource, textureSource }
+    rumbleRef.current = { ctx: audioCtx, deepGain, textureGain, deepFilter, textureFilter, deepSource, textureSource }
 
     return () => {
       deepGain.gain.setTargetAtTime(0, audioCtx.currentTime, 1.4)
@@ -526,6 +534,12 @@ export function StormLayer({
       window.setTimeout(() => {
         try { deepSource.stop() } catch { /* already stopped */ }
         try { textureSource.stop() } catch { /* already stopped */ }
+        try { deepSource.disconnect() } catch { /* harmless */ }
+        try { textureSource.disconnect() } catch { /* harmless */ }
+        try { deepFilter.disconnect() } catch { /* harmless */ }
+        try { textureFilter.disconnect() } catch { /* harmless */ }
+        try { deepGain.disconnect() } catch { /* harmless */ }
+        try { textureGain.disconnect() } catch { /* harmless */ }
       }, 3600)
       if (rumbleRef.current?.deepSource === deepSource) rumbleRef.current = null
     }
@@ -645,6 +659,11 @@ export function StormLayer({
       gain.gain.linearRampToValueAtTime(0.0001, tailStart + 0.50)
 
       source.connect(lowpass).connect(gain).connect(getPitchAudioTransientOutput(audioCtx))
+      source.onended = () => {
+        try { source.disconnect() } catch { /* harmless */ }
+        try { lowpass.disconnect() } catch { /* harmless */ }
+        try { gain.disconnect() } catch { /* harmless */ }
+      }
       source.start(startTime)
       lastThunderPlayedAt = performance.now()
     }

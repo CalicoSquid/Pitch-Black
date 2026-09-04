@@ -101,6 +101,10 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
         window.setTimeout(() => {
           try { current.steadySource.stop() } catch { /* already stopped */ }
           try { current.heavySource.stop() } catch { /* already stopped */ }
+          try { current.steadySource.disconnect() } catch { /* harmless */ }
+          try { current.heavySource.disconnect() } catch { /* harmless */ }
+          try { current.steadyGain.disconnect() } catch { /* harmless */ }
+          try { current.heavyGain.disconnect() } catch { /* harmless */ }
           if (audioRef.current === current) audioRef.current = null
         }, 800)
       }
@@ -157,6 +161,10 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       window.setTimeout(() => {
         try { current.steadySource.stop() } catch { /* already stopped */ }
         try { current.heavySource.stop() } catch { /* already stopped */ }
+        try { current.steadySource.disconnect() } catch { /* harmless */ }
+        try { current.heavySource.disconnect() } catch { /* harmless */ }
+        try { current.steadyGain.disconnect() } catch { /* harmless */ }
+        try { current.heavyGain.disconnect() } catch { /* harmless */ }
       }, 650)
       audioRef.current = null
     }

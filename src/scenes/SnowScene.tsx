@@ -84,7 +84,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
   const soundOnRef = useRef(soundOn)
   const speedRef = useRef(speed)
   const audioReadyNonce = usePitchAudioReadyNonce()
-  const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; source: AudioBufferSourceNode } | null>(null)
+  const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; filter: BiquadFilterNode; source: AudioBufferSourceNode } | null>(null)
 
   useEffect(() => {
     activeRef.current = active
@@ -106,6 +106,9 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         current.gain.gain.setTargetAtTime(0, current.ctx.currentTime, 0.6)
         window.setTimeout(() => {
           try { current.source.stop() } catch { /* already stopped */ }
+          try { current.source.disconnect() } catch { /* harmless */ }
+          try { current.filter.disconnect() } catch { /* harmless */ }
+          try { current.gain.disconnect() } catch { /* harmless */ }
           if (audioRef.current === current) audioRef.current = null
         }, 900)
       }
@@ -129,12 +132,15 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     // Start genuinely silent. The live snowfall/audio-density loop below is the
     // sole authority for raising Snow ambience, preventing a brief wind swell
     // when Sound is enabled while Snow itself is inactive.
-    audioRef.current = { ctx: audioCtx, gain, source }
+    audioRef.current = { ctx: audioCtx, gain, filter, source }
 
     return () => {
       gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.3)
       window.setTimeout(() => {
         try { source.stop() } catch { /* already stopped */ }
+        try { source.disconnect() } catch { /* harmless */ }
+        try { filter.disconnect() } catch { /* harmless */ }
+        try { gain.disconnect() } catch { /* harmless */ }
       }, 500)
       audioRef.current = null
     }

@@ -76,6 +76,7 @@ export function EmberScene({
     let height = window.innerHeight
     let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
     let raf = 0
+    let idleTimer = 0
     let last = performance.now()
     let meteorStartedAt = -1
     let wasActive = false
@@ -107,15 +108,59 @@ export function EmberScene({
 
     let audioCtx: AudioContext | null = null
     let whooshGain: GainNode | null = null
+    let whooshFilter: BiquadFilterNode | null = null
     let whooshSource: AudioBufferSourceNode | null = null
     let fireGain: GainNode | null = null
+    let fireFilter: BiquadFilterNode | null = null
     let fireSource: AudioBufferSourceNode | null = null
+    let fireStopTimer = 0
     let lastFireLevelNode: GainNode | null = null
     let lastFireLevel = Number.NaN
 
     const ensureAudio = () => {
       audioCtx = getPitchAudio()
       return audioCtx
+    }
+
+    const disconnectWhoosh = (source = whooshSource, filter = whooshFilter, gain = whooshGain) => {
+      try { source?.disconnect() } catch { /* harmless */ }
+      try { filter?.disconnect() } catch { /* harmless */ }
+      try { gain?.disconnect() } catch { /* harmless */ }
+      if (whooshSource === source) {
+        whooshSource = null
+        whooshFilter = null
+        whooshGain = null
+      }
+    }
+
+    const disconnectFire = (source = fireSource, filter = fireFilter, gain = fireGain) => {
+      try { source?.disconnect() } catch { /* harmless */ }
+      try { filter?.disconnect() } catch { /* harmless */ }
+      try { gain?.disconnect() } catch { /* harmless */ }
+      if (fireSource === source) {
+        fireSource = null
+        fireFilter = null
+        fireGain = null
+        lastFireLevelNode = null
+        lastFireLevel = Number.NaN
+      }
+    }
+
+    const stopFireSound = (fadeSeconds = 0.24) => {
+      const source = fireSource
+      const filter = fireFilter
+      const gain = fireGain
+      if (!source || fireStopTimer) return
+      if (gain && audioCtx && audioCtx.state !== 'closed') {
+        gain.gain.cancelScheduledValues(audioCtx.currentTime)
+        gain.gain.setTargetAtTime(0, audioCtx.currentTime, Math.max(0.03, fadeSeconds))
+      }
+      fireStopTimer = window.setTimeout(() => {
+        fireStopTimer = 0
+        if (fireSource !== source || (hasIgnited && soundOnRef.current)) return
+        try { source.stop() } catch { /* already stopped */ }
+        disconnectFire(source, filter, gain)
+      }, Math.max(260, fadeSeconds * 2800))
     }
 
     const startWhoosh = () => {
@@ -149,13 +194,9 @@ export function EmberScene({
       filter.frequency.exponentialRampToValueAtTime(1250, ac.currentTime + 1.8)
 
       whooshSource = source
+      whooshFilter = filter
       whooshGain = gain
-      source.onended = () => {
-        if (whooshSource === source) {
-          whooshSource = null
-          whooshGain = null
-        }
-      }
+      source.onended = () => disconnectWhoosh(source, filter, gain)
     }
 
     const impactSound = () => {
@@ -174,6 +215,10 @@ export function EmberScene({
       impactGain.gain.exponentialRampToValueAtTime(0.17, ac.currentTime + 0.012)
       impactGain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.42)
       osc.connect(impactGain).connect(getPitchAudioTransientOutput(ac))
+      osc.onended = () => {
+        try { osc.disconnect() } catch { /* harmless */ }
+        try { impactGain.disconnect() } catch { /* harmless */ }
+      }
       osc.start()
       osc.stop(ac.currentTime + 0.46)
 
@@ -191,15 +236,24 @@ export function EmberScene({
       filter.frequency.value = 850
       gain.gain.value = 0.055
       source.connect(filter).connect(gain).connect(getPitchAudioTransientOutput(ac))
+      source.onended = () => {
+        try { source.disconnect() } catch { /* harmless */ }
+        try { filter.disconnect() } catch { /* harmless */ }
+        try { gain.disconnect() } catch { /* harmless */ }
+      }
       source.start()
     }
 
     const syncFireSound = () => {
       if (!soundOnRef.current || !hasIgnited) {
-        if (fireGain && audioCtx) fireGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.24)
+        stopFireSound()
         return
       }
 
+      if (fireStopTimer) {
+        window.clearTimeout(fireStopTimer)
+        fireStopTimer = 0
+      }
       const ac = ensureAudio()
       if (!ac) return
       if (fireSource) return
@@ -226,7 +280,9 @@ export function EmberScene({
       source.connect(filter).connect(gain).connect(getPitchAudioOutput(ac))
       source.start()
       fireSource = source
+      fireFilter = filter
       fireGain = gain
+      source.onended = () => disconnectFire(source, filter, gain)
     }
 
     const seeded = (i: number) => {
@@ -332,11 +388,13 @@ export function EmberScene({
       fireSnapshot.fill(0)
 
       if (whooshSource) {
-        try { whooshSource.stop() } catch { /* already stopped */ }
-        whooshSource = null
-        whooshGain = null
+        const source = whooshSource
+        const filter = whooshFilter
+        const gain = whooshGain
+        try { source.stop() } catch { /* already stopped */ }
+        disconnectWhoosh(source, filter, gain)
       }
-      if (fireGain && audioCtx) fireGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.12)
+      stopFireSound(0.12)
       if (activeRef.current) beginMeteor(time)
     }
 
@@ -425,9 +483,11 @@ export function EmberScene({
 
     const beginMeteor = (time: number) => {
       if (whooshSource) {
-        try { whooshSource.stop() } catch { /* already finished */ }
-        whooshSource = null
-        whooshGain = null
+        const source = whooshSource
+        const filter = whooshFilter
+        const gain = whooshGain
+        try { source.stop() } catch { /* already finished */ }
+        disconnectWhoosh(source, filter, gain)
       }
       meteorStartedAt = time
       impacted = false
@@ -507,7 +567,11 @@ export function EmberScene({
       const previous = fireSnapshot
       fire[0] = 0
       fire[fire.length - 1] = 0
+      residue[0] = 0
+      residue[residue.length - 1] = 0
       let totalHeat = 0
+      let maxHeat = 0
+      let maxResidue = 0
       const impactAge = (time - impactAt) / 1000
 
       // Keep an ignition source alive briefly at the strike point.
@@ -567,7 +631,9 @@ export function EmberScene({
 
         heat = Math.max(0, Math.min(1, heat))
         fire[i] = heat
-        totalHeat += fire[i]
+        totalHeat += heat
+        if (heat > maxHeat) maxHeat = heat
+        if (residue[i] > maxResidue) maxResidue = residue[i]
 
         if (heat > 0.06) {
           residue[i] = Math.min(1, residue[i] + heat * 0.00145 * scaled)
@@ -639,6 +705,24 @@ export function EmberScene({
         }
       } else {
         pitchWorld.wetness = Math.max(0, pitchWorld.wetness - 0.0005 * scaled * Math.max(0.15, 1 - rainMix))
+      }
+
+      // `hasIgnited` used to remain latched forever after the first strike/meteor,
+      // leaving this whole-world simulation running at ~30 Hz for the rest of an
+      // overnight session. Keep the accepted cooling/char aftermath intact, then
+      // genuinely put Ember to sleep once every visible/fuel-bearing trace is gone.
+      if (!emberPurgeActive && impactAge >= 4.2 && maxHeat < 0.008 && maxResidue < 0.03) {
+        hasIgnited = false
+        for (let i = 0; i < fire.length; i++) {
+          if (fire[i] < 0.008) fire[i] = 0
+          if (residue[i] < 0.03) residue[i] = 0
+        }
+      }
+
+      if (impactAge >= 4.2 && fragments.length === 0) {
+        impacted = false
+        meteorStartedAt = -1
+        trail.length = 0
       }
 
       if (fireGain && audioCtx) {
@@ -946,7 +1030,8 @@ export function EmberScene({
     syncFireSound()
     let fireCarry = 0
     let lastVisualFrame = 0
-    raf = requestAnimationFrame(function draw(time) {
+
+    const draw = (time: number) => {
       const dt = Math.min(34, time - last)
       last = time
 
@@ -971,12 +1056,31 @@ export function EmberScene({
       if (fireCarry >= 30) {
         updateFire(time, Math.min(66, fireCarry))
         fireCarry = 0
+        // updateFire can be the moment the final invisible heat/char disappears.
+        syncFireSound()
+      }
+
+      const highMotion = (meteorStartedAt >= 0 && !impacted) || (impacted && time - impactAt < 1_450)
+      const hasTransientVisuals = fragments.length > 0 || sparks.length > 0 || steam.length > 0 || smoke.length > 0
+      const fullyDormant = !hasIgnited && meteorStartedAt < 0 && !impacted && !emberPurgeActive && !hasTransientVisuals
+
+      if (fullyDormant) {
+        // Five lightweight checks per second are enough to catch a new meteor,
+        // scene activation, world reset, or lightning strike without burning a
+        // display-rate animation loop for hours while Ember is visually absent.
+        if (visibleRef.current && lastVisualFrame !== -1) {
+          ctx.clearRect(0, 0, width, height)
+          lastVisualFrame = -1
+        }
+        idleTimer = window.setTimeout(() => {
+          idleTimer = 0
+          raf = requestAnimationFrame(draw)
+        }, 200)
+        return
       }
 
       // The meteor/impact needs display-rate motion. Persistent fire/char is a
-      // slower organic surface and remains visually smooth at ~30 Hz, while its
-      // particles continue to integrate every animation frame below.
-      const highMotion = (meteorStartedAt >= 0 && !impacted) || (impacted && time - impactAt < 1_450)
+      // slower organic surface and remains visually smooth at ~30 Hz.
       const render = visibleRef.current && (highMotion || time - lastVisualFrame >= 30)
       if (render) lastVisualFrame = time
       if (render) ctx.clearRect(0, 0, width, height)
@@ -985,17 +1089,29 @@ export function EmberScene({
       drawFire(time, dt, render)
 
       raf = requestAnimationFrame(draw)
-    })
+    }
+
+    raf = requestAnimationFrame(draw)
 
     window.addEventListener('resize', resize)
 
     return () => {
       cancelAnimationFrame(raf)
+      window.clearTimeout(idleTimer)
+      window.clearTimeout(fireStopTimer)
       window.removeEventListener('resize', resize)
       if (whooshGain && audioCtx) whooshGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05)
       if (fireGain && audioCtx) fireGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.18)
-      try { whooshSource?.stop() } catch { /* already finished */ }
-      try { fireSource?.stop() } catch { /* already finished */ }
+      const endingWhooshSource = whooshSource
+      const endingWhooshFilter = whooshFilter
+      const endingWhooshGain = whooshGain
+      const endingFireSource = fireSource
+      const endingFireFilter = fireFilter
+      const endingFireGain = fireGain
+      try { endingWhooshSource?.stop() } catch { /* already finished */ }
+      try { endingFireSource?.stop() } catch { /* already finished */ }
+      disconnectWhoosh(endingWhooshSource, endingWhooshFilter, endingWhooshGain)
+      disconnectFire(endingFireSource, endingFireFilter, endingFireGain)
     }
   }, [])
 
