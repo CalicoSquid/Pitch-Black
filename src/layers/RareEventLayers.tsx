@@ -4,7 +4,7 @@ import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 import { publishAmbientOwlHoot } from '../world/ambientLifeSignal'
 
-export type RareEventKind = 'aurora' | 'great-meteor' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl' | 'owl-ufo'
+export type RareEventKind = 'aurora' | 'great-meteor' | 'supernova' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl' | 'owl-army' | 'owl-ufo'
 
 export type RareEventState = {
   kind: RareEventKind
@@ -640,6 +640,92 @@ function drawImpossibleStar(ctx: CanvasRenderingContext2D, width: number, height
   ctx.fill()
 }
 
+function drawSupernova(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
+  const duration = 9_000
+  if (elapsed < 0 || elapsed > duration) return
+
+  // It first reads as an unremarkable star, then becomes unmistakably wrong.
+  // Keep it compact enough to belong to the sky rather than becoming a screen flash.
+  const x = width * (0.20 + seededFrac(id * 19.7 + 4.1) * 0.60)
+  const y = height * (0.10 + seededFrac(id * 31.3 + 7.8) * 0.30)
+  const intro = smoothStep(elapsed / 650)
+  const ignition = smoothStep((elapsed - 1_850) / 720)
+  const collapse = smoothStep((elapsed - 5_250) / 1_950)
+  const vanish = smoothStep((elapsed - 7_150) / 1_450)
+  const presence = clamp01(intro * (1 - vanish))
+  if (presence <= 0.001) return
+
+  const bloom = ignition * (1 - collapse)
+  const collapsedCore = ignition * collapse * (1 - vanish)
+  const baseStar = (1 - ignition) * presence
+  const maxShell = Math.max(17, Math.min(31, width * 0.018))
+  const shellRadius = 2.2 + maxShell * (0.72 + smoothStep((elapsed - 2_300) / 2_000) * 0.28) * bloom
+  const glowRadius = Math.max(34, Math.min(72, width * 0.042)) * (0.50 + bloom * 0.50)
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'screen'
+
+  if (baseStar > 0.001) {
+    ctx.beginPath()
+    ctx.arc(x, y, 1.05, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(232,238,241,${0.68 * baseStar})`
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, 3.6, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(198,214,225,${0.055 * baseStar})`
+    ctx.fill()
+  }
+
+  if (bloom > 0.001) {
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, glowRadius)
+    glow.addColorStop(0, `rgba(255,249,232,${0.26 * bloom})`)
+    glow.addColorStop(0.18, `rgba(244,226,191,${0.16 * bloom})`)
+    glow.addColorStop(0.55, `rgba(190,211,227,${0.065 * bloom})`)
+    glow.addColorStop(1, 'rgba(170,196,216,0)')
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(x, y, glowRadius, 0, Math.PI * 2)
+    ctx.fill()
+
+    // A thin irregular-looking shell is enough to read as a stellar detonation;
+    // no debris particles or expensive blur field are needed.
+    ctx.beginPath()
+    ctx.arc(x, y, shellRadius, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(236,226,205,${0.34 * bloom})`
+    ctx.lineWidth = Math.max(0.8, Math.min(1.6, width * 0.0009))
+    ctx.stroke()
+
+    const innerRadius = Math.max(3.8, Math.min(6.2, width * 0.0034)) * (0.72 + bloom * 0.28)
+    ctx.beginPath()
+    ctx.arc(x, y, innerRadius, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,250,236,${0.96 * bloom})`
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, innerRadius * 0.43, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,255,253,${0.99 * bloom})`
+    ctx.fill()
+  }
+
+  if (collapsedCore > 0.001) {
+    // The bloom pulls sharply back to a pinprick before the star disappears.
+    const coreRadius = 1.0 + (1 - collapse) * 4.6
+    const coreAlpha = clamp01(collapsedCore * (1 - vanish * 0.55))
+    const tinyGlow = ctx.createRadialGradient(x, y, 0, x, y, 13)
+    tinyGlow.addColorStop(0, `rgba(247,236,213,${0.18 * coreAlpha})`)
+    tinyGlow.addColorStop(1, 'rgba(202,218,228,0)')
+    ctx.fillStyle = tinyGlow
+    ctx.beginPath()
+    ctx.arc(x, y, 13, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(x, y, coreRadius, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(249,246,232,${0.90 * coreAlpha})`
+    ctx.fill()
+  }
+
+  ctx.restore()
+}
+
 function owlBlinkOpen(elapsed: number, center: number, halfWidth: number) {
   const distance = Math.abs(elapsed - center)
   if (distance >= halfWidth) return 1
@@ -709,6 +795,72 @@ function drawOwl(ctx: CanvasRenderingContext2D, width: number, height: number, e
   ctx.globalCompositeOperation = 'screen'
   drawEye(centerX - spacing * 0.5 + shift * 0.55, leftOpen, -0.035)
   drawEye(centerX + spacing * 0.5 + shift * 0.72, rightOpen, 0.025)
+  ctx.restore()
+}
+
+
+function drawOwlArmy(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
+  const duration = 7_650
+  if (elapsed < 0 || elapsed > duration) return
+
+  // The real field hoot begins at 5.35s; give it a beat to register before the
+  // reveal so the sequence reads as hoot -> twenty eyes -> nothing.
+  const armyStart = 6_100
+  const armyEnd = 7_300
+  if (elapsed < armyStart) {
+    drawOwl(ctx, width, height, elapsed, id)
+    return
+  }
+  if (elapsed > armyEnd) return
+
+  const fadeIn = smoothStep((elapsed - armyStart) / 150)
+  const fadeOut = 1 - smoothStep((elapsed - (armyEnd - 180)) / 180)
+  const presence = clamp01(fadeIn * fadeOut)
+  if (presence <= 0.001) return
+
+  // Ten pairs = twenty eyes total. They arrive together, hold their gaze and
+  // disappear together; no chorus, no individual animation and no second joke.
+  ctx.save()
+  ctx.globalCompositeOperation = 'screen'
+  for (let i = 0; i < 10; i++) {
+    const lane = i / 9
+    const jitter = (seededFrac(id * 41.7 + i * 13.9 + 2.4) - 0.5) * 0.055
+    const x = width * Math.max(0.065, Math.min(0.935, 0.085 + lane * 0.83 + jitter))
+    const terrainY = surfaceYAt(x, width, height)
+    const depth = seededFrac(id * 53.1 + i * 17.2 + 9.6)
+    const lift = 15 + depth * 39
+    const y = Math.min(height * 0.78, terrainY - lift)
+    const scale = 0.66 + seededFrac(id * 29.4 + i * 7.7 + 6.1) * 0.48
+    const spacing = Math.max(7.2, Math.min(13.8, width * 0.0088)) * scale
+    const eyeRx = Math.max(1.45, Math.min(2.45, width * 0.00175)) * scale
+    const eyeRy = eyeRx * 0.66
+    const pairAlpha = presence * (0.72 + seededFrac(id * 71.3 + i * 5.1) * 0.22)
+
+    const drawEye = (eyeX: number, bias: number) => {
+      const glowRadius = 4.4 + eyeRx * 1.55
+      const glow = ctx.createRadialGradient(eyeX, y, 0, eyeX, y, glowRadius)
+      glow.addColorStop(0, `rgba(232,190,92,${0.15 * pairAlpha})`)
+      glow.addColorStop(0.38, `rgba(197,146,63,${0.065 * pairAlpha})`)
+      glow.addColorStop(1, 'rgba(166,119,51,0)')
+      ctx.fillStyle = glow
+      ctx.beginPath()
+      ctx.arc(eyeX, y, glowRadius, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.ellipse(eyeX, y, eyeRx * (1 + bias), eyeRy, 0, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(224,177,78,${0.79 * pairAlpha})`
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.ellipse(eyeX + eyeRx * 0.10, y - eyeRy * 0.08, eyeRx * 0.32, Math.max(0.11, eyeRy * 0.40), 0, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(255,226,143,${0.48 * pairAlpha})`
+      ctx.fill()
+    }
+
+    drawEye(x - spacing * 0.5, -0.025)
+    drawEye(x + spacing * 0.5, 0.018)
+  }
   ctx.restore()
 }
 
@@ -1091,9 +1243,11 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     const durationFor = (kind: RareEventKind | null) => {
       if (kind === 'aurora') return 94_000
       if (kind === 'great-meteor') return 15_500
+      if (kind === 'supernova') return 9_000
       if (kind === 'distant-storm') return 72_000
       if (kind === 'impossible-star') return 32_000
       if (kind === 'owl') return 9_600
+      if (kind === 'owl-army') return 7_650
       if (kind === 'owl-ufo') return 15_600
       return 0
     }
@@ -1137,7 +1291,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
             boomTimer = null
           }, 12_300)
         }
-        if (requested.kind === 'owl' || requested.kind === 'owl-ufo') {
+        if (requested.kind === 'owl' || requested.kind === 'owl-army' || requested.kind === 'owl-ufo') {
           if (soundRef.current) {
             const owlAudio = getPitchAudio()
             if (owlAudio) void loadPitchAudioAsset(owlAudio, 'owl-field.mp3').catch(() => undefined)
@@ -1170,9 +1324,11 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
         drawAurora(ctx, auroraField, width, height, elapsed)
       }
       if (currentKind === 'great-meteor') drawGreatMeteor(ctx, width, height, elapsed)
+      if (currentKind === 'supernova') drawSupernova(ctx, width, height, elapsed, currentId)
       if (currentKind === 'distant-storm') drawDistantStorm(ctx, width, height, elapsed, currentId)
       if (currentKind === 'impossible-star') drawImpossibleStar(ctx, width, height, elapsed)
       if (currentKind === 'owl') drawOwl(ctx, width, height, elapsed, currentId)
+      if (currentKind === 'owl-army') drawOwlArmy(ctx, width, height, elapsed, currentId)
       if (currentKind === 'owl-ufo') drawOwlUfo(ctx, width, height, elapsed, currentId)
 
       const duration = durationFor(currentKind)

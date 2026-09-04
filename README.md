@@ -1,3 +1,12 @@
+## v1.62.0 — event density
+
+- Added **Supernova**, a new silent 6–12 hour rare sky sighting: an ordinary-looking star blooms into a compact readable stellar explosion, then collapses back to a pinprick and disappears completely.
+- Added **Owl Army** as a 10% branch of owl encounters. Owl cadence is unchanged: 80% remain the normal owl, 10% become Owl Army, and the existing 10% Owl UFO branch remains. Owl Army uses the single normal field-recorded hoot, then briefly reveals exactly twenty staring eyes (ten owl pairs) before all vanish together; there is no chorus.
+- Airplane and Lantern encounters now retry in 5–11 minutes when their scheduled opportunity is blocked by weather, overlap, visibility or unsafe ground instead of discarding the encounter and waiting another full 45–140 minute interval. Successful encounters retain their original sparse cadence.
+- Reduced-motion users now receive calm opacity-only versions of routine shooting stars, distant flashes, moon veils and meteor showers instead of having those event classes removed entirely. Motion remains suppressed; the world no longer becomes disproportionately empty.
+- Added non-persistent QA routes `?test=supernova` and `?test=owl-army` for immediate visual review.
+- The routine 38–92 second micro-event scheduler, all weather cadence, existing rare-event intervals and the v1.61.1 overnight-stability lifecycle remain unchanged.
+
 ## v1.61.1 — overnight stability
 
 - Fixed Ember's long-session lifecycle so a meteor/lightning ignition no longer leaves the full world fire simulation awake forever after every visible/fuel-bearing trace has cooled.

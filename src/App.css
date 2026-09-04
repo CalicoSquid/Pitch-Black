@@ -747,9 +747,28 @@
   60% { opacity: 0; }
 }
 
+@keyframes alive-reduced-star-pulse {
+  0%, 100% { opacity: 0; transform: none; }
+  22% { opacity: .62; transform: none; }
+  62% { opacity: .42; transform: none; }
+}
+
+@keyframes alive-reduced-flash {
+  0%, 100% { opacity: 0; }
+  35% { opacity: .22; }
+  58% { opacity: .08; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .alive-shooting-star,
-  .alive-distant-flash { display: none; }
+  .alive-shooting-star {
+    display: block;
+    animation: alive-reduced-star-pulse var(--alive-event-duration) ease-in-out forwards;
+  }
+  .alive-shooting-star::after { display: none; }
+  .alive-distant-flash {
+    display: block;
+    animation: alive-reduced-flash var(--alive-event-duration) ease-in-out forwards;
+  }
   .global-moon::before { transition-duration: 0ms; }
 }
 
@@ -1167,12 +1186,25 @@
   .alive-moon-veil { top: 27%; width: clamp(180px, 58vh, 300px); height: clamp(72px, 24vh, 118px); }
 }
 
+@keyframes alive-reduced-moon-veil {
+  0%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.03); }
+  28% { opacity: .34; transform: translate(-50%, -50%) scale(1.03); }
+  72% { opacity: .28; transform: translate(-50%, -50%) scale(1.03); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .alive-status i,
   .control-dock .alive-control.alive-active::after,
   .alive-night-sky i { animation: none; }
-  .alive-moon-veil,
-  .alive-meteor-shower { display: none; }
+  .alive-moon-veil {
+    display: block;
+    animation: alive-reduced-moon-veil var(--alive-event-duration) ease-in-out forwards;
+  }
+  .alive-meteor-shower { display: block; }
+  .alive-meteor-shower-star {
+    animation: alive-reduced-star-pulse var(--alive-star-duration) ease-in-out var(--alive-star-delay) forwards;
+  }
+  .alive-meteor-shower-star::after { display: none; }
 }
 
 /* v1.34 — straightforward bedtime UX. Controls are obvious while awake and

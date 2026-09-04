@@ -59,9 +59,10 @@ type AliveTimeline = {
 }
 
 type AliveHeroSchedule = {
-  version: 1
+  version: 2
   auroraNextAt: number
   greatMeteorNextAt: number
+  supernovaNextAt: number
 }
 
 type AmbientLifeSchedule = {
@@ -91,6 +92,10 @@ function nextGreatMeteorAt(from: number) {
   return from + between(3, 6) * HOUR
 }
 
+function nextSupernovaAt(from: number) {
+  return from + between(6, 12) * HOUR
+}
+
 function nextAirplaneAt(from: number) {
   return from + between(45, 100) * MINUTE
 }
@@ -105,11 +110,11 @@ function nextLanternAt(from: number) {
 
 
 function isAliveRareMicroKind(kind: RareEventKind) {
-  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl' || kind === 'owl-ufo'
+  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl' || kind === 'owl-army' || kind === 'owl-ufo'
 }
 
 function isAliveHeroKind(kind: RareEventKind) {
-  return kind === 'aurora' || kind === 'great-meteor'
+  return kind === 'aurora' || kind === 'great-meteor' || kind === 'supernova'
 }
 
 function isAlivePhase(value: unknown): value is AlivePhase {
@@ -253,10 +258,22 @@ function readHeroSchedule(): AliveHeroSchedule | null {
   try {
     const raw = window.localStorage.getItem(ALIVE_HERO_STORAGE_KEY)
     if (!raw) return null
-    const saved = JSON.parse(raw) as Partial<AliveHeroSchedule>
-    if (saved.version !== 1) return null
+    const saved = JSON.parse(raw) as Partial<Omit<AliveHeroSchedule, 'version'>> & { version?: 1 | 2 }
+    if (saved.version !== 1 && saved.version !== 2) return null
     if (typeof saved.auroraNextAt !== 'number' || !Number.isFinite(saved.auroraNextAt)) return null
     if (typeof saved.greatMeteorNextAt !== 'number' || !Number.isFinite(saved.greatMeteorNextAt)) return null
+    // Migrate the existing v1 wall-clock schedule in place so this pass does not
+    // reset somebody's already-running Aurora / Great Meteor clocks. Supernova
+    // simply receives its first independent 6–12 hour opportunity from now.
+    if (saved.version === 1) {
+      return {
+        version: 2,
+        auroraNextAt: saved.auroraNextAt,
+        greatMeteorNextAt: saved.greatMeteorNextAt,
+        supernovaNextAt: nextSupernovaAt(Date.now()),
+      }
+    }
+    if (typeof saved.supernovaNextAt !== 'number' || !Number.isFinite(saved.supernovaNextAt)) return null
     return saved as AliveHeroSchedule
   } catch {
     return null
@@ -274,15 +291,17 @@ function saveHeroSchedule(schedule: AliveHeroSchedule) {
 
 function makeHeroSchedule(now: number): AliveHeroSchedule {
   return {
-    version: 1,
+    version: 2,
     auroraNextAt: nextAuroraAt(now),
     greatMeteorNextAt: nextGreatMeteorAt(now),
+    supernovaNextAt: nextSupernovaAt(now),
   }
 }
 
 function resolveHeroScheduleToNow(schedule: AliveHeroSchedule, now: number) {
   let auroraNextAt = schedule.auroraNextAt
   let greatMeteorNextAt = schedule.greatMeteorNextAt
+  let supernovaNextAt = schedule.supernovaNextAt
   let guard = 0
 
   // Hero sightings that happened while nobody was watching stay missed. Advance
@@ -298,9 +317,15 @@ function resolveHeroScheduleToNow(schedule: AliveHeroSchedule, now: number) {
     guard += 1
   }
 
-  const resolved = (auroraNextAt <= now || greatMeteorNextAt <= now)
+  guard = 0
+  while (supernovaNextAt <= now && guard < 1024) {
+    supernovaNextAt = nextSupernovaAt(supernovaNextAt)
+    guard += 1
+  }
+
+  const resolved = (auroraNextAt <= now || greatMeteorNextAt <= now || supernovaNextAt <= now)
     ? makeHeroSchedule(now)
-    : { version: 1 as const, auroraNextAt, greatMeteorNextAt }
+    : { version: 2 as const, auroraNextAt, greatMeteorNextAt, supernovaNextAt }
 
   saveHeroSchedule(resolved)
   return resolved
@@ -576,6 +601,7 @@ export function useAliveWorld({
     let microEndTimer = 0
     let auroraTimer = 0
     let greatMeteorTimer = 0
+    let supernovaTimer = 0
     let distantStormTimer = 0
     let impossibleStarTimer = 0
     let owlTimer = 0
@@ -612,7 +638,7 @@ export function useAliveWorld({
       const current = rareEventsRef.current
 
       // Hero sightings own the moment. Subtle rare events wait rather than
-      // cluttering Aurora / Great Meteor, while the two hero kinds remain
+      // cluttering Aurora / Great Meteor / Supernova, while hero kinds remain
       // independent so their extremely rare natural overlap is still possible.
       if (isAliveRareMicroKind(kind) && current.some((event) => isAliveRareMicroKind(event.kind) || isAliveHeroKind(event.kind))) {
         return false
@@ -622,7 +648,10 @@ export function useAliveWorld({
       }
 
       clearRoutineMicroPresentation()
-      if (isAliveHeroKind(kind) && ambientLifeEventsRef.current.length > 0) {
+      // Aurora and Great Meteor deliberately clear long crossings so their large
+      // compositions own the screen. Supernova is compact enough to happen in
+      // the same world without abruptly erasing an Airplane, Train or Lantern.
+      if ((kind === 'aurora' || kind === 'great-meteor') && ambientLifeEventsRef.current.length > 0) {
         ambientLifeEventsRef.current = []
         setAmbientLifeEvents([])
       }
@@ -669,8 +698,11 @@ export function useAliveWorld({
       const currentPhase = currentEventPhase()
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
       const quietEnough = rareEventsRef.current.length === 0
-      if (document.visibilityState === 'visible' && compatible && quietEnough) emitAmbientLifeEvent('airplane')
-      const nextSchedule = { ...schedule, airplaneNextAt: nextAirplaneAt(now) }
+      const emitted = document.visibilityState === 'visible' && compatible && quietEnough && emitAmbientLifeEvent('airplane')
+      // A bad weather/overlap window postpones the encounter instead of throwing
+      // away a 45–100 minute opportunity completely. Successful sightings keep
+      // their original sparse cadence.
+      const nextSchedule = { ...schedule, airplaneNextAt: emitted ? nextAirplaneAt(now) : now + between(5, 11) * MINUTE }
       ambientLifeScheduleRef.current = nextSchedule
       saveAmbientLifeSchedule(nextSchedule)
       scheduleAmbientLifeTimers()
@@ -698,8 +730,10 @@ export function useAliveWorld({
       const now = Date.now()
       const quietEnough = rareEventsRef.current.length === 0
       const safeGround = sceneRef.current !== 'ember'
-      if (document.visibilityState === 'visible' && quietEnough && safeGround) emitAmbientLifeEvent('lantern')
-      const nextSchedule = { ...schedule, lanternNextAt: nextLanternAt(now) }
+      const emitted = document.visibilityState === 'visible' && quietEnough && safeGround && emitAmbientLifeEvent('lantern')
+      // Same retry policy as Airplane: don't make a perfectly good encounter wait
+      // another hour or two just because its first window was occupied.
+      const nextSchedule = { ...schedule, lanternNextAt: emitted ? nextLanternAt(now) : now + between(5, 11) * MINUTE }
       ambientLifeScheduleRef.current = nextSchedule
       saveAmbientLifeSchedule(nextSchedule)
       scheduleAmbientLifeTimers()
@@ -930,7 +964,8 @@ export function useAliveWorld({
       }
       const currentPhase = currentEventPhase()
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
-      const owlKind: RareEventKind = Math.random() < 0.10 ? 'owl-ufo' : 'owl'
+      const owlRoll = Math.random()
+      const owlKind: RareEventKind = owlRoll < 0.10 ? 'owl-ufo' : owlRoll < 0.20 ? 'owl-army' : 'owl'
       if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent(owlKind)) {
         scheduleOwl(true)
         return
@@ -941,13 +976,15 @@ export function useAliveWorld({
     const scheduleHeroTimers = () => {
       window.clearTimeout(auroraTimer)
       window.clearTimeout(greatMeteorTimer)
+      window.clearTimeout(supernovaTimer)
       const schedule = heroScheduleRef.current
       if (!schedule) return
       auroraTimer = window.setTimeout(() => runHeroEvent('aurora'), Math.max(0, schedule.auroraNextAt - Date.now()))
       greatMeteorTimer = window.setTimeout(() => runHeroEvent('great-meteor'), Math.max(0, schedule.greatMeteorNextAt - Date.now()))
+      supernovaTimer = window.setTimeout(() => runHeroEvent('supernova'), Math.max(0, schedule.supernovaNextAt - Date.now()))
     }
 
-    function runHeroEvent(kind: 'aurora' | 'great-meteor') {
+    function runHeroEvent(kind: 'aurora' | 'great-meteor' | 'supernova') {
       if (disposed) return
       const schedule = heroScheduleRef.current
       if (!schedule) return
@@ -962,11 +999,13 @@ export function useAliveWorld({
       }
 
       // Routine micro-events yield to a hero sighting. Weather itself continues
-      // uninterrupted, and the other hero kind is deliberately left alone.
+      // uninterrupted, and the other hero kinds are deliberately left alone.
       emitRareEvent(kind)
       const next = kind === 'aurora'
         ? { ...schedule, auroraNextAt: nextAuroraAt(now) }
-        : { ...schedule, greatMeteorNextAt: nextGreatMeteorAt(now) }
+        : kind === 'great-meteor'
+          ? { ...schedule, greatMeteorNextAt: nextGreatMeteorAt(now) }
+          : { ...schedule, supernovaNextAt: nextSupernovaAt(now) }
       heroScheduleRef.current = next
       saveHeroSchedule(next)
       scheduleHeroTimers()
@@ -1026,6 +1065,7 @@ export function useAliveWorld({
       window.clearTimeout(microEndTimer)
       window.clearTimeout(auroraTimer)
       window.clearTimeout(greatMeteorTimer)
+      window.clearTimeout(supernovaTimer)
       window.clearTimeout(distantStormTimer)
       window.clearTimeout(impossibleStarTimer)
       window.clearTimeout(owlTimer)
