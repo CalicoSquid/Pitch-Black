@@ -106,7 +106,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
 
     void Promise.all([steadyPromise, heavyPromise])
       .then(([steadyBuffer, heavyBuffer]) => {
-        if (disposed || audioCtx.state === 'closed') return
+        if (disposed || audioCtx.state !== 'running') return
 
         const output = getPitchAudioOutput(audioCtx)
         const steadySource = audioCtx.createBufferSource()

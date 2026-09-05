@@ -5,15 +5,16 @@ import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import type { AlivePhase } from './useAliveWorld'
 
 function nightLevel(phase: AlivePhase) {
-  if (phase === 'calm') return 0.045
-  if (phase === 'clearing') return 0.026
-  if (phase === 'rain-front') return 0.008
+  if (phase === 'calm') return 0.060
+  if (phase === 'clearing') return 0.035
+  if (phase === 'rain-front') return 0.011
   return 0
 }
 
 /**
  * TQW is quiet first. The real insect recording is a stable, subordinate night
- * texture. Visual micro-events must never alter it: if the ambience pumps when a
+ * texture. The field bed stays audible at low listening levels without competing
+ * with weather. Visual micro-events must never alter it: if the ambience pumps when a
  * meteor/halo appears, the sound becomes an accidental event announcement.
  */
 export function AliveAmbience({
@@ -54,7 +55,7 @@ export function AliveAmbience({
 
     void loadPitchAudioAsset(audioCtx, 'night-ambience-loop.mp3')
       .then((buffer) => {
-        if (disposed || audioCtx.state === 'closed') return
+        if (disposed || audioCtx.state !== 'running') return
 
         source = audioCtx.createBufferSource()
         presenceGain = audioCtx.createGain()
@@ -63,7 +64,7 @@ export function AliveAmbience({
         source.loop = true
         source.loopStart = 0
         source.loopEnd = buffer.duration
-        presenceGain.gain.value = 0.16
+        presenceGain.gain.value = 0.24
         phaseGain.gain.value = 0
         source.connect(presenceGain).connect(phaseGain).connect(getPitchAudioOutput(audioCtx))
 
@@ -73,7 +74,7 @@ export function AliveAmbience({
         const now = audioCtx.currentTime
         phaseGain.gain.setValueAtTime(0, now)
         phaseGain.gain.setTargetAtTime(nightLevel(phaseRef.current), now, 1.8)
-        presenceGain.gain.setValueAtTime(0.16, now)
+        presenceGain.gain.setValueAtTime(0.24, now)
         source.onended = () => {
           try { source?.disconnect() } catch { /* harmless */ }
           try { presenceGain?.disconnect() } catch { /* harmless */ }

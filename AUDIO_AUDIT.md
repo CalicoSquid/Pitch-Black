@@ -1,3 +1,9 @@
+# v1.64.2 audio lifecycle note
+
+- Fresh-load persistent loops are now created only after the shared AudioContext is actually `running`; no persistent source graph is built into an autoplay-suspended context.
+- Real AudioContext `statechange` events drive readiness after browser interruption/resume. Any ordinary click/tap/key can satisfy a browser-required fresh-load gesture; a Sound off/on cycle is not required by TQW.
+- Calm/Clearing/Rain-front night ambience is approximately 6 dB louder than v1.64.1. Source recording, loop points, weather mix and master headroom are otherwise unchanged.
+
 # Audio release audit — v1.59.0
 
 ## Launch mix

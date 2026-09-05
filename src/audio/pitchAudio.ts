@@ -80,6 +80,34 @@ export function cancelPitchAudioTransients() {
   pitchAudioTransientGain = null
 }
 
+
+function observePitchAudioState(audioCtx: AudioContext) {
+  const onStateChange = () => {
+    if (pitchAudioContext !== audioCtx) return
+    if (audioCtx.state === 'running') {
+      signalPitchAudioReady(audioCtx)
+      return
+    }
+
+    // Browsers can suspend/interrupt Web Audio outside our own visibility handler.
+    // Treat every non-running state as a fresh readiness boundary so persistent
+    // ambience is rebuilt exactly once when the context genuinely runs again.
+    pitchAudioNeedsReadySignal = true
+    window.clearTimeout(readyTimer)
+    readyTimer = 0
+    if (pitchAudioOutputGain && audioCtx.state !== 'closed') {
+      try {
+        pitchAudioOutputGain.gain.cancelScheduledValues(audioCtx.currentTime)
+        pitchAudioOutputGain.gain.setValueAtTime(0, audioCtx.currentTime)
+      } catch {
+        // A context can disappear while the browser is tearing the page down.
+      }
+    }
+  }
+
+  if (typeof audioCtx.addEventListener === 'function') audioCtx.addEventListener('statechange', onStateChange)
+}
+
 export function unlockPitchAudio() {
   try {
     // Never create or resume Web Audio while the page is backgrounded. Some
@@ -94,6 +122,7 @@ export function unlockPitchAudio() {
 
     if (!pitchAudioContext || pitchAudioContext.state === 'closed') {
       pitchAudioContext = new AudioCtx()
+      observePitchAudioState(pitchAudioContext)
       pitchAudioOutputGain = null
       pitchAudioFadeGain = null
       pitchAudioMuteGain = null
@@ -151,7 +180,8 @@ export function suspendPitchAudio() {
 }
 
 export function getPitchAudio() {
-  return unlockPitchAudio()
+  const audioCtx = unlockPitchAudio()
+  return audioCtx?.state === 'running' ? audioCtx : null
 }
 
 export function getPitchAudioOutput(audioCtx: AudioContext) {

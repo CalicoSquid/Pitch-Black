@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import {
   ambientInteractionSignal,
   clearAmbientLantern,
@@ -565,6 +566,7 @@ function Lantern({
 }
 
 function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
+  const audioReadyNonce = usePitchAudioReadyNonce()
   const { kind, id, duration = 92_000, horn = false, hornDelay } = event
 
   useEffect(() => {
@@ -589,7 +591,7 @@ function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
 
     void loadPitchAudioAsset(audioCtx, 'distant-train-bed.mp3')
       .then((buffer) => {
-        if (disposed || audioCtx.state === 'closed') return
+        if (disposed || audioCtx.state !== 'running') return
 
         bedSource = audioCtx.createBufferSource()
         bedGain = audioCtx.createGain()
@@ -620,7 +622,7 @@ function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
       hornTimer = window.setTimeout(() => {
         void hornBuffer
           .then((buffer) => {
-            if (disposed || audioCtx.state === 'closed') return
+            if (disposed || audioCtx.state !== 'running') return
 
             hornSource = audioCtx.createBufferSource()
             hornGain = audioCtx.createGain()
@@ -648,7 +650,7 @@ function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
       try { hornSource?.disconnect() } catch { /* harmless */ }
       try { hornGain?.disconnect() } catch { /* harmless */ }
     }
-  }, [duration, horn, hornDelay, id, kind, soundOn])
+  }, [audioReadyNonce, duration, horn, hornDelay, id, kind, soundOn])
 }
 
 export function AmbientLifeLayer({ event, soundOn, phase, onComplete, testReaction }: AmbientLifeLayerProps) {

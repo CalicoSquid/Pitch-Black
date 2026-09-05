@@ -1,3 +1,13 @@
+## v1.64.2 — audio lifecycle + night ambience hotfix
+
+- Persistent Web Audio owners now receive a context only once it is genuinely `running`; Rain, Snow, Storm, night ambience and train no longer build loop sources into an autoplay-suspended context and hope to rebuild later.
+- The shared AudioContext now observes its real `statechange` events. Browser interruptions/suspensions create a fresh readiness boundary, and returning to `running` rebuilds persistent ambience without requiring a Sound off/on cycle.
+- A fresh browser reload can still legally require one ordinary page gesture before Web Audio is allowed to run. That is browser autoplay policy; after this pass any click/tap/key is sufficient — cycling the Sound control is not part of the recovery path.
+- Night insect ambience was raised by about 6 dB in Calm/Clearing/Rain-front while remaining subordinate to weather. The recording, loop points and character are unchanged.
+- Audio assets that finish decoding after the context has become suspended are not allowed to create stale loop sources.
+- Added a deterministic startup test covering suspended-on-load → first real resume → unexpected interruption → resume recovery.
+- v1.64.1 WaterLife cadence/clear hotfix and all visual/event scheduling are unchanged.
+
 ## v1.64.1 — WaterLife overnight hotfix
 
 - Fixed a real long-session performance regression: the presence of any lotus no longer forces a full-screen transparent canvas clear/repaint at display refresh rate for the lifetime of the flower.
