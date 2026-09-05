@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.62.2-cat-friend-supernova'
+const CACHE_NAME = 'this-quiet-world-v1.62.3-baseline-recovery'
 const APP_SHELL = ['/', '/index.html', '/about/', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {

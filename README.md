@@ -1,16 +1,11 @@
-## v1.62.2 — cat friend + supernova correction
+## v1.62.3 — baseline recovery
 
-- Reworked the 5% **Wrong Owl / Weird Friend** branch around a tiny, sleep-safe synthesized cat `mrrp?`. The selected real owl hoot now finishes completely before the friend appears, so the joke can never be buried under the field recording.
-- Weird Friend appears after the hoot, waits a beat, makes the cat sound, then leaves. The original owl's glowing eyes widen immediately and deliberately linger after the friend has vanished before the owl finally fades.
-- Corrected **Supernova** back toward the accepted v1.62.0 visual: small white star → modest red/red-giant swell → soft circular gradient supernova → inward collapse. The separate hard white expansion ring remains removed; the gradient bloom now carries only restrained cream/yellow/orange/red warmth.
-- Owl encounter odds, Supernova 6–12 hour cadence, all other events, overnight lifecycle and UI are unchanged. QA routes remain `?test=owl-wrong` and `?test=supernova`.
-
-## v1.62.1 — owl character + supernova polish
-
-- Added **Wrong Owl** as a 5% branch of owl encounters. Owl cadence is unchanged: 75% normal owl, 10% Owl Army, 10% Owl UFO and 5% Wrong Owl. The normal field-recorded hoot plays first; a second owl then appears, gives one deliberately inappropriate tiny daytime-style chirp, and the original owl silently looks sideways before both disappear.
-- Rebuilt **Supernova** around a dying-star sequence: ordinary white star → swelling red/orange giant → unstable warm flare → irregular red/orange supernova cloud → sharp collapse → a tiny momentary black absence. The prominent clean expansion ring from v1.62.0 is removed.
-- Added non-persistent QA route `?test=owl-wrong`; existing `?test=supernova` now previews the rebuilt sequence.
-- No owl encounter frequency, Supernova 6–12 hour schedule, weather cadence, micro-event cadence, overnight lifecycle, UI or other accepted event visuals were changed.
+- Removed the rejected Weird Friend / cat owl experiment completely and restored the v1.62.0 owl pool unchanged: 80% normal owl, 10% Owl Army, 10% Owl UFO.
+- Restored Supernova to the original v1.62.0 timing, explosion size, circular gradient geometry and collapse behavior.
+- Added only a restrained red/orange pre-explosion star phase: the star warms red and grows roughly 38% before ignition.
+- Kept the original shockwave motion but made the ring thinner, warmer and less than half as opaque so it contributes impact without reading as a hard white graphic.
+- Added subtle warm color to the original supernova gradient while preserving white/cream as the dominant light.
+- No event cadence, overnight-stability lifecycle, weather behavior, Owl Army/UFO behavior or routine micro-event frequency changed.
 
 ## v1.62.0 — event density
 
