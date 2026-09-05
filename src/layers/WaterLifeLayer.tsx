@@ -147,6 +147,8 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
     let idleTimer = 0
     let disposed = false
     let canvasCleared = true
+    let previousHadBubbles = false
+    let previousWaterY = Number.NaN
     let lotusId = 1
     let nextLotusAt = performance.now() + 45_000 + Math.random() * 75_000
     let nextBubbleAt = performance.now() + 7 * 60_000 + Math.random() * 8 * 60_000
@@ -398,28 +400,64 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
       updateBubbles(now, dt)
       processLightning(now)
 
-      const hasLife = lotuses.length > 0 || bubbles.length > 0
-      if (!canvasCleared) ctx.clearRect(0, 0, width, height)
+      const hasLotuses = lotuses.length > 0
+      const hasBubbles = bubbles.length > 0
+      const hasLife = hasLotuses || hasBubbles
+
+      if (!canvasCleared) {
+        // Bubbles can travel across the whole viewport, so they require one full
+        // clear while present (and once after they finish). Lotus-only frames do
+        // not: repeatedly clearing a multi-megapixel transparent canvas at 60Hz
+        // was enough to overwhelm weaker overnight devices when Rain was already
+        // animating underneath. Keep lotus cleanup local to the waterline band.
+        if (hasBubbles || previousHadBubbles || !Number.isFinite(waterY) || !Number.isFinite(previousWaterY)) {
+          ctx.clearRect(0, 0, width, height)
+        } else {
+          const top = Math.max(0, Math.min(waterY, previousWaterY) - 72)
+          const bottom = Math.min(height, Math.max(waterY, previousWaterY) + 28)
+          ctx.clearRect(0, top, width, Math.max(1, bottom - top))
+        }
+      }
       canvasCleared = !(actualWater && hasLife)
       if (actualWater) {
         const flash = clamp01(stormSignal.flash)
         for (const lotus of lotuses) drawLotus(ctx, lotus, waterY, now, flash)
         drawBubbles(now)
       }
+      previousHadBubbles = hasBubbles
+      previousWaterY = waterY
 
-      const activeAnimation = lotuses.length > 0 || bubbles.length > 0 || test !== null
       cancelAnimationFrame(raf)
       window.clearTimeout(idleTimer)
-      if (activeAnimation) {
+
+      // WaterLife is deliberately low-frequency compared with the weather
+      // renderer. Bubble motion still gets a smooth 30fps cadence. Growing,
+      // opening, closing, sinking or burning lotuses update at 24fps. A resting
+      // bud/open flower only needs 6fps for its sub-pixel sway/light response.
+      // With no actors, retain the original 2Hz overnight heartbeat.
+      const lotusInMotion = lotuses.some(lotus =>
+        lotus.state === 'shoot'
+        || lotus.state === 'opening'
+        || lotus.state === 'closing'
+        || lotus.state === 'sinking'
+        || lotus.state === 'burning'
+        || lotus.state === 'charred'
+      )
+      const lightningActive = clamp01(stormSignal.flash) > 0.02
+      const delay = hasBubbles
+        ? 33
+        : lotusInMotion || lightningActive
+          ? 42
+          : hasLotuses || test !== null
+            ? 167
+            : 500
+
+      idleTimer = window.setTimeout(() => {
+        // Only discard elapsed time while truly idle. Active bubble physics must
+        // receive the full scheduled dt rather than just the final rAF delay.
+        if (!hasLife && test === null) lastFrame = performance.now()
         raf = requestAnimationFrame(draw)
-      } else {
-        // Overnight-safe deep idle: the layer only wakes twice a second to see
-        // whether weather/water conditions now permit an event.
-        idleTimer = window.setTimeout(() => {
-          lastFrame = performance.now()
-          raf = requestAnimationFrame(draw)
-        }, 500)
-      }
+      }, delay)
     }
 
     resize()

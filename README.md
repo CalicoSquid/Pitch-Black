@@ -1,3 +1,10 @@
+## v1.64.1 — WaterLife overnight hotfix
+
+- Fixed a real long-session performance regression: the presence of any lotus no longer forces a full-screen transparent canvas clear/repaint at display refresh rate for the lifetime of the flower.
+- Lotus-only cleanup is restricted to a narrow band around the real standing-water surface. Bubbles still use full-canvas cleanup because they can travel across the viewport.
+- WaterLife now runs bubbles at ~30 fps, actively growing/opening/closing/burning lotuses at ~24 fps, resting buds/open blooms at ~6 fps, and returns to the existing 2 Hz heartbeat when empty.
+- Lotus lifecycle, placement, appearance, event cadence, bubble appearance/capture behavior, and all world schedulers are unchanged.
+
 ## v1.64.0 — overnight stability + water-life refinement
 
 This release folds the Codex long-session performance audit and the refined standing-water lifecycle into the v1.63.2 baseline without changing the world-event scheduler.
