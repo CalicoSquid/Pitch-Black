@@ -29,7 +29,7 @@ export function AliveAmbience({
   const phaseRef = useRef(phase)
   const phaseGainRef = useRef<GainNode | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
-  phaseRef.current = phase
+  useEffect(() => { phaseRef.current = phase }, [phase])
 
   useEffect(() => {
     const audioCtx = contextRef.current
@@ -91,7 +91,14 @@ export function AliveAmbience({
       if (phaseGainRef.current === phaseGain) phaseGainRef.current = null
       if (contextRef.current === audioCtx) contextRef.current = null
 
-      if (!source || !phaseGain || audioCtx.state === 'closed') return
+      if (!source || !phaseGain) return
+      if (audioCtx.state !== 'running') {
+        try { source.stop() } catch { /* already stopped */ }
+        source.disconnect()
+        presenceGain?.disconnect()
+        phaseGain.disconnect()
+        return
+      }
       const now = audioCtx.currentTime
       phaseGain.gain.cancelScheduledValues(now)
       phaseGain.gain.setTargetAtTime(0, now, 0.42)

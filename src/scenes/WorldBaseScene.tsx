@@ -1,3 +1,4 @@
+import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { ambientLanternSignal, ambientTrainSignal } from '../world/ambientLifeSignal'
@@ -540,7 +541,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    let dpr = canvasPixelRatio(width, height, 1.5)
     let raf = 0
     let idleTimer = 0
     let last = performance.now()
@@ -553,7 +554,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      dpr = canvasPixelRatio(width, height, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
@@ -584,9 +585,10 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
       // Standing water is aftermath, not a permanent terrain replacement. Even
       // untouched water slowly drains/evaporates over real time; frozen water
       // lingers longer. The water/ice surface remains one coherent level plane.
-      const dtSeconds = dt / 1000
+      const materialElapsed = Math.min(1000, frameElapsed)
+      const dtSeconds = materialElapsed / 1000
       const currentScene = sceneRef.current
-      if (currentScene !== 'rain' && pitchWorld.waterLevel > 0) {
+      if (currentScene !== 'rain' && (pitchWorld.waterLevel > 0 || pitchWorld.wetness > 0)) {
         const recessionPerSecond = currentScene === 'snow'
           ? 1 / 5400
           : currentScene === 'ember'
@@ -596,7 +598,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
         pitchWorld.wetness = Math.max(0, pitchWorld.wetness - recessionPerSecond * dtSeconds * 0.55)
       }
 
-      materialTick += dt
+      materialTick += materialElapsed
       if (materialTick >= 240) {
         const tickSeconds = materialTick / 1000
         materialTick = 0
@@ -614,7 +616,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
           ctx.clearRect(0, 0, width, height)
           idleCleared = true
         }
-        if (!ambientTrainSignal.active && !ambientLanternSignal.active && pitchWorld.waterLevel <= 0.0001 && pitchWorld.wetness <= 0.001) {
+        if (!ambientTrainSignal.active && !ambientLanternSignal.active) {
           cancelAnimationFrame(raf)
           idleTimer = window.setTimeout(() => {
             raf = requestAnimationFrame(draw)

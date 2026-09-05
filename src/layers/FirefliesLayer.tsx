@@ -1,3 +1,4 @@
+import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import { fireflySignal } from '../world/fireflySignal'
 import { pitchWorld, snowSurfaceYAtIndex, worldIndexAt } from '../world/worldState'
@@ -87,7 +88,7 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+    let dpr = canvasPixelRatio(width, height, 1.25)
     let raf = 0
     let idleTimer = 0
     let last = performance.now()
@@ -103,7 +104,7 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+      dpr = canvasPixelRatio(width, height, 1.25)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`

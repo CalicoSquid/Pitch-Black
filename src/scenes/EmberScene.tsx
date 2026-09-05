@@ -1,5 +1,6 @@
+import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
-import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
+import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { lightningGroundStrikeSignal } from '../world/lightningSignal'
 import {
   ensureWorld,
@@ -74,7 +75,7 @@ export function EmberScene({
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    let dpr = canvasPixelRatio(width, height, 1.5)
     let raf = 0
     let idleTimer = 0
     let last = performance.now()
@@ -471,7 +472,7 @@ export function EmberScene({
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      dpr = canvasPixelRatio(width, height, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
@@ -732,7 +733,7 @@ export function EmberScene({
           lastFireLevel = Number.NaN
         }
         if (level !== lastFireLevel) {
-          fireGain.gain.setTargetAtTime(level, audioCtx.currentTime, 0.25)
+          setContinuousAudioTarget(fireGain.gain, level, audioCtx.currentTime, 0.25)
           lastFireLevel = level
         }
       } else {
@@ -1101,7 +1102,7 @@ export function EmberScene({
       window.clearTimeout(fireStopTimer)
       window.removeEventListener('resize', resize)
       if (whooshGain && audioCtx) whooshGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05)
-      if (fireGain && audioCtx) fireGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.18)
+      if (fireGain && audioCtx) setContinuousAudioTarget(fireGain.gain, 0, audioCtx.currentTime, 0.18)
       const endingWhooshSource = whooshSource
       const endingWhooshFilter = whooshFilter
       const endingWhooshGain = whooshGain

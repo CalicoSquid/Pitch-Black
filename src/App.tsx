@@ -21,6 +21,7 @@ import { useIdleControls } from './hooks/useIdleControls'
 import { FirefliesLayer } from './layers/FirefliesLayer'
 import { GlobalMoon } from './layers/GlobalMoon'
 import { StormLayer } from './layers/StormLayer'
+import { WaterLifeLayer } from './layers/WaterLifeLayer'
 import { RareGroundEventLayer, RareSkyEventLayer } from './layers/RareEventLayers'
 import type { RareEventState } from './layers/RareEventLayers'
 import { EmberScene } from './scenes/EmberScene'
@@ -55,7 +56,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-army' | 'owl-ufo' | 'aurora' | 'supernova' | 'train' | 'lantern' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-army' | 'owl-ufo' | 'aurora' | 'supernova' | 'train' | 'lantern' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower' | 'lotus' | 'bubbles'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -74,7 +75,7 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-army' || test === 'owl-ufo' || test === 'aurora' || test === 'supernova' || test === 'train' || test === 'lantern' || test === 'night' || test === 'rain' || test === 'heavy-rain' || test === 'snow-fade' || test === 'meteor' || test === 'meteor-shower' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-army' || test === 'owl-ufo' || test === 'aurora' || test === 'supernova' || test === 'train' || test === 'lantern' || test === 'night' || test === 'rain' || test === 'heavy-rain' || test === 'snow-fade' || test === 'meteor' || test === 'meteor-shower' || test === 'lotus' || test === 'bubbles' ? test : null
 }
 
 function readLanternTestOptions() {
@@ -437,11 +438,9 @@ function App() {
     const audioCtx = unlockPitchAudio()
     if (!audioCtx) return
 
-    // The complete real-audio bank is only ~7 MB. Decode it once when Sound is
-    // enabled so rare events never wait on their first network/decode round-trip.
-    // This does not start playback and is safe while autoplay policy keeps the
-    // context suspended; the first user gesture will resume the prepared graph.
-    void warmPitchAudioBank(audioCtx)
+    const controller = typeof AbortController === 'undefined' ? undefined : new AbortController()
+    void warmPitchAudioBank(controller?.signal)
+    return () => controller?.abort()
   }, [soundOn])
 
   useEffect(() => {
@@ -450,8 +449,7 @@ function App() {
     // a browser-policy fallback for mobile browsers that demand a fresh gesture.
     const prepareEnabledAudio = () => {
       if (!soundOn || document.visibilityState !== 'visible') return
-      const audioCtx = unlockPitchAudio()
-      if (audioCtx) void warmPitchAudioBank(audioCtx)
+      unlockPitchAudio()
     }
 
     const syncAudioVisibility = () => {
@@ -767,10 +765,14 @@ function App() {
       ? { moon: true, storm: false, fireflies: false }
     : testMode === 'train' || testMode === 'lantern'
       ? { moon: true, storm: testMode === 'lantern' && lanternTest.reaction === 'lightning', fireflies: false }
+    : testMode === 'lotus'
+      ? { moon: true, storm: true, fireflies: false }
+    : testMode === 'bubbles'
+      ? { moon: true, storm: false, fireflies: true }
     : testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain' || testMode === 'meteor' || testMode === 'meteor-shower'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
-  const displayScene: Scene = testMode === 'rain' || testMode === 'heavy-rain'
+  const displayScene: Scene = testMode === 'rain' || testMode === 'heavy-rain' || testMode === 'lotus' || testMode === 'bubbles'
     ? 'rain'
     : testMode === 'snow-fade'
       ? (testSnowActive ? 'snow' : 'calm')
@@ -901,6 +903,13 @@ function App() {
         )}
         <div className={`world-weather-layer ${displayScene === 'black' ? 'world-hidden' : ''}`}>
           <WorldBaseScene scene={displayScene} />
+          <WaterLifeLayer
+            scene={displayScene}
+            stormActive={displayLayers.storm}
+            soundOn={soundOn}
+            moonVisible={displayLayers.moon}
+            testMode={testMode === 'lotus' || testMode === 'bubbles' ? testMode : null}
+          />
           {worldEventsActive && aliveRareEvents.filter((event) => event.kind === 'ground-fog').map((event) => (
             <RareGroundEventLayer
               key={`alive-rare-ground-${event.kind}-${event.id}`}

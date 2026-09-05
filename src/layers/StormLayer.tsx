@@ -1,7 +1,8 @@
+import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
-import { getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
+import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import { publishLightningGroundStrike, publishLightningIgnition } from '../world/lightningSignal'
 import {
@@ -563,6 +564,7 @@ export function StormLayer({
 
     return () => {
       cancelled = true
+      thunderAssetsRef.current = null
     }
   }, [active, soundOn, audioReadyNonce])
 
@@ -574,7 +576,7 @@ export function StormLayer({
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+    let dpr = canvasPixelRatio(width, height, 1.25)
     const thunderTest = import.meta.env.DEV
       ? new URLSearchParams(window.location.search).get('thunder')
       : null
@@ -614,7 +616,7 @@ export function StormLayer({
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+      dpr = canvasPixelRatio(width, height, 1.25)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
@@ -982,11 +984,11 @@ export function StormLayer({
         const deepTarget = soundOnRef.current ? 0.017 + coverage * 0.018 : 0
         const textureTarget = soundOnRef.current ? 0.0035 + coverage * 0.0085 : 0
         if (Math.abs(deepTarget - lastDeepRumbleTarget) > 0.0008 || Number.isNaN(lastDeepRumbleTarget)) {
-          rumble.deepGain.gain.setTargetAtTime(deepTarget, rumble.ctx.currentTime, 1.15)
+          setContinuousAudioTarget(rumble.deepGain.gain, deepTarget, rumble.ctx.currentTime, 1.15)
           lastDeepRumbleTarget = deepTarget
         }
         if (Math.abs(textureTarget - lastTextureRumbleTarget) > 0.0006 || Number.isNaN(lastTextureRumbleTarget)) {
-          rumble.textureGain.gain.setTargetAtTime(textureTarget, rumble.ctx.currentTime, 1.35)
+          setContinuousAudioTarget(rumble.textureGain.gain, textureTarget, rumble.ctx.currentTime, 1.35)
           lastTextureRumbleTarget = textureTarget
         }
       }

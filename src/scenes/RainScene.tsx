@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { useEffect, useRef, useState } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
-import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import { fireflySignal } from '../world/fireflySignal'
 import { ambientLanternSignal } from '../world/ambientLifeSignal'
@@ -70,6 +71,8 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
   const soundOnRef = useRef(soundOn)
   const speedRef = useRef(speed)
   const audioReadyNonce = usePitchAudioReadyNonce()
+  const [audioTail, setAudioTail] = useState(active)
+  const audioEnabled = soundOn && (active || audioTail)
   const audioRef = useRef<{
     ctx: AudioContext
     steadyGain: GainNode
@@ -92,24 +95,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
   }, [speed])
 
   useEffect(() => {
-    if (!soundOn) {
-      const current = audioRef.current
-      if (current) {
-        const now = current.ctx.currentTime
-        current.steadyGain.gain.setTargetAtTime(0, now, 0.45)
-        current.heavyGain.gain.setTargetAtTime(0, now, 0.45)
-        window.setTimeout(() => {
-          try { current.steadySource.stop() } catch { /* already stopped */ }
-          try { current.heavySource.stop() } catch { /* already stopped */ }
-          try { current.steadySource.disconnect() } catch { /* harmless */ }
-          try { current.heavySource.disconnect() } catch { /* harmless */ }
-          try { current.steadyGain.disconnect() } catch { /* harmless */ }
-          try { current.heavyGain.disconnect() } catch { /* harmless */ }
-          if (audioRef.current === current) audioRef.current = null
-        }, 800)
-      }
-      return
-    }
+    if (!audioEnabled) return
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
@@ -168,7 +154,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       }, 650)
       audioRef.current = null
     }
-  }, [soundOn, audioReadyNonce])
+  }, [audioEnabled, audioReadyNonce])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -181,7 +167,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
     let frame = 0
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    let dpr = canvasPixelRatio(width, height, 1.5)
     let drops: RainDrop[] = []
     let ripples: Ripple[] = []
     let splashes: Splash[] = []
@@ -236,7 +222,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      dpr = canvasPixelRatio(width, height, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
@@ -550,12 +536,14 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
     let aliveRiseTau = 8_000
     let aliveFallTau = 36_000 + Math.random() * 10_000
     let audioWeatherMix = weatherMix
+    let audioNeeded = activeRef.current
     let aliveArrival: 'sudden' | 'gradual' = 'gradual'
     let materialCarry = 0
     let materialFrame = 0
     const draw = (time: number) => {
       frame += 1
-      const dt = Math.min(32, time - lastTime)
+      const elapsed = Math.max(0, Math.min(1000, time - lastTime))
+      const dt = Math.min(32, elapsed)
       lastTime = time
       const speedNow = speedRef.current
       simTime += dt * speedNow
@@ -581,7 +569,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       const transitionTau = aliveRef.current
         ? (nowActive ? aliveRiseTau : aliveFallTau)
         : 520
-      const blend = 1 - Math.exp(-dt / transitionTau)
+      const blend = 1 - Math.exp(-elapsed / transitionTau)
       weatherMix += (targetMix - weatherMix) * blend
 
       const rainDensity = aliveRef.current
@@ -599,11 +587,18 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       const audioTau = aliveRef.current
         ? (nowActive ? Math.max(1_000, aliveRiseTau * 0.78) : 48_000)
         : 520
-      const audioBlend = 1 - Math.exp(-dt / audioTau)
+      const audioBlend = 1 - Math.exp(-elapsed / audioTau)
       audioWeatherMix += (audioTarget - audioWeatherMix) * audioBlend
       const audioDensity = aliveRef.current
         ? (nowActive ? Math.max(rainDensity, audioWeatherMix * 0.62) : Math.pow(Math.max(0, audioWeatherMix), 0.84))
         : weatherMix
+
+      // Release silent loops only after the existing weather tail is inaudible.
+      const needsAudio = nowActive || audioDensity > 0.0001
+      if (needsAudio !== audioNeeded) {
+        audioNeeded = needsAudio
+        setAudioTail(needsAudio)
+      }
 
       const currentAudio = audioRef.current
       if (currentAudio) {
@@ -623,11 +618,11 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
           lastHeavyTargetGain = Number.NaN
         }
         if (Math.abs(steadyTarget - lastSteadyTargetGain) > 0.0005 || Number.isNaN(lastSteadyTargetGain)) {
-          currentAudio.steadyGain.gain.setTargetAtTime(steadyTarget, currentAudio.ctx.currentTime, 0.85)
+          setContinuousAudioTarget(currentAudio.steadyGain.gain, steadyTarget, currentAudio.ctx.currentTime, 0.85)
           lastSteadyTargetGain = steadyTarget
         }
         if (Math.abs(heavyTarget - lastHeavyTargetGain) > 0.0005 || Number.isNaN(lastHeavyTargetGain)) {
-          currentAudio.heavyGain.gain.setTargetAtTime(heavyTarget, currentAudio.ctx.currentTime, 1.15)
+          setContinuousAudioTarget(currentAudio.heavyGain.gain, heavyTarget, currentAudio.ctx.currentTime, 1.15)
           lastHeavyTargetGain = heavyTarget
         }
       } else {

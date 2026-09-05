@@ -1,4 +1,7 @@
-const audioBufferCache = new Map<string, Promise<AudioBuffer>>()
+import { AudioBufferCache } from './audioBufferCache'
+
+const audioBufferCache = new AudioBufferCache()
+const pendingDecodes = new Map<string, Promise<AudioBuffer>>()
 
 function publicAudioUrl(fileName: string) {
   const base = import.meta.env.BASE_URL.endsWith('/')
@@ -9,21 +12,28 @@ function publicAudioUrl(fileName: string) {
 
 export function loadPitchAudioAsset(audioCtx: AudioContext, fileName: string) {
   const url = publicAudioUrl(fileName)
-  const cached = audioBufferCache.get(url)
-  if (cached) return cached
+  const key = `${audioCtx.sampleRate}:${url}`
+  const cached = audioBufferCache.get(key)
+  if (cached) return Promise.resolve(cached)
+  const existing = pendingDecodes.get(key)
+  if (existing) return existing
 
   const pending = fetch(url, { cache: 'force-cache' })
     .then((response) => {
       if (!response.ok) throw new Error(`Unable to load audio asset: ${fileName}`)
       return response.arrayBuffer()
     })
-    .then((bytes) => audioCtx.decodeAudioData(bytes.slice(0)))
-    .catch((error) => {
-      audioBufferCache.delete(url)
+    .then((bytes) => audioCtx.decodeAudioData(bytes))
+    .then((buffer) => {
+      audioBufferCache.set(key, buffer)
+      pendingDecodes.delete(key)
+      return buffer
+    }, (error) => {
+      pendingDecodes.delete(key)
       throw error
     })
 
-  audioBufferCache.set(url, pending)
+  pendingDecodes.set(key, pending)
   return pending
 }
 
@@ -40,11 +50,19 @@ export const PITCH_AUDIO_BANK = [
 ] as const
 
 /**
- * Decode the small production audio bank as soon as Sound is enabled. The files
- * remain browser/service-worker cached after first load, and prewarming removes
- * first-event fetch/decode latency from owl, train and thunder without starting
- * any audible source nodes.
+ * Warm compressed recordings in the HTTP/service-worker cache. Decoding all MP3s
+ * here retains far more PCM memory than their download size suggests. Scene and
+ * event owners request decoding when needed, including ahead of delayed cues.
  */
-export function warmPitchAudioBank(audioCtx: AudioContext) {
-  return Promise.allSettled(PITCH_AUDIO_BANK.map((fileName) => loadPitchAudioAsset(audioCtx, fileName)))
+export async function warmPitchAudioBank(signal?: AbortSignal) {
+  for (const fileName of PITCH_AUDIO_BANK) {
+    if (signal?.aborted) return
+    try {
+      const response = await fetch(publicAudioUrl(fileName), { cache: 'force-cache', signal })
+      // Consume one response at a time so the cache fills without a decode burst.
+      await response.arrayBuffer()
+    } catch {
+      // Optional audio or an aborted warmup must never interrupt the page.
+    }
+  }
 }

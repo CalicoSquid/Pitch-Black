@@ -1,3 +1,4 @@
+import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
@@ -1225,7 +1226,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.35)
+    let dpr = canvasPixelRatio(width, height, 1.35)
     let raf = 0
     let currentId = -1
     let currentKind: RareEventKind | null = null
@@ -1240,13 +1241,13 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.35)
+      dpr = canvasPixelRatio(width, height, 1.35)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      auroraField = createAuroraField(width, height)
+      auroraField = null
     }
 
     const durationFor = (kind: RareEventKind | null) => {
@@ -1344,6 +1345,8 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (!completed && duration > 0 && elapsed >= duration) {
         completed = true
         completeRef.current?.(currentKind, currentId)
+        ctx.clearRect(0, 0, width, height)
+        return
       }
 
       raf = requestAnimationFrame(draw)
@@ -1381,7 +1384,7 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+    let dpr = canvasPixelRatio(width, height, 1.25)
     let raf = 0
     let currentId = -1
     let startedAt = 0
@@ -1465,13 +1468,13 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.25)
+      dpr = canvasPixelRatio(width, height, 1.25)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      fogField = createFogField()
+      fogField = null
     }
 
     const drawFog = (elapsed: number, id: number) => {
@@ -1549,6 +1552,8 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
       if (!completed && elapsed >= 86_000) {
         completed = true
         completeRef.current?.('ground-fog', currentId)
+        ctx.clearRect(0, 0, width, height)
+        return
       }
 
       raf = requestAnimationFrame(draw)

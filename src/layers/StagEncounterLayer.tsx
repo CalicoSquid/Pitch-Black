@@ -1,3 +1,4 @@
+import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import { ensureWorld, surfaceYAt } from '../world/worldState'
 
@@ -241,7 +242,7 @@ export function StagEncounterLayer({ triggerId }: { triggerId: number }) {
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    let dpr = canvasPixelRatio(width, height, 1.5)
     let raf = 0
     let disposed = false
     let lastTrigger = triggerRef.current
@@ -254,7 +255,7 @@ export function StagEncounterLayer({ triggerId }: { triggerId: number }) {
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      dpr = canvasPixelRatio(width, height, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`

@@ -1,13 +1,14 @@
 {
   "name": "this-quiet-world",
   "private": true,
-  "version": "1.62.3",
+  "version": "1.63.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:performance": "node --test tests/performance.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.34.0",

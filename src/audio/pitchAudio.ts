@@ -8,6 +8,8 @@ let pitchAudioTransientGain: GainNode | null = null
 let pitchAudioMuted = false
 let pitchAudioVolume = 1
 let pitchAudioNeedsReadySignal = true
+let readyTimer = 0
+let audioGeneration = 0
 
 export const PITCH_AUDIO_READY_EVENT = 'tqw:pitch-audio-ready'
 
@@ -20,8 +22,12 @@ function signalPitchAudioReady(audioCtx: AudioContext) {
   // This prevents a stale pre-background rain/storm gain from leaking for a frame
   // when the AudioContext resumes.
   const outputGain = pitchAudioOutputGain
+  const generation = audioGeneration
+  window.clearTimeout(readyTimer)
   if (outputGain) {
-    window.setTimeout(() => {
+    readyTimer = window.setTimeout(() => {
+      readyTimer = 0
+      if (generation !== audioGeneration || pitchAudioNeedsReadySignal || document.visibilityState !== 'visible') return
       if (pitchAudioContext !== audioCtx || audioCtx.state !== 'running') return
       outputGain.gain.cancelScheduledValues(audioCtx.currentTime)
       outputGain.gain.setTargetAtTime(pitchAudioVolume, audioCtx.currentTime, 0.045)
@@ -102,13 +108,20 @@ export function unlockPitchAudio() {
 
     if (pitchAudioContext.state === 'running') {
       signalPitchAudioReady(pitchAudioContext)
-    } else if (pitchAudioContext.state === 'suspended') {
+    } else if (pitchAudioContext.state === 'suspended' || (pitchAudioContext.state as string) === 'interrupted') {
       // A returning session may have Sound persisted ON before the browser has
       // received a fresh user gesture. That autoplay-policy rejection is normal;
       // the global gesture unlock in App retries immediately on the first input.
       const contextToResume = pitchAudioContext
+      const generation = audioGeneration
       void contextToResume.resume()
-        .then(() => signalPitchAudioReady(contextToResume))
+        .then(() => {
+          if (generation !== audioGeneration || document.visibilityState !== 'visible') {
+            if (document.visibilityState !== 'visible') suspendPitchAudio()
+            return
+          }
+          signalPitchAudioReady(contextToResume)
+        })
         .catch(() => {})
     }
     return pitchAudioContext
@@ -118,17 +131,20 @@ export function unlockPitchAudio() {
 }
 
 export function suspendPitchAudio() {
+  audioGeneration += 1
+  window.clearTimeout(readyTimer)
+  readyTimer = 0
   const audioCtx = pitchAudioContext
   pitchAudioNeedsReadySignal = true
   cancelPitchAudioTransients()
-  if (!audioCtx || audioCtx.state !== 'running') return
+  if (!audioCtx || audioCtx.state === 'closed') return
 
   try {
     if (pitchAudioOutputGain) {
       pitchAudioOutputGain.gain.cancelScheduledValues(audioCtx.currentTime)
       pitchAudioOutputGain.gain.setValueAtTime(0, audioCtx.currentTime)
     }
-    void audioCtx.suspend()
+    void audioCtx.suspend().catch(() => {})
   } catch {
     // Browser audio lifecycle support varies; suspension failure is harmless.
   }
@@ -188,4 +204,12 @@ export function restorePitchAudioFade() {
   const now = audioCtx.currentTime
   fadeGain.gain.cancelScheduledValues(now)
   fadeGain.gain.setTargetAtTime(1, now, 0.08)
+}
+
+/** Replace a continuous control envelope without retaining overnight automation history. */
+export function setContinuousAudioTarget(param: AudioParam, target: number, now: number, tau: number) {
+  const current = param.value
+  param.cancelScheduledValues(0)
+  param.setValueAtTime(current, now)
+  param.setTargetAtTime(target, now, tau)
 }

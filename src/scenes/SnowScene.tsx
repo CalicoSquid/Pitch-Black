@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
-import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
+import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { useEffect, useRef, useState } from 'react'
+import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import { fireflySignal } from '../world/fireflySignal'
 import { lightningGroundStrikeSignal } from '../world/lightningSignal'
@@ -84,6 +85,8 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
   const soundOnRef = useRef(soundOn)
   const speedRef = useRef(speed)
   const audioReadyNonce = usePitchAudioReadyNonce()
+  const [audioTail, setAudioTail] = useState(active)
+  const audioEnabled = soundOn && (active || audioTail)
   const audioRef = useRef<{ ctx: AudioContext; gain: GainNode; filter: BiquadFilterNode; source: AudioBufferSourceNode } | null>(null)
 
   useEffect(() => {
@@ -100,20 +103,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
   }, [speed])
 
   useEffect(() => {
-    if (!soundOn) {
-      if (audioRef.current) {
-        const current = audioRef.current
-        current.gain.gain.setTargetAtTime(0, current.ctx.currentTime, 0.6)
-        window.setTimeout(() => {
-          try { current.source.stop() } catch { /* already stopped */ }
-          try { current.source.disconnect() } catch { /* harmless */ }
-          try { current.filter.disconnect() } catch { /* harmless */ }
-          try { current.gain.disconnect() } catch { /* harmless */ }
-          if (audioRef.current === current) audioRef.current = null
-        }, 900)
-      }
-      return
-    }
+    if (!audioEnabled) return
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
@@ -144,7 +134,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       }, 500)
       audioRef.current = null
     }
-  }, [soundOn, audioReadyNonce])
+  }, [audioEnabled, audioReadyNonce])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -157,7 +147,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let idleTimer = 0
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    let dpr = canvasPixelRatio(width, height, 1.5)
     let flakes: Flake[] = []
     let loosePowder: LoosePowder[] = []
     let lastLightningVersion = lightningGroundStrikeSignal.version
@@ -225,7 +215,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       width = window.innerWidth
       height = window.innerHeight
       snowDepthCeiling = Math.min(52, Math.max(28, height * 0.06))
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+      dpr = canvasPixelRatio(width, height, 1.5)
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       canvas.style.width = `${width}px`
@@ -571,11 +561,13 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let aliveRiseTau = 34_000 + Math.random() * 8_000
     let aliveFallTau = 48_000 + Math.random() * 12_000
     let audioWeatherMix = weatherMix
+    let audioNeeded = activeRef.current
     let freezeCarry = 0
 
     const draw = (time: number) => {
       frame += 1
-      const dt = Math.min(34, time - lastFrameTime)
+      const elapsed = Math.max(0, Math.min(1000, time - lastFrameTime))
+      const dt = Math.min(34, elapsed)
       lastFrameTime = time
       const speedNow = speedRef.current
       simTime += dt * speedNow
@@ -598,7 +590,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       const transitionTau = aliveRef.current
         ? (nowActive ? aliveRiseTau : aliveFallTau)
         : 520
-      const blend = 1 - Math.exp(-dt / transitionTau)
+      const blend = 1 - Math.exp(-elapsed / transitionTau)
       weatherMix += (targetMix - weatherMix) * blend
 
       // Density is deliberately steeper than opacity in Alive: the beginning of
@@ -621,11 +613,18 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       const audioTau = aliveRef.current
         ? (nowActive ? Math.max(5_000, aliveRiseTau * 0.72) : 62_000)
         : 520
-      const audioBlend = 1 - Math.exp(-dt / audioTau)
+      const audioBlend = 1 - Math.exp(-elapsed / audioTau)
       audioWeatherMix += (audioTarget - audioWeatherMix) * audioBlend
       const audioDensity = aliveRef.current
         ? (nowActive ? Math.max(snowfallMix, audioWeatherMix * 0.58) : Math.pow(Math.max(0, audioWeatherMix), 0.82))
         : weatherMix
+
+      // Release silent loops only after the existing weather tail is inaudible.
+      const needsAudio = nowActive || audioDensity > 0.0001
+      if (needsAudio !== audioNeeded) {
+        audioNeeded = needsAudio
+        setAudioTail(needsAudio)
+      }
 
       const currentAudio = audioRef.current
       if (currentAudio) {
@@ -635,7 +634,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           lastAudioTargetGain = Number.NaN
         }
         if (Math.abs(targetGain - lastAudioTargetGain) > 0.00002 || Number.isNaN(lastAudioTargetGain)) {
-          currentAudio.gain.gain.setTargetAtTime(targetGain, currentAudio.ctx.currentTime, 0.7)
+          setContinuousAudioTarget(currentAudio.gain.gain, targetGain, currentAudio.ctx.currentTime, 0.7)
           lastAudioTargetGain = targetGain
         }
       } else {

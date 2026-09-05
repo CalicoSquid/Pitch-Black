@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.62.3-baseline-recovery'
+const CACHE_NAME = 'this-quiet-world-v1.63.2-lotus-elegance'
 const APP_SHELL = ['/', '/index.html', '/about/', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {
