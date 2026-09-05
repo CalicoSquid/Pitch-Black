@@ -1,3 +1,11 @@
+## v1.65.1 — night ambience replacement
+
+- Replaced the previous night/cricket bed with ES335-001's CC0 Freesound recording `crickets.wav` (sound 440574).
+- Built a 4:13 seamless circular loop using a 5-second end-to-start crossfade; no synthetic cricket layers were added.
+- Level-matched the replacement asset to the previous raw night-bed loudness (~-21.7 LUFS, -3.0 dBTP), so the v1.65 sleep-mix gains remain unchanged.
+- The replacement is much less rhythmically repetitive than the previous bed; onset autocorrelation around the old ~0.5-second pulse drops from ~0.45 to ~0.06.
+- No runtime audio gains, weather balance, scheduler logic, visuals, or world behavior changed.
+
 ## v1.65.0 — consistency pass
 
 This release restores four product contracts that had drifted apart during recent performance/event work:
