@@ -1,3 +1,10 @@
+## v1.62.2 — cat friend + supernova correction
+
+- Reworked the 5% **Wrong Owl / Weird Friend** branch around a tiny, sleep-safe synthesized cat `mrrp?`. The selected real owl hoot now finishes completely before the friend appears, so the joke can never be buried under the field recording.
+- Weird Friend appears after the hoot, waits a beat, makes the cat sound, then leaves. The original owl's glowing eyes widen immediately and deliberately linger after the friend has vanished before the owl finally fades.
+- Corrected **Supernova** back toward the accepted v1.62.0 visual: small white star → modest red/red-giant swell → soft circular gradient supernova → inward collapse. The separate hard white expansion ring remains removed; the gradient bloom now carries only restrained cream/yellow/orange/red warmth.
+- Owl encounter odds, Supernova 6–12 hour cadence, all other events, overnight lifecycle and UI are unchanged. QA routes remain `?test=owl-wrong` and `?test=supernova`.
+
 ## v1.62.1 — owl character + supernova polish
 
 - Added **Wrong Owl** as a 5% branch of owl encounters. Owl cadence is unchanged: 75% normal owl, 10% Owl Army, 10% Owl UFO and 5% Wrong Owl. The normal field-recorded hoot plays first; a second owl then appears, gives one deliberately inappropriate tiny daytime-style chirp, and the original owl silently looks sideways before both disappear.
