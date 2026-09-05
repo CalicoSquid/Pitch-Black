@@ -531,7 +531,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
 
     let lastTime = performance.now()
     let simTime = performance.now()
-    let weatherMix = activeRef.current && !aliveRef.current ? 1 : 0
+    let weatherMix = activeRef.current ? 1 : 0
     let wasActive = activeRef.current
     let aliveRiseTau = 8_000
     let aliveFallTau = 36_000 + Math.random() * 10_000
@@ -606,8 +606,8 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
         // only blooms when the procedural storm density/intensity actually rises,
         // so the audio follows the same living weather rather than switching clips.
         const heavyPresence = smoothStep((intensity - 0.58) / 0.34)
-        const steadyTarget = soundOnRef.current ? 0.34 * audioDensity : 0
-        const heavyTarget = soundOnRef.current ? 0.46 * audioDensity * heavyPresence : 0
+        const steadyTarget = soundOnRef.current ? 0.20 * audioDensity : 0
+        const heavyTarget = soundOnRef.current ? 0.25 * audioDensity * heavyPresence : 0
 
         if (currentAudio.steadyGain !== lastSteadyGainNode) {
           lastSteadyGainNode = currentAudio.steadyGain

@@ -3,35 +3,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export function useIdleControls(delay = 3200) {
   const [visible, setVisible] = useState(true)
   const timer = useRef<number | null>(null)
-  const lastActivity = useRef(0)
-
-  const scheduleHide = useCallback(() => {
-    if (timer.current !== null) return
-
-    const check = () => {
-      const remaining = delay - (performance.now() - lastActivity.current)
-      if (remaining <= 0) {
-        timer.current = null
-        setVisible(false)
-        return
-      }
-      timer.current = window.setTimeout(check, remaining)
-    }
-
-    timer.current = window.setTimeout(check, delay)
-  }, [delay])
 
   const wake = useCallback(() => {
-    lastActivity.current = performance.now()
     setVisible(true)
-    scheduleHide()
-  }, [scheduleHide])
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
+      timer.current = null
+      setVisible(false)
+    }, delay)
+  }, [delay])
 
   useEffect(() => {
     wake()
-    // Pointer Events are the main path, but embedded TV/projector browsers and
-    // remotes often expose only legacy mouse/click or focus events. Treat all
-    // of them as equivalent activity without changing the hide timing.
+    // Every real interaction restarts one simple hide timer. Keeping focus on a
+    // control must not pin the dock open; the user never needs to tap elsewhere.
     const events: (keyof WindowEventMap)[] = [
       'pointermove',
       'pointerdown',

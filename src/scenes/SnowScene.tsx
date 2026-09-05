@@ -165,7 +165,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let depositionCarry = 0
     let snowfallIntensity = 0.78
     let snowfallTarget = 0.78
-    let currentSnowfallMix = activeRef.current && !aliveRef.current ? 1 : 0
+    let currentSnowfallMix = activeRef.current ? 1 : 0
     let nextSnowfallShift = performance.now() + 12000
     const driftPatternPhase = Math.random() * Math.PI * 2
 
@@ -556,7 +556,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     let lastFrameTime = performance.now()
     let simTime = performance.now()
-    let weatherMix = activeRef.current && !aliveRef.current ? 1 : 0
+    let weatherMix = activeRef.current ? 1 : 0
     let wasActive = activeRef.current
     let aliveRiseTau = 34_000 + Math.random() * 8_000
     let aliveFallTau = 48_000 + Math.random() * 12_000
@@ -628,7 +628,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
       const currentAudio = audioRef.current
       if (currentAudio) {
-        const targetGain = soundOnRef.current ? 0.035 * audioDensity : 0
+        const targetGain = soundOnRef.current ? 0.11 * audioDensity : 0
         if (currentAudio.gain !== lastAudioGainNode) {
           lastAudioGainNode = currentAudio.gain
           lastAudioTargetGain = Number.NaN

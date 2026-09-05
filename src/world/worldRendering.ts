@@ -10,6 +10,7 @@ import {
 export type TerrainRenderCache = {
   snowDepth: Float64Array
   groundY: Float64Array
+  snowBaseY: Float64Array
   snowY: Float64Array
   groundWidth: number
   groundHeight: number
@@ -28,6 +29,7 @@ export function createTerrainRenderCache(): TerrainRenderCache {
   return {
     snowDepth: new Float64Array(0),
     groundY: new Float64Array(0),
+    snowBaseY: new Float64Array(0),
     snowY: new Float64Array(0),
     groundWidth: -1,
     groundHeight: -1,
@@ -201,6 +203,7 @@ export function drawTerrain(
   if (cache.snowDepth.length !== snow.length) {
     cache.snowDepth = new Float64Array(snow.length)
     cache.groundY = new Float64Array(snow.length)
+    cache.snowBaseY = new Float64Array(snow.length)
     cache.snowY = new Float64Array(snow.length)
     cache.groundWidth = -1
     cache.groundHeight = -1
@@ -222,6 +225,7 @@ export function drawTerrain(
     cache.groundHeight = height
   }
 
+  const waterY = standingWaterSurfaceY(height)
   for (let i = 0; i < snow.length; i++) {
     const a = snow[Math.max(0, i - 2)]
     const b = snow[Math.max(0, i - 1)]
@@ -233,10 +237,13 @@ export function drawTerrain(
     const depth = Math.max(0, base + shimmer)
 
     cache.snowDepth[i] = depth
-    cache.snowY[i] = cache.groundY[i] - depth
+    const snowBaseY = Number.isFinite(waterY) ? Math.min(cache.groundY[i], waterY) : cache.groundY[i]
+    cache.snowBaseY[i] = snowBaseY
+    cache.snowY[i] = snowBaseY - depth
   }
 
   const groundY = cache.groundY
+  const snowBaseY = cache.snowBaseY
   const snowY = cache.snowY
 
   // Permanent earth mass. Nearly black by design; it primarily establishes space.
@@ -265,7 +272,7 @@ export function drawTerrain(
 
   for (let i = snow.length - 1; i >= 0; i--) {
     const x = cache.gridX[i]
-    ctx.lineTo(x, groundY[i])
+    ctx.lineTo(x, snowBaseY[i])
   }
   ctx.closePath()
 

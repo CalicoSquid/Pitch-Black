@@ -303,6 +303,7 @@ export function EmberScene({
     }
 
     const emberSurfaceYAtX = (x: number) => emberSurfaceYAtIndex(worldIndexAt(x, width))
+    const visibleSurfaceYAtX = (x: number) => snowSurfaceYAtIndex(worldIndexAt(x, width), height)
 
     const fireSurfaceYAtIndex = (index: number) => emberPurgeActive
       ? emberSurfaceYAtIndex(index)
@@ -316,7 +317,7 @@ export function EmberScene({
 
     const chooseTrajectory = () => {
       targetX = width * (0.28 + Math.random() * 0.44)
-      targetY = emberSurfaceYAtX(targetX)
+      targetY = activeRef.current ? emberSurfaceYAtX(targetX) : visibleSurfaceYAtX(targetX)
 
       const fromLeft = Math.random() > 0.5
       const horizontalDistance = width * (0.28 + Math.random() * 0.18)
@@ -501,7 +502,11 @@ export function EmberScene({
       if (impacted) return
       impacted = true
       hasIgnited = true
-      emberPurgeActive = true
+      // Only the dedicated Ember scene owns the world-clearing purge. Autonomous
+      // meteor impacts during Rain/Snow stay local and are allowed to lose their
+      // fight with the weather instead of secretly turning the world into Ember.
+      const fullEmberTakeover = activeRef.current
+      emberPurgeActive = fullEmberTakeover
       impactAt = time
       impactIndex = worldIndexAt(targetX, width)
 
@@ -530,9 +535,9 @@ export function EmberScene({
         spawnLightningSteam(Math.max(1, impactIndex - 4), 1.18)
         spawnLightningSteam(Math.min(pitchWorld.water.length - 2, impactIndex + 4), 1.18)
       }
-      pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - 0.085)
+      pitchWorld.waterLevel = Math.max(0, pitchWorld.waterLevel - (fullEmberTakeover ? 0.085 : 0.018))
 
-      targetY = emberSurfaceYAtX(targetX)
+      targetY = fullEmberTakeover ? emberSurfaceYAtX(targetX) : visibleSurfaceYAtX(targetX)
 
       for (let offset = -2; offset <= 2; offset++) {
         const idx = impactIndex + offset

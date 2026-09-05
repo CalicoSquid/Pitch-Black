@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.64.2-audio-lifecycle'
+const CACHE_NAME = 'this-quiet-world-v1.65.0-consistency'
 const APP_SHELL = ['/', '/index.html', '/about/', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', (event) => {

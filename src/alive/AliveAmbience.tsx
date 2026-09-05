@@ -5,9 +5,9 @@ import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
 import type { AlivePhase } from './useAliveWorld'
 
 function nightLevel(phase: AlivePhase) {
-  if (phase === 'calm') return 0.060
-  if (phase === 'clearing') return 0.035
-  if (phase === 'rain-front') return 0.011
+  if (phase === 'calm') return 0.26
+  if (phase === 'clearing') return 0.18
+  if (phase === 'rain-front') return 0.055
   return 0
 }
 
