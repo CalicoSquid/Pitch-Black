@@ -55,7 +55,7 @@ type BeforeInstallPromptEventLike = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
-type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-army' | 'owl-ufo' | 'aurora' | 'supernova' | 'train' | 'lantern' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower'
+type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-army' | 'owl-wrong' | 'owl-ufo' | 'aurora' | 'supernova' | 'train' | 'lantern' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
@@ -74,7 +74,7 @@ const DEFAULT_PREFERENCES: PitchPreferences = {
 function readVisualTestMode(): VisualTestMode | null {
   if (typeof window === 'undefined') return null
   const test = new URLSearchParams(window.location.search).get('test')
-  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-army' || test === 'owl-ufo' || test === 'aurora' || test === 'supernova' || test === 'train' || test === 'lantern' || test === 'night' || test === 'rain' || test === 'heavy-rain' || test === 'snow-fade' || test === 'meteor' || test === 'meteor-shower' ? test : null
+  return test === 'fog' || test === 'storm' || test === 'moon-veil' || test === 'owl' || test === 'owl-army' || test === 'owl-wrong' || test === 'owl-ufo' || test === 'aurora' || test === 'supernova' || test === 'train' || test === 'lantern' || test === 'night' || test === 'rain' || test === 'heavy-rain' || test === 'snow-fade' || test === 'meteor' || test === 'meteor-shower' ? test : null
 }
 
 function readLanternTestOptions() {
@@ -267,10 +267,10 @@ function App() {
   }, [testMode])
 
   useEffect(() => {
-    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'owl-army' && testMode !== 'owl-ufo' && testMode !== 'aurora' && testMode !== 'supernova' && testMode !== 'train' && testMode !== 'lantern' && testMode !== 'meteor' && testMode !== 'meteor-shower') return
+    if (testMode !== 'fog' && testMode !== 'moon-veil' && testMode !== 'owl' && testMode !== 'owl-army' && testMode !== 'owl-wrong' && testMode !== 'owl-ufo' && testMode !== 'aurora' && testMode !== 'supernova' && testMode !== 'train' && testMode !== 'lantern' && testMode !== 'meteor' && testMode !== 'meteor-shower') return
     const interval = testMode === 'fog'
       ? 90_000
-      : testMode === 'owl' || testMode === 'owl-army' || testMode === 'owl-ufo'
+      : testMode === 'owl' || testMode === 'owl-army' || testMode === 'owl-wrong' || testMode === 'owl-ufo'
         ? 18_000
         : testMode === 'aurora'
           ? 100_000
@@ -767,7 +767,7 @@ function App() {
       ? { moon: true, storm: false, fireflies: false }
     : testMode === 'train' || testMode === 'lantern'
       ? { moon: true, storm: testMode === 'lantern' && lanternTest.reaction === 'lightning', fireflies: false }
-    : testMode === 'owl' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain' || testMode === 'meteor' || testMode === 'meteor-shower'
+    : testMode === 'owl' || testMode === 'owl-army' || testMode === 'owl-wrong' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'night' || testMode === 'rain' || testMode === 'heavy-rain' || testMode === 'meteor' || testMode === 'meteor-shower'
       ? { moon: false, storm: false, fireflies: false }
       : normalDisplayLayers
   const displayScene: Scene = testMode === 'rain' || testMode === 'heavy-rain'
@@ -776,14 +776,14 @@ function App() {
       ? (testSnowActive ? 'snow' : 'calm')
       : testMode === 'lantern'
         ? (lanternTest.weather ?? (lanternTest.reaction === 'lightning' ? 'rain' : 'calm'))
-        : testMode === 'fog' || testMode === 'owl' || testMode === 'owl-army' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'supernova' || testMode === 'train' || testMode === 'night' || testMode === 'meteor' || testMode === 'meteor-shower'
+        : testMode === 'fog' || testMode === 'owl' || testMode === 'owl-army' || testMode === 'owl-wrong' || testMode === 'owl-ufo' || testMode === 'aurora' || testMode === 'supernova' || testMode === 'train' || testMode === 'night' || testMode === 'meteor' || testMode === 'meteor-shower'
           ? 'calm'
           : scene
   const testFogEvent: RareEventState | null = testMode === 'fog'
     ? { kind: 'ground-fog', id: testEventId }
     : null
-  const testOwlEvent: RareEventState | null = testMode === 'owl' || testMode === 'owl-army' || testMode === 'owl-ufo'
-    ? { kind: testMode === 'owl-ufo' ? 'owl-ufo' : testMode === 'owl-army' ? 'owl-army' : 'owl', id: testEventId }
+  const testOwlEvent: RareEventState | null = testMode === 'owl' || testMode === 'owl-army' || testMode === 'owl-wrong' || testMode === 'owl-ufo'
+    ? { kind: testMode === 'owl-ufo' ? 'owl-ufo' : testMode === 'owl-army' ? 'owl-army' : testMode === 'owl-wrong' ? 'owl-wrong' : 'owl', id: testEventId }
     : testMode === 'lantern' && testLanternOwlId !== null
       ? { kind: 'owl', id: testLanternOwlId }
       : null

@@ -4,7 +4,7 @@ import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 import { publishAmbientOwlHoot } from '../world/ambientLifeSignal'
 
-export type RareEventKind = 'aurora' | 'great-meteor' | 'supernova' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl' | 'owl-army' | 'owl-ufo'
+export type RareEventKind = 'aurora' | 'great-meteor' | 'supernova' | 'distant-storm' | 'ground-fog' | 'impossible-star' | 'owl' | 'owl-army' | 'owl-wrong' | 'owl-ufo'
 
 export type RareEventState = {
   kind: RareEventKind
@@ -641,89 +641,129 @@ function drawImpossibleStar(ctx: CanvasRenderingContext2D, width: number, height
 }
 
 function drawSupernova(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
-  const duration = 9_000
+  const duration = 10_500
   if (elapsed < 0 || elapsed > duration) return
 
-  // It first reads as an unremarkable star, then becomes unmistakably wrong.
-  // Keep it compact enough to belong to the sky rather than becoming a screen flash.
   const x = width * (0.20 + seededFrac(id * 19.7 + 4.1) * 0.60)
   const y = height * (0.10 + seededFrac(id * 31.3 + 7.8) * 0.30)
-  const intro = smoothStep(elapsed / 650)
-  const ignition = smoothStep((elapsed - 1_850) / 720)
-  const collapse = smoothStep((elapsed - 5_250) / 1_950)
-  const vanish = smoothStep((elapsed - 7_150) / 1_450)
+  const intro = smoothStep(elapsed / 550)
+  const giant = smoothStep((elapsed - 1_150) / 1_900)
+  const instability = clamp01((elapsed - 2_850) / 950) * (1 - smoothStep((elapsed - 3_900) / 260))
+  const detonation = smoothStep((elapsed - 3_700) / 190)
+  const collapse = smoothStep((elapsed - 5_550) / 1_500)
+  const absence = smoothStep((elapsed - 6_850) / 500) * (1 - smoothStep((elapsed - 8_500) / 750))
+  const vanish = smoothStep((elapsed - 9_000) / 1_150)
   const presence = clamp01(intro * (1 - vanish))
   if (presence <= 0.001) return
 
-  const bloom = ignition * (1 - collapse)
-  const collapsedCore = ignition * collapse * (1 - vanish)
-  const baseStar = (1 - ignition) * presence
-  const maxShell = Math.max(17, Math.min(31, width * 0.018))
-  const shellRadius = 2.2 + maxShell * (0.72 + smoothStep((elapsed - 2_300) / 2_000) * 0.28) * bloom
-  const glowRadius = Math.max(34, Math.min(72, width * 0.042)) * (0.50 + bloom * 0.50)
+  const explosion = detonation * (1 - collapse)
+  const preExplosion = (1 - detonation) * presence
+  const starRadius = 1.05 + giant * Math.max(2.5, Math.min(4.4, width * 0.0024))
+  const redPulse = 0.93 + Math.sin(elapsed * 0.012 + id * 0.7) * 0.07 * instability
+  const warm = giant * redPulse
 
   ctx.save()
   ctx.globalCompositeOperation = 'screen'
 
-  if (baseStar > 0.001) {
+  if (preExplosion > 0.001) {
+    const giantGlowRadius = 4.2 + giant * Math.max(13, Math.min(24, width * 0.014))
+    const giantGlow = ctx.createRadialGradient(x, y, 0, x, y, giantGlowRadius)
+    giantGlow.addColorStop(0, `rgba(255,244,226,${0.13 * preExplosion * (1 - warm * 0.35)})`)
+    giantGlow.addColorStop(0.18, `rgba(255,158,72,${0.16 * preExplosion * warm})`)
+    giantGlow.addColorStop(0.55, `rgba(170,46,18,${0.075 * preExplosion * warm})`)
+    giantGlow.addColorStop(1, 'rgba(95,15,8,0)')
+    ctx.fillStyle = giantGlow
     ctx.beginPath()
-    ctx.arc(x, y, 1.05, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(232,238,241,${0.68 * baseStar})`
+    ctx.arc(x, y, giantGlowRadius, 0, Math.PI * 2)
     ctx.fill()
+
     ctx.beginPath()
-    ctx.arc(x, y, 3.6, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(198,214,225,${0.055 * baseStar})`
+    ctx.arc(x, y, starRadius, 0, Math.PI * 2)
+    const red = Math.round(238 + warm * 17)
+    const green = Math.round(238 - warm * 122)
+    const blue = Math.round(241 - warm * 190)
+    ctx.fillStyle = `rgba(${red},${green},${blue},${0.76 * preExplosion})`
     ctx.fill()
+
+    if (instability > 0.001) {
+      const flareAlpha = instability * (0.10 + 0.08 * Math.sin(elapsed * 0.025))
+      ctx.beginPath()
+      ctx.arc(x, y, starRadius * (1.8 + instability * 0.7), 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(255,91,34,${Math.max(0, flareAlpha)})`
+      ctx.fill()
+    }
   }
 
-  if (bloom > 0.001) {
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, glowRadius)
-    glow.addColorStop(0, `rgba(255,249,232,${0.26 * bloom})`)
-    glow.addColorStop(0.18, `rgba(244,226,191,${0.16 * bloom})`)
-    glow.addColorStop(0.55, `rgba(190,211,227,${0.065 * bloom})`)
-    glow.addColorStop(1, 'rgba(170,196,216,0)')
-    ctx.fillStyle = glow
+  if (explosion > 0.001) {
+    const outward = smoothStep((elapsed - 3_720) / 1_500)
+    const baseRadius = Math.max(13, Math.min(28, width * 0.016)) * (0.48 + outward * 0.72)
+    const cloudGlowRadius = Math.max(30, Math.min(64, width * 0.038)) * (0.55 + outward * 0.62)
+    const cloud = ctx.createRadialGradient(x, y, 0, x, y, cloudGlowRadius)
+    cloud.addColorStop(0, `rgba(255,250,228,${0.36 * explosion})`)
+    cloud.addColorStop(0.14, `rgba(255,205,105,${0.29 * explosion})`)
+    cloud.addColorStop(0.36, `rgba(255,112,40,${0.21 * explosion})`)
+    cloud.addColorStop(0.68, `rgba(169,37,20,${0.10 * explosion})`)
+    cloud.addColorStop(1, 'rgba(90,8,5,0)')
+
+    // A filled, lopsided ejecta cloud reads as a stellar explosion without the
+    // conspicuous geometric ring from the first pass.
+    const points = 22
     ctx.beginPath()
-    ctx.arc(x, y, glowRadius, 0, Math.PI * 2)
+    for (let i = 0; i <= points; i++) {
+      const angle = (i / points) * Math.PI * 2
+      const irregularity = 0.72 + seededFrac(id * 83.1 + i * 17.7) * 0.50
+      const wobble = 1 + Math.sin(angle * 3 + id * 0.13) * 0.08
+      const radius = baseRadius * irregularity * wobble
+      const px = x + Math.cos(angle) * radius
+      const py = y + Math.sin(angle) * radius * (0.84 + seededFrac(id * 13.2 + i * 9.4) * 0.18)
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    ctx.closePath()
+    ctx.fillStyle = cloud
     ctx.fill()
 
-    // A thin irregular-looking shell is enough to read as a stellar detonation;
-    // no debris particles or expensive blur field are needed.
+    const coreRadius = Math.max(3.8, Math.min(7.0, width * 0.0037)) * (1 - collapse * 0.78)
     ctx.beginPath()
-    ctx.arc(x, y, shellRadius, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(236,226,205,${0.34 * bloom})`
-    ctx.lineWidth = Math.max(0.8, Math.min(1.6, width * 0.0009))
-    ctx.stroke()
+    ctx.arc(x, y, Math.max(1.0, coreRadius), 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,252,236,${0.98 * explosion})`
+    ctx.fill()
 
-    const innerRadius = Math.max(3.8, Math.min(6.2, width * 0.0034)) * (0.72 + bloom * 0.28)
-    ctx.beginPath()
-    ctx.arc(x, y, innerRadius, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(255,250,236,${0.96 * bloom})`
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(x, y, innerRadius * 0.43, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(255,255,253,${0.99 * bloom})`
-    ctx.fill()
-  }
-
-  if (collapsedCore > 0.001) {
-    // The bloom pulls sharply back to a pinprick before the star disappears.
-    const coreRadius = 1.0 + (1 - collapse) * 4.6
-    const coreAlpha = clamp01(collapsedCore * (1 - vanish * 0.55))
-    const tinyGlow = ctx.createRadialGradient(x, y, 0, x, y, 13)
-    tinyGlow.addColorStop(0, `rgba(247,236,213,${0.18 * coreAlpha})`)
-    tinyGlow.addColorStop(1, 'rgba(202,218,228,0)')
-    ctx.fillStyle = tinyGlow
-    ctx.beginPath()
-    ctx.arc(x, y, 13, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(x, y, coreRadius, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(249,246,232,${0.90 * coreAlpha})`
-    ctx.fill()
+    // Sparse warm ejecta, deliberately short and uneven rather than a radial wheel.
+    for (let i = 0; i < 7; i++) {
+      const angle = seededFrac(id * 47.2 + i * 19.6) * Math.PI * 2
+      const length = baseRadius * (0.65 + seededFrac(id * 73.7 + i * 8.3) * 0.95) * outward
+      const inner = baseRadius * (0.28 + seededFrac(id * 11.9 + i * 5.8) * 0.22)
+      const sx = x + Math.cos(angle) * inner
+      const sy = y + Math.sin(angle) * inner * 0.90
+      const ex = x + Math.cos(angle) * length
+      const ey = y + Math.sin(angle) * length * 0.90
+      ctx.beginPath()
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(ex, ey)
+      ctx.strokeStyle = i % 2 === 0
+        ? `rgba(255,154,61,${0.16 * explosion})`
+        : `rgba(220,61,29,${0.13 * explosion})`
+      ctx.lineWidth = 0.7 + seededFrac(id * 37.4 + i * 3.7) * 0.6
+      ctx.stroke()
+    }
   }
 
   ctx.restore()
+
+  if (absence > 0.001) {
+    // The final remnant is an absence, not a cartoon black-hole graphic. Because
+    // this canvas sits above the star field, a tiny source-over disk quietly
+    // swallows whatever was behind the dead star for a moment before vanishing.
+    ctx.save()
+    ctx.globalCompositeOperation = 'source-over'
+    const radius = Math.max(1.4, Math.min(3.2, width * 0.0019)) * (0.72 + absence * 0.28)
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(0,0,0,${0.92 * absence})`
+    ctx.fill()
+    ctx.restore()
+  }
 }
 
 function owlBlinkOpen(elapsed: number, center: number, halfWidth: number) {
@@ -732,12 +772,21 @@ function owlBlinkOpen(elapsed: number, center: number, halfWidth: number) {
   return smoothStep(distance / halfWidth)
 }
 
-function drawOwl(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
-  const duration = 9_600
+function drawOwl(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  elapsed: number,
+  id: number,
+  options: { gaze?: number; fadeOutStart?: number; fadeOutDuration?: number } = {},
+) {
+  const fadeOutStart = options.fadeOutStart ?? 7_350
+  const fadeOutDuration = options.fadeOutDuration ?? 1_650
+  const duration = Math.max(9_600, fadeOutStart + fadeOutDuration + 150)
   if (elapsed < 0 || elapsed > duration) return
 
   const fadeIn = smoothStep(elapsed / 1_050)
-  const fadeOut = 1 - smoothStep((elapsed - 7_350) / 1_650)
+  const fadeOut = 1 - smoothStep((elapsed - fadeOutStart) / fadeOutDuration)
   const presence = clamp01(fadeIn * fadeOut)
   if (presence <= 0) return
 
@@ -765,6 +814,8 @@ function drawOwl(ctx: CanvasRenderingContext2D, width: number, height: number, e
   const rightOpen = Math.max(0.025, firstRight * secondRight)
   const breath = 0.91 + Math.sin(elapsed * 0.0021 + id * 0.37) * 0.09
   const alpha = presence * breath
+  const gaze = clamp01(options.gaze ?? 0)
+  const gazeDirection = leftSide ? 1 : -1
 
   const drawEye = (x: number, openness: number, bias: number) => {
     const yRadius = eyeRadiusY * openness
@@ -786,7 +837,7 @@ function drawOwl(ctx: CanvasRenderingContext2D, width: number, height: number, e
     ctx.fill()
 
     ctx.beginPath()
-    ctx.ellipse(x + eyeRadiusX * 0.12, centerY - yRadius * 0.10, eyeRadiusX * 0.34, Math.max(0.12, yRadius * 0.42), 0, 0, Math.PI * 2)
+    ctx.ellipse(x + eyeRadiusX * (0.12 + gazeDirection * gaze * 0.31), centerY - yRadius * 0.10, eyeRadiusX * 0.34, Math.max(0.12, yRadius * 0.42), 0, 0, Math.PI * 2)
     ctx.fillStyle = `rgba(255,226,143,${0.52 * alpha * openness})`
     ctx.fill()
   }
@@ -861,6 +912,71 @@ function drawOwlArmy(ctx: CanvasRenderingContext2D, width: number, height: numbe
     drawEye(x - spacing * 0.5, -0.025)
     drawEye(x + spacing * 0.5, 0.018)
   }
+  ctx.restore()
+}
+
+
+function drawWrongOwl(ctx: CanvasRenderingContext2D, width: number, height: number, elapsed: number, id: number) {
+  const duration = 10_650
+  if (elapsed < 0 || elapsed > duration) return
+
+  const secondAppears = smoothStep((elapsed - 6_050) / 360)
+  const gaze = smoothStep((elapsed - 6_950) / 680)
+  const fadeTogether = 1 - smoothStep((elapsed - 9_550) / 700)
+
+  // Preserve the normal sighting and its real hoot, then let the original owl
+  // make the smallest possible reaction: the eye highlights slide toward the
+  // newcomer after the ridiculous daytime chirp.
+  drawOwl(ctx, width, height, elapsed, id, {
+    gaze,
+    fadeOutStart: 9_550,
+    fadeOutDuration: 700,
+  })
+
+  if (secondAppears <= 0.001 || fadeTogether <= 0.001) return
+
+  const leftSide = seededFrac(id * 17.3 + 3.2) < 0.5
+  const xBand = seededFrac(id * 11.7 + 8.4)
+  const originalX = width * (leftSide ? 0.17 + xBand * 0.20 : 0.63 + xBand * 0.20)
+  const direction = leftSide ? 1 : -1
+  const separation = Math.max(42, Math.min(78, width * 0.055))
+  const x = Math.max(width * 0.08, Math.min(width * 0.92, originalX + direction * separation))
+  const terrainY = surfaceYAt(x, width, height)
+  const depth = seededFrac(id * 67.2 + 11.4)
+  const y = Math.min(height * 0.77, terrainY - (16 + depth * 18))
+  const scale = 0.80 + seededFrac(id * 51.6 + 5.9) * 0.14
+  const spacing = Math.max(8.5, Math.min(13.2, width * 0.0093)) * scale
+  const eyeRx = Math.max(1.55, Math.min(2.55, width * 0.00185)) * scale
+  const eyeRy = eyeRx * 0.66
+  const alpha = secondAppears * fadeTogether * (0.89 + Math.sin(elapsed * 0.0023 + id) * 0.06)
+
+  ctx.save()
+  ctx.globalCompositeOperation = 'screen'
+  const drawEye = (eyeX: number, bias: number) => {
+    const glowRadius = 4.8 + eyeRx * 1.55
+    const glow = ctx.createRadialGradient(eyeX, y, 0, eyeX, y, glowRadius)
+    glow.addColorStop(0, `rgba(232,190,92,${0.15 * alpha})`)
+    glow.addColorStop(0.38, `rgba(197,146,63,${0.065 * alpha})`)
+    glow.addColorStop(1, 'rgba(166,119,51,0)')
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(eyeX, y, glowRadius, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.ellipse(eyeX, y, eyeRx * (1 + bias), eyeRy, 0, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(224,177,78,${0.76 * alpha})`
+    ctx.fill()
+
+    // The wrong owl innocently looks straight ahead. He has no idea what he did.
+    ctx.beginPath()
+    ctx.ellipse(eyeX + eyeRx * 0.10, y - eyeRy * 0.08, eyeRx * 0.32, Math.max(0.11, eyeRy * 0.40), 0, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(255,226,143,${0.47 * alpha})`
+    ctx.fill()
+  }
+
+  drawEye(x - spacing * 0.5, -0.02)
+  drawEye(x + spacing * 0.5, 0.018)
   ctx.restore()
 }
 
@@ -1132,6 +1248,52 @@ function playOwlCall(soundOn: boolean, eventId: number) {
     })
 }
 
+
+function playWrongOwlChirp(soundOn: boolean) {
+  if (!soundOn) return
+  const ac = getPitchAudio()
+  if (!ac || ac.state === 'closed') return
+
+  const output = getPitchAudioTransientOutput(ac)
+  const now = ac.currentTime
+  const gain = ac.createGain()
+  const filter = ac.createBiquadFilter()
+  filter.type = 'highpass'
+  filter.frequency.value = 1_650
+  filter.Q.value = 0.45
+  gain.gain.setValueAtTime(0.0001, now)
+  gain.gain.exponentialRampToValueAtTime(0.018, now + 0.018)
+  gain.gain.exponentialRampToValueAtTime(0.006, now + 0.11)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.31)
+  gain.connect(filter).connect(output)
+
+  const notes = [
+    { start: 0, from: 2_350, to: 3_420, stop: 0.12 },
+    { start: 0.115, from: 2_720, to: 4_120, stop: 0.30 },
+  ]
+  let ended = 0
+  const cleanup = () => {
+    ended += 1
+    if (ended < notes.length) return
+    try { gain.disconnect() } catch { /* harmless */ }
+    try { filter.disconnect() } catch { /* harmless */ }
+  }
+
+  for (const note of notes) {
+    const voice = ac.createOscillator()
+    voice.type = 'sine'
+    voice.frequency.setValueAtTime(note.from, now + note.start)
+    voice.frequency.exponentialRampToValueAtTime(note.to, now + note.stop)
+    voice.connect(gain)
+    voice.onended = () => {
+      try { voice.disconnect() } catch { /* harmless */ }
+      cleanup()
+    }
+    voice.start(now + note.start)
+    voice.stop(now + note.stop)
+  }
+}
+
 function playAbductedOwlCall(soundOn: boolean) {
   if (!soundOn) return
   const ac = getPitchAudio()
@@ -1226,6 +1388,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     let boomTimer: number | null = null
     let owlTimer: number | null = null
     let ufoHootTimer: number | null = null
+    let wrongOwlChirpTimer: number | null = null
     let auroraField: AuroraFieldRuntime | null = null
 
     const resize = () => {
@@ -1243,11 +1406,12 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     const durationFor = (kind: RareEventKind | null) => {
       if (kind === 'aurora') return 94_000
       if (kind === 'great-meteor') return 15_500
-      if (kind === 'supernova') return 9_000
+      if (kind === 'supernova') return 10_500
       if (kind === 'distant-storm') return 72_000
       if (kind === 'impossible-star') return 32_000
       if (kind === 'owl') return 9_600
       if (kind === 'owl-army') return 7_650
+      if (kind === 'owl-wrong') return 10_650
       if (kind === 'owl-ufo') return 15_600
       return 0
     }
@@ -1270,6 +1434,10 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
           window.clearTimeout(ufoHootTimer)
           ufoHootTimer = null
         }
+        if (wrongOwlChirpTimer !== null) {
+          window.clearTimeout(wrongOwlChirpTimer)
+          wrongOwlChirpTimer = null
+        }
         ctx.clearRect(0, 0, width, height)
         raf = requestAnimationFrame(draw)
         return
@@ -1279,6 +1447,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
         if (boomTimer !== null) window.clearTimeout(boomTimer)
         if (owlTimer !== null) window.clearTimeout(owlTimer)
         if (ufoHootTimer !== null) window.clearTimeout(ufoHootTimer)
+        if (wrongOwlChirpTimer !== null) window.clearTimeout(wrongOwlChirpTimer)
         currentId = requested.id
         currentKind = requested.kind
         startedAt = time
@@ -1291,7 +1460,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
             boomTimer = null
           }, 12_300)
         }
-        if (requested.kind === 'owl' || requested.kind === 'owl-army' || requested.kind === 'owl-ufo') {
+        if (requested.kind === 'owl' || requested.kind === 'owl-army' || requested.kind === 'owl-wrong' || requested.kind === 'owl-ufo') {
           if (soundRef.current) {
             const owlAudio = getPitchAudio()
             if (owlAudio) void loadPitchAudioAsset(owlAudio, 'owl-field.mp3').catch(() => undefined)
@@ -1301,6 +1470,12 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
             playOwlCall(soundRef.current, requested.id)
             owlTimer = null
           }, 5_350)
+        }
+        if (requested.kind === 'owl-wrong') {
+          wrongOwlChirpTimer = window.setTimeout(() => {
+            playWrongOwlChirp(soundRef.current)
+            wrongOwlChirpTimer = null
+          }, 6_650)
         }
         if (requested.kind === 'owl-ufo') {
           ufoHootTimer = window.setTimeout(() => {
@@ -1329,6 +1504,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (currentKind === 'impossible-star') drawImpossibleStar(ctx, width, height, elapsed)
       if (currentKind === 'owl') drawOwl(ctx, width, height, elapsed, currentId)
       if (currentKind === 'owl-army') drawOwlArmy(ctx, width, height, elapsed, currentId)
+      if (currentKind === 'owl-wrong') drawWrongOwl(ctx, width, height, elapsed, currentId)
       if (currentKind === 'owl-ufo') drawOwlUfo(ctx, width, height, elapsed, currentId)
 
       const duration = durationFor(currentKind)
@@ -1349,6 +1525,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       if (boomTimer !== null) window.clearTimeout(boomTimer)
       if (owlTimer !== null) window.clearTimeout(owlTimer)
       if (ufoHootTimer !== null) window.clearTimeout(ufoHootTimer)
+      if (wrongOwlChirpTimer !== null) window.clearTimeout(wrongOwlChirpTimer)
       window.removeEventListener('resize', resize)
     }
   }, [])

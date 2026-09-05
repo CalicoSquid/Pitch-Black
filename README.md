@@ -1,3 +1,10 @@
+## v1.62.1 — owl character + supernova polish
+
+- Added **Wrong Owl** as a 5% branch of owl encounters. Owl cadence is unchanged: 75% normal owl, 10% Owl Army, 10% Owl UFO and 5% Wrong Owl. The normal field-recorded hoot plays first; a second owl then appears, gives one deliberately inappropriate tiny daytime-style chirp, and the original owl silently looks sideways before both disappear.
+- Rebuilt **Supernova** around a dying-star sequence: ordinary white star → swelling red/orange giant → unstable warm flare → irregular red/orange supernova cloud → sharp collapse → a tiny momentary black absence. The prominent clean expansion ring from v1.62.0 is removed.
+- Added non-persistent QA route `?test=owl-wrong`; existing `?test=supernova` now previews the rebuilt sequence.
+- No owl encounter frequency, Supernova 6–12 hour schedule, weather cadence, micro-event cadence, overnight lifecycle, UI or other accepted event visuals were changed.
+
 ## v1.62.0 — event density
 
 - Added **Supernova**, a new silent 6–12 hour rare sky sighting: an ordinary-looking star blooms into a compact readable stellar explosion, then collapses back to a pinprick and disappears completely.

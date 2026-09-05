@@ -110,7 +110,7 @@ function nextLanternAt(from: number) {
 
 
 function isAliveRareMicroKind(kind: RareEventKind) {
-  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl' || kind === 'owl-army' || kind === 'owl-ufo'
+  return kind === 'distant-storm' || kind === 'ground-fog' || kind === 'impossible-star' || kind === 'owl' || kind === 'owl-army' || kind === 'owl-wrong' || kind === 'owl-ufo'
 }
 
 function isAliveHeroKind(kind: RareEventKind) {
@@ -965,7 +965,7 @@ export function useAliveWorld({
       const currentPhase = currentEventPhase()
       const compatible = currentPhase === 'calm' || currentPhase === 'clearing' || currentPhase === 'cold-front' || currentPhase === 'snow'
       const owlRoll = Math.random()
-      const owlKind: RareEventKind = owlRoll < 0.10 ? 'owl-ufo' : owlRoll < 0.20 ? 'owl-army' : 'owl'
+      const owlKind: RareEventKind = owlRoll < 0.10 ? 'owl-ufo' : owlRoll < 0.20 ? 'owl-army' : owlRoll < 0.25 ? 'owl-wrong' : 'owl'
       if (document.visibilityState !== 'visible' || !compatible || !emitRareEvent(owlKind)) {
         scheduleOwl(true)
         return
