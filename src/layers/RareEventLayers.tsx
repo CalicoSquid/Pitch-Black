@@ -1070,10 +1070,9 @@ function drawOwlUfo(ctx: CanvasRenderingContext2D, width: number, height: number
     const alpha = owlPresence * breath
 
     const drawEye = (x: number, openness: number, bias: number) => {
-      const yRadius = eyeRadiusY * openness * (1 + widen * 0.46)
+      const yRadius = eyeRadiusY * openness
       if (yRadius < 0.06) return
-      const widenedX = eyeRadiusX * (1 + widen * 0.24)
-    const glowRadius = 5.2 + widenedX * 1.6
+      const glowRadius = 5.2 + eyeRadiusX * 1.6
       const glow = ctx.createRadialGradient(x, owlY, 0, x, owlY, glowRadius)
       glow.addColorStop(0, `rgba(232,190,92,${0.17 * alpha * openness})`)
       glow.addColorStop(0.38, `rgba(197,146,63,${0.075 * alpha * openness})`)
