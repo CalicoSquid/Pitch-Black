@@ -53,7 +53,7 @@ export function AliveAmbience({
     let phaseGain: GainNode | null = null
     let presenceGain: GainNode | null = null
 
-    void loadPitchAudioAsset(audioCtx, 'night-ambience-loop.mp3')
+    void loadPitchAudioAsset(audioCtx, 'night-ambience-crickets-v2.mp3')
       .then((buffer) => {
         if (disposed || audioCtx.state !== 'running') return
 

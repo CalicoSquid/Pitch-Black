@@ -39,7 +39,7 @@ export function loadPitchAudioAsset(audioCtx: AudioContext, fileName: string) {
 
 
 export const PITCH_AUDIO_BANK = [
-  'night-ambience-loop.mp3',
+  'night-ambience-crickets-v2.mp3',
   'rain-steady-loop.mp3',
   'rain-heavy-loop.mp3',
   'owl-field.mp3',

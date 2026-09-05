@@ -2,7 +2,7 @@
 
 ## Verified CC0
 
-- Night ambience / crickets: ES335-001 — `crickets.wav`, Freesound sound 440574. Creative Commons 0. Recorded at night in the Nile Valley near Naches, Washington using a Tascam DR08. The shipped `night-ambience-loop.mp3` is a seamless, level-matched derivative of this source.
+- Night ambience / crickets: ES335-001 — `crickets.wav`, Freesound sound 440574. Creative Commons 0. Recorded at night in the Nile Valley near Naches, Washington using a Tascam DR08. The shipped `night-ambience-crickets-v2.mp3` is a seamless, level-matched derivative of this source.
 - Train source: TRP — `180721 Distant train horn birds summer ambience STRATFORD.mp3`, Freesound sound 571073. Creative Commons 0. The shipped train bed and horn are edited derivatives of this source.
 - Distant thunder: LukaCafuka — `Thunder 12`, Freesound sound 795412. Creative Commons 0. The shipped `thunder-distant.mp3` is an edited derivative.
 - Heavy/close thunder: Littlebrojay — `long thunder edited.wav`, Freesound sound 195436. Creative Commons 0. The shipped `thunder-close.mp3` is an edited derivative.

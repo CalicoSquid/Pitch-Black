@@ -1,3 +1,9 @@
+## v1.65.2 — audio cache-bust hotfix
+
+- Renamed the replacement night ambience asset to a new public URL (`night-ambience-crickets-v2.mp3`) so browsers cannot reuse the old cricket file from HTTP/service-worker cache after deployment.
+- The recording, runtime gain, and v1.65.1 mix are otherwise unchanged.
+- This fixes the case where a normal refresh after deployment could still sound exactly like the previous cricket bed because `fetch(..., { cache: "force-cache" })` reused the old response at the unchanged URL.
+
 ## v1.65.1 — night ambience replacement
 
 - Replaced the previous night/cricket bed with ES335-001's CC0 Freesound recording `crickets.wav` (sound 440574).
