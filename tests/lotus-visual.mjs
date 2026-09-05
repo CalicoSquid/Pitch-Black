@@ -1,0 +1,33 @@
+import {chromium, firefox, webkit} from '../.perf-tools/node_modules/playwright/index.mjs';
+import assert from 'node:assert/strict';
+const engine=process.argv[2] || 'chromium';
+const browser=await ({chromium, firefox, webkit})[engine].launch(engine==='chromium' ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE} : {});
+const page=await browser.newPage({viewport:{width:1200,height:560},deviceScaleFactor:1});
+await page.goto('http://127.0.0.1:5173/about/');
+const result=await page.evaluate(async()=>{
+ const {drawLotus}=await import('/src/layers/lotus.ts');
+ document.body.innerHTML='';document.body.style.cssText='margin:0;background:#050706;color:#999;font:12px sans-serif';
+ const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=560;document.body.append(canvas);
+ const ctx=canvas.getContext('2d');ctx.fillStyle='#050706';ctx.fillRect(0,0,1200,560);
+ const phases=[['shoot',3500],['bud',0],['opening',3500],['opening',7000],['open',0],['sinking',4000]];
+ const now=50000;
+ const model={id:1,x:0,scale:1.2,hue:5,state:'bud',stateStarted:now,riseDuration:7000,openDuration:11000,closeDuration:20000,burnSeed:2};
+ phases.forEach(([state,elapsed],i)=>{
+  const x=100+i*200;
+  ctx.fillStyle='#84908b';ctx.fillText(`${state}${elapsed?' '+elapsed/1000+'s':''}`,x-40,40);
+  ctx.strokeStyle='rgba(85,106,97,.15)';ctx.beginPath();ctx.moveTo(x-80,140);ctx.lineTo(x+80,140);ctx.stroke();
+  drawLotus(ctx,{...model,x,state,stateStarted:now-elapsed},140,now,0);
+  ctx.save();ctx.translate(x,440);ctx.scale(4,4);drawLotus(ctx,{...model,x:0,state,stateStarted:now-elapsed},0,now,0);ctx.restore();
+ });
+ ctx.fillStyle='#84908b';ctx.fillText('Actual size above / 4x detail below. Original dim palette.',24,525);
+ const target=document.createElement('canvas');target.width=100;target.height=100;const c=target.getContext('2d');
+ const pixels=(state,elapsed)=>{c.clearRect(0,0,100,100);drawLotus(c,{...model,x:50,scale:2,state,stateStarted:now-elapsed},75,now,0);return c.getImageData(0,0,100,100).data;};
+ const pairs=[['shoot',7000,'bud',0],['bud',2600,'opening',0],['opening',11000,'open',0],['open',0,'closing',0],['closing',20000,'bud',0],['bud',7000,'sinking',0]];
+ const differences=pairs.map(([a,at,b,bt])=>{const one=pixels(a,at),two=pixels(b,bt);return {boundary:a+' -> '+b,maxDelta:one.reduce((n,v,i)=>Math.max(n,Math.abs(v-two[i])),0),changedChannels:one.reduce((n,v,i)=>n+(v!==two[i]?1:0),0)};});
+ const future=pixels('shoot',-100);const ended=pixels('sinking',8000);
+ return {differences,futureVisible:future.some(v=>v!==0),endedVisible:ended.some(v=>v!==0)};
+});
+console.log(JSON.stringify(result,null,2));
+assert.ok(result.differences.every(x=>x.maxDelta<=1));assert.equal(result.futureVisible,false);assert.equal(result.endedVisible,false);
+await page.screenshot({path:`.perf-tools/lotus-lifecycle-${engine}.png`});
+await browser.close();

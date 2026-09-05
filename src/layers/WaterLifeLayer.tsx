@@ -1,3 +1,4 @@
+import { drawLotus, advanceLotus, type Lotus } from './lotus'
 import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
@@ -22,21 +23,6 @@ type Props = {
   testMode?: WaterLifeTestMode
 }
 
-type LotusState = 'shoot' | 'bud' | 'opening' | 'open' | 'closing' | 'burning' | 'charred'
-
-type Lotus = {
-  id: number
-  x: number
-  scale: number
-  hue: number
-  state: LotusState
-  stateStarted: number
-  riseDuration: number
-  openDuration: number
-  closeDuration: number
-  burnSeed: number
-}
-
 type Bubble = {
   x: number
   y: number
@@ -58,11 +44,6 @@ function clamp01(value: number) {
 function smoothstep(value: number) {
   const t = clamp01(value)
   return t * t * (3 - 2 * t)
-}
-
-function seededUnit(seed: number) {
-  const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453
-  return value - Math.floor(value)
 }
 
 function playWaterGurgle() {
@@ -124,191 +105,6 @@ function playWaterGurgle() {
   low.stop(now + duration)
 }
 
-function drawPetal(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  length: number,
-  width: number,
-  angle: number,
-  alpha: number,
-  redBias: number,
-) {
-  ctx.save()
-  ctx.translate(x, y)
-  ctx.rotate(angle)
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.bezierCurveTo(-width * 0.72, -length * 0.25, -width * 0.62, -length * 0.78, 0, -length)
-  ctx.bezierCurveTo(width * 0.62, -length * 0.78, width * 0.72, -length * 0.25, 0, 0)
-  ctx.closePath()
-  ctx.fillStyle = redBias < -50
-    ? `rgba(48, 42, 36, ${alpha})`
-    : `rgba(${232 + redBias}, ${226 - redBias * 0.22}, ${228 + redBias * 0.1}, ${alpha})`
-  ctx.fill()
-  ctx.restore()
-}
-
-function drawLotusBud(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  s: number,
-  alpha: number,
-  redBias: number,
-  emergence = 1,
-) {
-  const budLength = (10.4 + emergence * 2.6) * s
-  const budWidth = (2.35 + emergence * 0.6) * s
-  const sheathAlpha = alpha * (0.72 + emergence * 0.18)
-  drawPetal(ctx, x, y + 0.55 * s, budLength * 0.98, budWidth * 0.94, -0.12, sheathAlpha * 0.82, redBias - 4)
-  drawPetal(ctx, x, y + 0.55 * s, budLength * 0.98, budWidth * 0.94, 0.12, sheathAlpha * 0.82, redBias - 4)
-  drawPetal(ctx, x, y, budLength * 1.08, budWidth, 0, alpha, redBias + 1)
-
-  ctx.save()
-  ctx.strokeStyle = `rgba(243, 237, 240, ${alpha * 0.16})`
-  ctx.lineWidth = Math.max(0.55, 0.68 * s)
-  ctx.lineCap = 'round'
-  ctx.beginPath()
-  ctx.moveTo(x, y - budLength * 0.18)
-  ctx.quadraticCurveTo(x + 0.16 * s, y - budLength * 0.46, x, y - budLength * 0.82)
-  ctx.stroke()
-  ctx.restore()
-}
-
-function drawLotus(
-  ctx: CanvasRenderingContext2D,
-  lotus: Lotus,
-  waterY: number,
-  now: number,
-  lightningFlash: number,
-) {
-  const elapsed = now - lotus.stateStarted
-  let visible = 1
-  let openness = 0
-  let stemT = 1
-  let budVisible = 1
-
-  if (lotus.state === 'shoot') {
-    stemT = smoothstep(elapsed / lotus.riseDuration)
-    budVisible = smoothstep((stemT - 0.58) / 0.42)
-  } else if (lotus.state === 'bud') {
-    openness = 0
-  } else if (lotus.state === 'opening') {
-    openness = smoothstep(elapsed / lotus.openDuration)
-  } else if (lotus.state === 'open') {
-    openness = 1
-  } else if (lotus.state === 'closing') {
-    openness = 1 - smoothstep(elapsed / lotus.closeDuration)
-  } else if (lotus.state === 'burning') {
-    openness = 1
-  } else if (lotus.state === 'charred') {
-    openness = 0.42
-    visible = 1 - smoothstep(elapsed / 3600)
-  }
-
-  if (visible <= 0) return
-
-  const s = lotus.scale
-  const stemHeight = 12.4 * s
-  const bloomLift = 1.4 * s
-  const budBaseY = waterY - stemHeight * stemT - bloomLift
-  const flowerY = budBaseY - 0.5 * s
-  const padAlpha = 0.06 + lightningFlash * 0.11
-  ctx.save()
-  ctx.globalAlpha = visible
-
-  ctx.beginPath()
-  ctx.ellipse(lotus.x, waterY + 1.2, 13.5 * s, 3.7 * s, -0.08, 0, TAU)
-  ctx.fillStyle = `rgba(62, 86, 72, ${padAlpha})`
-  ctx.fill()
-
-  if (stemT > 0.02) {
-    const stemAlpha = (0.12 + lightningFlash * 0.09) * visible
-    ctx.strokeStyle = `rgba(102, 128, 110, ${stemAlpha})`
-    ctx.lineWidth = Math.max(0.7, 1.05 * s)
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    ctx.moveTo(lotus.x, waterY + 0.4)
-    ctx.quadraticCurveTo(lotus.x + 0.65 * s, waterY - stemHeight * stemT * 0.38, lotus.x, budBaseY + 3.2 * s)
-    ctx.stroke()
-  }
-
-  if (lotus.state === 'burning' || lotus.state === 'charred') {
-    const charAlpha = lotus.state === 'burning' ? 0.7 : 0.52 * visible
-    for (let i = 0; i < 7; i++) {
-      drawPetal(
-        ctx,
-        lotus.x,
-        flowerY,
-        (9 + (i % 3) * 1.35) * s,
-        3.5 * s,
-        -0.72 + (i / 6) * 1.44,
-        charAlpha,
-        -115,
-      )
-    }
-
-    if (lotus.state === 'burning') {
-      const burnT = clamp01(elapsed / 4200)
-      const flicker = 0.78 + Math.sin(now * 0.021 + lotus.burnSeed) * 0.16 + seededUnit(Math.floor(now / 90) + lotus.id) * 0.08
-      const flameH = (7 + (1 - burnT) * 7) * s * flicker
-      const flameW = (3.2 + (1 - burnT) * 1.8) * s
-      const grad = ctx.createRadialGradient(lotus.x, flowerY - flameH * 0.35, 0.4, lotus.x, flowerY - flameH * 0.35, flameH)
-      grad.addColorStop(0, `rgba(255, 226, 132, ${0.56 * (1 - burnT)})`)
-      grad.addColorStop(0.34, `rgba(255, 126, 52, ${0.46 * (1 - burnT)})`)
-      grad.addColorStop(1, 'rgba(146, 33, 16, 0)')
-      ctx.fillStyle = grad
-      ctx.beginPath()
-      ctx.ellipse(lotus.x, flowerY - flameH * 0.34, flameW, flameH * 0.62, 0, 0, TAU)
-      ctx.fill()
-    }
-
-    ctx.restore()
-    return
-  }
-
-  const redBias = lotus.hue
-  const budAlpha = (0.22 + lightningFlash * 0.14) * visible
-  const bloomAlpha = (0.18 + openness * 0.42 + lightningFlash * 0.22) * visible
-
-  if (lotus.state === 'shoot') {
-    if (budVisible > 0.01) drawLotusBud(ctx, lotus.x, budBaseY, s, budAlpha * budVisible, redBias, budVisible)
-    ctx.restore()
-    return
-  }
-
-  if (lotus.state === 'bud' || (lotus.state === 'closing' && openness < 0.26)) {
-    const emergence = lotus.state === 'closing' ? 0.82 + (1 - clamp01(openness / 0.26)) * 0.18 : 1
-    drawLotusBud(ctx, lotus.x, budBaseY, s, budAlpha, redBias, emergence)
-    ctx.restore()
-    return
-  }
-
-  const spread = 0.15 + openness * 0.88
-  const petalLift = (1 - openness) * 0.5 * s
-
-  for (let i = 0; i < 5; i++) {
-    const u = i / 4
-    const angle = (-0.72 + u * 1.44) * spread
-    drawPetal(ctx, lotus.x, flowerY + petalLift, (9.9 + openness * 3.8) * s, 3.15 * s, angle, bloomAlpha * 0.72, redBias)
-  }
-  for (let i = 0; i < 4; i++) {
-    const u = i / 3
-    const angle = (-0.48 + u * 0.96) * spread
-    drawPetal(ctx, lotus.x, flowerY + 0.65 * s + petalLift * 0.65, (8.5 + openness * 2.9) * s, 2.85 * s, angle, bloomAlpha, redBias + 4)
-  }
-
-  if (openness > 0.5) {
-    ctx.beginPath()
-    ctx.arc(lotus.x, flowerY - 1.35 * s, 1.22 * s, 0, TAU)
-    ctx.fillStyle = `rgba(247, 210, 126, ${(openness - 0.5) * 0.3 + lightningFlash * 0.12})`
-    ctx.fill()
-  }
-
-  ctx.restore()
-}
-
 export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testMode = null }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sceneRef = useRef(scene)
@@ -361,7 +157,9 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
     const bubbles: Bubble[] = []
 
     const resize = () => {
+      const previousWidth = width
       width = window.innerWidth
+      for (const lotus of lotuses) lotus.x *= width / Math.max(1, previousWidth)
       height = window.innerHeight
       dpr = canvasPixelRatio(width, height, 1.25)
       canvas.width = Math.max(1, Math.round(width * dpr))
@@ -381,16 +179,22 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
 
     const findWaterX = (waterY: number, preferred?: number) => {
       let bestX = -1
-      let bestDepth = 5
-      for (let i = 0; i < 18; i++) {
+      let bestScore = Number.NEGATIVE_INFINITY
+      const samples = preferred === undefined ? 18 : 64
+      for (let i = 0; i < samples; i++) {
         const x = preferred !== undefined
-          ? Math.max(width * 0.08, Math.min(width * 0.92, preferred + (Math.random() - 0.5) * width * 0.22))
+          ? (i === 0 ? Math.max(width * 0.08, Math.min(width * 0.92, preferred)) : width * (0.08 + (i - 1) / (samples - 2) * 0.84))
           : width * (0.08 + Math.random() * 0.84)
         const idx = worldIndexAt(x, width)
         if ((pitchWorld.ice[idx] || 0) > 0.34) continue
         const depth = waterDepthAt(x, waterY)
-        if (depth > bestDepth) {
-          bestDepth = depth
+        if (depth <= 5) continue
+        if (preferred !== undefined && lotuses.some(lotus => Math.abs(lotus.x - x) < Math.max(44, width * 0.075))) continue
+        // Favor the intended spacing once the water is deep enough; repeatedly
+        // selecting the deepest sample packs neighboring flowers into one spot.
+        const score = preferred === undefined ? depth : Math.min(depth, 12) * 0.2 - Math.abs(x - preferred)
+        if (score > bestScore) {
+          bestScore = score
           bestX = x
         }
       }
@@ -446,36 +250,7 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
 
     const updateLotuses = (now: number, wetWeather: boolean) => {
       for (let i = lotuses.length - 1; i >= 0; i--) {
-        const lotus = lotuses[i]
-        if (now < lotus.stateStarted) continue
-        const elapsed = now - lotus.stateStarted
-        if (lotus.state === 'shoot') {
-          if (elapsed >= lotus.riseDuration) {
-            lotus.state = 'bud'
-            lotus.stateStarted = now
-          }
-        } else if (lotus.state === 'bud') {
-          if (wetWeather && elapsed >= 2_600) {
-            lotus.state = 'opening'
-            lotus.stateStarted = now
-          } else if (!wetWeather && elapsed >= 7_000) {
-            lotuses.splice(i, 1)
-          }
-        } else if (lotus.state === 'opening' && elapsed >= lotus.openDuration) {
-          lotus.state = wetWeather ? 'open' : 'closing'
-          lotus.stateStarted = now
-        } else if (lotus.state === 'open' && !wetWeather) {
-          lotus.state = 'closing'
-          lotus.stateStarted = now
-        } else if (lotus.state === 'closing' && elapsed >= lotus.closeDuration) {
-          lotus.state = 'bud'
-          lotus.stateStarted = now
-        } else if (lotus.state === 'burning' && elapsed >= 4200) {
-          lotus.state = 'charred'
-          lotus.stateStarted = now
-        } else if (lotus.state === 'charred' && elapsed >= 3600) {
-          lotuses.splice(i, 1)
-        }
+        if (!advanceLotus(lotuses[i], now, wetWeather)) lotuses.splice(i, 1)
       }
     }
 
