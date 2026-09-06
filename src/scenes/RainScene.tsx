@@ -142,8 +142,11 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       const current = audioRef.current
       if (!current || current.ctx !== audioCtx) return
       const now = audioCtx.currentTime
-      current.steadyGain.gain.setTargetAtTime(0, now, 0.32)
-      current.heavyGain.gain.setTargetAtTime(0, now, 0.32)
+      for (const gain of [current.steadyGain, current.heavyGain]) {
+        gain.gain.cancelScheduledValues(now)
+        gain.gain.setValueAtTime(gain.gain.value, now)
+        gain.gain.linearRampToValueAtTime(0, now + 0.95)
+      }
       window.setTimeout(() => {
         try { current.steadySource.stop() } catch { /* already stopped */ }
         try { current.heavySource.stop() } catch { /* already stopped */ }
@@ -151,7 +154,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
         try { current.heavySource.disconnect() } catch { /* harmless */ }
         try { current.steadyGain.disconnect() } catch { /* harmless */ }
         try { current.heavyGain.disconnect() } catch { /* harmless */ }
-      }, 650)
+      }, 1000)
       audioRef.current = null
     }
   }, [audioEnabled, audioReadyNonce])

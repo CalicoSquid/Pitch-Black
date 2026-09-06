@@ -70,13 +70,13 @@ export function GlobalMoon({ visible, halo = false }: { visible: boolean; halo?:
         {/* Faint earthshine keeps the lunar body readable without faking the phase. */}
         <g clipPath="url(#moon-disc-clip)" opacity="0.075">
           <image href="/moon-texture.png" x="4" y="4" width="192" height="192" preserveAspectRatio="xMidYMid slice" />
-          <image href="https://assets.science.nasa.gov/dynamicimage/assets/science/missions/hubble/releases/1999/04/STScI-01EVTA4B0CT67AJW6WYMQRF0MY.tif?crop=faces%2Cfocalpoint&fit=clip&h=1200&w=1200" x="4" y="4" width="192" height="192" preserveAspectRatio="xMidYMid slice" />
+          <image href="/moon-realistic.webp" x="4" y="4" width="192" height="192" preserveAspectRatio="xMidYMid slice" />
         </g>
 
         {/* The real illuminated portion: curved crescent / quarter / gibbous geometry. */}
         <g clipPath="url(#moon-lit-clip)">
           <image href="/moon-texture.png" x="4" y="4" width="192" height="192" preserveAspectRatio="xMidYMid slice" />
-          <image href="https://assets.science.nasa.gov/dynamicimage/assets/science/missions/hubble/releases/1999/04/STScI-01EVTA4B0CT67AJW6WYMQRF0MY.tif?crop=faces%2Cfocalpoint&fit=clip&h=1200&w=1200" x="4" y="4" width="192" height="192" preserveAspectRatio="xMidYMid slice" />
+          <image href="/moon-realistic.webp" x="4" y="4" width="192" height="192" preserveAspectRatio="xMidYMid slice" />
         </g>
 
         <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(220,228,234,0.08)" strokeWidth="0.8" />

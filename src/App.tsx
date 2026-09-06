@@ -378,20 +378,20 @@ function App() {
     setAliveOn(false)
     // This runs synchronously inside the user's click, satisfying browser audio policy
     // before any later animation frame needs meteor/thunder/fire audio.
-    unlockPitchAudio()
+    if (soundOn) unlockPitchAudio()
     setScene(nextScene)
   }
 
   const chooseBlackout = () => {
     setAliveOn(false)
-    unlockPitchAudio()
+    if (soundOn) unlockPitchAudio()
     setScene('black')
     setShowClock(false)
     setLayers({ moon: false, storm: false, fireflies: false })
   }
 
   const toggleSound = () => {
-    unlockPitchAudio()
+    if (!soundOn) unlockPitchAudio()
     setSoundOn((value) => {
       const next = !value
       if (next) {
@@ -407,7 +407,7 @@ function App() {
   }
 
   const toggleLayer = (layer: LayerKey) => {
-    if (layer === 'storm') unlockPitchAudio()
+    if (layer === 'storm' && soundOn) unlockPitchAudio()
 
     if (aliveOn) {
       // Alive is a complete autonomous state. Touching any manual atmosphere
@@ -427,6 +427,7 @@ function App() {
 
   useEffect(() => {
     setPitchAudioMuted(!soundOn)
+    if (!soundOn) suspendPitchAudio()
   }, [soundOn])
 
   useEffect(() => {
@@ -515,7 +516,7 @@ function App() {
   }, [])
 
   const setSleepTimer = (minutes: number) => {
-    unlockPitchAudio()
+    if (soundOn) unlockPitchAudio()
     restorePitchAudioFade()
     const duration = minutes * 60_000
     setSleepTimerEndAt(Date.now() + duration)
@@ -666,7 +667,7 @@ function App() {
   }
 
   const toggleAlive = () => {
-    unlockPitchAudio()
+    if (soundOn) unlockPitchAudio()
 
     if (aliveOn) {
       setAliveOn(false)
@@ -700,7 +701,7 @@ function App() {
   }, [])
 
   const goFullscreen = async () => {
-    unlockPitchAudio()
+    if (soundOn) unlockPitchAudio()
     try {
       const doc = document as Document & {
         webkitFullscreenElement?: Element | null
@@ -1019,7 +1020,7 @@ function App() {
               step="1"
               value={Math.round(volume * 100)}
               onChange={(event) => {
-                unlockPitchAudio()
+                if (soundOn) unlockPitchAudio()
                 setVolume(Number(event.target.value) / 100)
               }}
               aria-label="Master volume"

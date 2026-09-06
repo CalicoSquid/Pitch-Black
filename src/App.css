@@ -1433,8 +1433,13 @@
   z-index: 0;
   pointer-events: none;
   opacity: 0;
-  will-change: transform, opacity;
+  will-change: transform, opacity, filter;
   animation: ambient-airplane-cross var(--life-plane-duration) linear forwards;
+}
+
+.ambient-airplane.exiting {
+  filter: opacity(0);
+  transition: filter 1.4s ease-out;
 }
 
 .ambient-airplane.from-right {

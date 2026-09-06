@@ -10,6 +10,7 @@ let pitchAudioVolume = 1
 let pitchAudioNeedsReadySignal = true
 let readyTimer = 0
 let audioGeneration = 0
+let transientGeneration = 0
 
 export const PITCH_AUDIO_READY_EVENT = 'tqw:pitch-audio-ready'
 
@@ -63,6 +64,7 @@ function ensurePitchAudioTransientOutput(audioCtx: AudioContext) {
 }
 
 export function cancelPitchAudioTransients() {
+  transientGeneration += 1
   const audioCtx = pitchAudioContext
   const transientGain = pitchAudioTransientGain
   if (!audioCtx || !transientGain) return
@@ -80,6 +82,9 @@ export function cancelPitchAudioTransients() {
   pitchAudioTransientGain = null
 }
 
+export function getPitchAudioTransientGeneration() {
+  return transientGeneration
+}
 
 function observePitchAudioState(audioCtx: AudioContext) {
   const onStateChange = () => {

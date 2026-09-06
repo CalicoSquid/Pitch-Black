@@ -45,7 +45,7 @@ function Airplane({ event }: { event: AmbientLifeEvent }) {
 
   return (
     <div
-      className={`ambient-airplane ${direction < 0 ? 'from-right' : 'from-left'}`}
+      className={`ambient-airplane ${direction < 0 ? 'from-right' : 'from-left'} ${event.cancelledAt ? 'exiting' : ''}`}
       style={{
         '--life-plane-y': `${startY}vh`,
         '--life-plane-dy': `${travelY}vh`,
@@ -107,7 +107,8 @@ function Train({ event, phase }: { event: AmbientLifeEvent; phase?: AlivePhase }
     const travelY = (initial.travelY ?? -3.6) / 100
     const startScale = initial.startScale ?? 1.05
     const endScale = initial.endScale ?? 0.76
-    const startedAt = performance.now()
+    const elapsedBeforeMount = Math.max(0, Date.now() - (initial.startedAt ?? Date.now()))
+    const startedAt = performance.now() - elapsedBeforeMount
     let raf = 0
     let lastPublished = 0
 
@@ -126,7 +127,9 @@ function Train({ event, phase }: { event: AmbientLifeEvent; phase?: AlivePhase }
         const fadeIn = smoothStep(progress / 0.045)
         const fadeOut = 1 - smoothStep((progress - 0.90) / 0.10)
         const distanceFade = 1 - progress * 0.24
-        const alpha = fadeIn * fadeOut * distanceFade * weatherVisibility(phaseRef.current)
+        const cancelledAt = eventRef.current.cancelledAt
+        const exitFade = cancelledAt ? 1 - smoothStep((Date.now() - cancelledAt) / 1_400) : 1
+        const alpha = fadeIn * fadeOut * distanceFade * weatherVisibility(phaseRef.current) * exitFade
 
         publishAmbientTrain(
           initial.id,
@@ -225,7 +228,8 @@ function Lantern({
     const pauseADuration = 0.008 + seeded(seed + 5.7) * 0.012
     const pauseBDuration = 0.006 + seeded(seed + 6.3) * 0.014
     const totalPaused = pauseADuration + pauseBDuration
-    const startedAt = performance.now()
+    const elapsedBeforeMount = Math.max(0, Date.now() - (initial.startedAt ?? Date.now()))
+    const startedAt = performance.now() - elapsedBeforeMount
     let raf = 0
     let lastPublished = 0
     let lastX = direction > 0 ? -window.innerWidth * 0.065 : window.innerWidth * 1.065
@@ -532,7 +536,9 @@ function Lantern({
         const scale = startScale * Math.pow(endScale / startScale, progress)
         const fadeIn = smoothStep(progress / 0.045)
         const fadeOut = reaction === 'none' ? 1 - smoothStep((progress - 0.955) / 0.045) : 1
-        const alpha = fadeIn * fadeOut * reactionFade * lanternWeatherVisibility(phaseRef.current)
+        const cancelledAt = eventRef.current.cancelledAt
+        const exitFade = cancelledAt ? 1 - smoothStep((Date.now() - cancelledAt) / 1_400) : 1
+        const alpha = fadeIn * fadeOut * reactionFade * lanternWeatherVisibility(phaseRef.current) * exitFade
 
         publishAmbientLantern(
           initial.id,
@@ -567,31 +573,45 @@ function Lantern({
 
 function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
   const audioReadyNonce = usePitchAudioReadyNonce()
-  const { kind, id, duration = 92_000, horn = false, hornDelay } = event
+  const { kind, id, duration = 92_000, horn = false, hornDelay, startedAt, cancelledAt } = event
 
   useEffect(() => {
-    if (kind !== 'train' || !soundOn) return
+    if (kind !== 'train' || !soundOn || cancelledAt) return
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
 
     const output = getPitchAudioOutput(audioCtx)
     const durationSeconds = duration / 1000
+    const eventStartedAt = startedAt ?? Date.now()
     let disposed = false
     let hornTimer = 0
+    let bedStopTimer = 0
+    let hornStopTimer = 0
     let bedSource: AudioBufferSourceNode | null = null
     let bedGain: GainNode | null = null
     let hornSource: AudioBufferSourceNode | null = null
     let hornGain: GainNode | null = null
+
+    const elapsedSeconds = () => Math.max(0, (Date.now() - eventStartedAt) / 1000)
 
     const disconnectBed = () => {
       try { bedSource?.disconnect() } catch { /* harmless */ }
       try { bedGain?.disconnect() } catch { /* harmless */ }
     }
 
+    const disconnectHorn = () => {
+      try { hornSource?.disconnect() } catch { /* harmless */ }
+      try { hornGain?.disconnect() } catch { /* harmless */ }
+    }
+
     void loadPitchAudioAsset(audioCtx, 'distant-train-bed.mp3')
       .then((buffer) => {
         if (disposed || audioCtx.state !== 'running') return
+
+        const elapsed = elapsedSeconds()
+        const audibleSeconds = Math.min(durationSeconds, Math.max(1, buffer.duration - 0.08))
+        if (elapsed >= audibleSeconds) return
 
         bedSource = audioCtx.createBufferSource()
         bedGain = audioCtx.createGain()
@@ -601,16 +621,25 @@ function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
         bedSource.onended = disconnectBed
 
         const now = audioCtx.currentTime
-        const fadeInEnd = now + Math.min(4.5, durationSeconds * 0.09)
-        const fadeOutStart = now + Math.max(5, durationSeconds - 7)
-        const audibleSeconds = Math.min(durationSeconds, Math.max(1, buffer.duration - 0.08))
-        const end = now + audibleSeconds
-        bedGain.gain.setValueAtTime(0, now)
-        bedGain.gain.linearRampToValueAtTime(0.18, fadeInEnd)
-        bedGain.gain.setValueAtTime(0.18, fadeOutStart)
-        bedGain.gain.linearRampToValueAtTime(0, end)
-        bedSource.start(now)
-        bedSource.stop(end + 0.15)
+        const fadeInSeconds = Math.min(4.5, durationSeconds * 0.09)
+        const fadeOutAt = Math.min(audibleSeconds, Math.max(5, durationSeconds - 7))
+        const remaining = audibleSeconds - elapsed
+        const levelAtElapsed = elapsed < fadeInSeconds
+          ? 0.18 * (elapsed / Math.max(0.01, fadeInSeconds))
+          : elapsed >= fadeOutAt
+            ? 0.18 * Math.max(0, (audibleSeconds - elapsed) / Math.max(0.01, audibleSeconds - fadeOutAt))
+            : 0.18
+
+        bedGain.gain.setValueAtTime(levelAtElapsed, now)
+        if (elapsed < fadeInSeconds) {
+          bedGain.gain.linearRampToValueAtTime(0.18, now + (fadeInSeconds - elapsed))
+        }
+        if (elapsed < fadeOutAt) {
+          bedGain.gain.setValueAtTime(0.18, now + (fadeOutAt - elapsed))
+        }
+        bedGain.gain.linearRampToValueAtTime(0, now + remaining)
+        bedSource.start(now, Math.min(elapsed, buffer.duration - 0.08))
+        bedSource.stop(now + remaining + 0.15)
       })
       .catch(() => {
         // The visual event should continue even if an optional recording fails.
@@ -618,39 +647,69 @@ function useTrainAudio(event: AmbientLifeEvent, soundOn: boolean) {
 
     if (horn) {
       const delay = hornDelay ?? Math.max(8_000, duration * 0.44)
-      const hornBuffer = loadPitchAudioAsset(audioCtx, 'distant-train-horn.mp3')
-      hornTimer = window.setTimeout(() => {
-        void hornBuffer
-          .then((buffer) => {
+      void loadPitchAudioAsset(audioCtx, 'distant-train-horn.mp3')
+        .then((buffer) => {
+          if (disposed || audioCtx.state !== 'running') return
+
+          const startHorn = () => {
             if (disposed || audioCtx.state !== 'running') return
+            const elapsedMs = Math.max(0, Date.now() - eventStartedAt)
+            const offsetSeconds = Math.max(0, (elapsedMs - delay) / 1000)
+            if (offsetSeconds >= buffer.duration - 0.05) return
 
             hornSource = audioCtx.createBufferSource()
             hornGain = audioCtx.createGain()
             hornSource.buffer = buffer
             hornGain.gain.value = 0.30
             hornSource.connect(hornGain).connect(output)
-            hornSource.onended = () => {
-              try { hornSource?.disconnect() } catch { /* harmless */ }
-              try { hornGain?.disconnect() } catch { /* harmless */ }
-            }
-            hornSource.start()
-          })
-          .catch(() => {
-            // No synthetic fallback: silence is better than an artificial horn.
-          })
-      }, delay)
+            hornSource.onended = disconnectHorn
+            hornSource.start(audioCtx.currentTime, offsetSeconds)
+          }
+
+          const remainingDelay = delay - Math.max(0, Date.now() - eventStartedAt)
+          if (remainingDelay <= 0) startHorn()
+          else hornTimer = window.setTimeout(startHorn, remainingDelay)
+        })
+        .catch(() => {
+          // No synthetic fallback: silence is better than an artificial horn.
+        })
     }
 
     return () => {
       disposed = true
       window.clearTimeout(hornTimer)
+      window.clearTimeout(bedStopTimer)
+      window.clearTimeout(hornStopTimer)
+
+      if (audioCtx.state === 'running') {
+        const now = audioCtx.currentTime
+        if (bedSource && bedGain) {
+          bedGain.gain.cancelScheduledValues(now)
+          bedGain.gain.setValueAtTime(bedGain.gain.value, now)
+          bedGain.gain.linearRampToValueAtTime(0, now + 1.0)
+          bedStopTimer = window.setTimeout(() => {
+            try { bedSource?.stop() } catch { /* already stopped */ }
+            disconnectBed()
+          }, 1050)
+        }
+        if (hornSource && hornGain) {
+          hornGain.gain.cancelScheduledValues(now)
+          hornGain.gain.setValueAtTime(hornGain.gain.value, now)
+          hornGain.gain.linearRampToValueAtTime(0, now + 0.55)
+          hornStopTimer = window.setTimeout(() => {
+            try { hornSource?.stop() } catch { /* already stopped */ }
+            disconnectHorn()
+          }, 600)
+        }
+        return
+      }
+
       try { bedSource?.stop() } catch { /* already stopped */ }
       try { hornSource?.stop() } catch { /* already stopped */ }
       disconnectBed()
-      try { hornSource?.disconnect() } catch { /* harmless */ }
-      try { hornGain?.disconnect() } catch { /* harmless */ }
+      disconnectHorn()
     }
-  }, [audioReadyNonce, duration, horn, hornDelay, id, kind, soundOn])
+  }, [audioReadyNonce, cancelledAt, duration, horn, hornDelay, id, kind, soundOn, startedAt])
 }
 
 export function AmbientLifeLayer({ event, soundOn, phase, onComplete, testReaction }: AmbientLifeLayerProps) {
@@ -661,7 +720,8 @@ export function AmbientLifeLayer({ event, soundOn, phase, onComplete, testReacti
     // legitimately run past the originally scheduled crossing duration.
     if (event.kind === 'lantern') return
     const duration = event.duration ?? (event.kind === 'train' ? 92_000 : 190_000)
-    const timer = window.setTimeout(() => onComplete?.(event.kind, event.id), duration + 250)
+    const elapsed = Math.max(0, Date.now() - (event.startedAt ?? Date.now()))
+    const timer = window.setTimeout(() => onComplete?.(event.kind, event.id), Math.max(0, duration - elapsed) + 250)
     return () => window.clearTimeout(timer)
   }, [event, onComplete])
 

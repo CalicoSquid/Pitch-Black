@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { fireflySignal } from '../world/fireflySignal'
-import { lightningGroundStrikeSignal } from '../world/lightningSignal'
+import { LIGHTNING_FLASH_EVENT, lightningGroundStrikeSignal } from '../world/lightningSignal'
 import {
   groundSurfaceYAtIndex,
   pitchWorld,
@@ -355,6 +355,7 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
     }
 
     let lastFrame = performance.now()
+    let nextFrameDue = lastFrame
     const draw = (now: number) => {
       if (disposed) return
       const dt = Math.max(0, Math.min(80, now - lastFrame))
@@ -452,16 +453,26 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
             ? 167
             : 500
 
+      nextFrameDue = Math.max(nextFrameDue + delay, performance.now())
+      const wait = Math.max(0, nextFrameDue - performance.now() - 8)
       idleTimer = window.setTimeout(() => {
         // Only discard elapsed time while truly idle. Active bubble physics must
         // receive the full scheduled dt rather than just the final rAF delay.
         if (!hasLife && test === null) lastFrame = performance.now()
         raf = requestAnimationFrame(draw)
-      }, delay)
+      }, wait)
+    }
+
+    const wakeForLightning = () => {
+      window.clearTimeout(idleTimer)
+      cancelAnimationFrame(raf)
+      nextFrameDue = performance.now()
+      raf = requestAnimationFrame(draw)
     }
 
     resize()
     window.addEventListener('resize', resize)
+    window.addEventListener(LIGHTNING_FLASH_EVENT, wakeForLightning)
     raf = requestAnimationFrame(draw)
 
     return () => {
@@ -469,6 +480,7 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
       cancelAnimationFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      window.removeEventListener(LIGHTNING_FLASH_EVENT, wakeForLightning)
       ctx.clearRect(0, 0, width, height)
     }
   }, [])

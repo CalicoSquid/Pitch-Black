@@ -1,25 +1,15 @@
-## v1.65.2 — audio cache-bust hotfix
+## v1.65.4 — audit hardening
 
-- Renamed the replacement night ambience asset to a new public URL (`night-ambience-crickets-v2.mp3`) so browsers cannot reuse the old cricket file from HTTP/service-worker cache after deployment.
-- The recording, runtime gain, and v1.65.1 mix are otherwise unchanged.
-- This fixes the case where a normal refresh after deployment could still sound exactly like the previous cricket bed because `fetch(..., { cache: "force-cache" })` reused the old response at the unchanged URL.
+- Snowflake motion, rotation, wind easing, loose powder and drift-material updates are now normalized to elapsed time / a 60 Hz simulation baseline instead of display refresh rate.
+- The large cricket field recording is released whenever its Alive phase is genuinely inaudible, and muted mode suspends Web Audio instead of leaving an idle context running.
+- Train visuals and audio now share the event's wall-clock start time. Resume/unmute continues the bed and horn from the correct point rather than restarting the journey.
+- Owl field-recording playback validates both the live rare-event identity and the current transient-audio generation immediately before starting.
+- Hero-event interruption gives train/lantern crossings and train audio a short exit fade instead of hard removal; rain loops now reach zero before their sources stop.
+- Water-life scheduling targets frame deadlines and wakes immediately when lightning begins, so resting lotuses can catch brief flashes without running at weather-frame cadence.
+- Service-worker install/activate/cache work is attached to the event lifecycle, navigation cache writes accept only valid HTML responses, and cache-write failures no longer poison successful fetches.
+- The approved realistic moon remains visually unchanged, but its realistic lunar surface is now served from the bundled `/moon-realistic.webp` instead of a runtime NASA request. `/moon-texture.png` remains underneath as the existing local base/fallback.
+- Owl decode completion now also checks a component-disposal flag, closing the remaining unmount race.
+- Firefly/snow interaction checks are counted per fixed material-simulation step, so 30 Hz rendering cannot starve one flake parity group.
+- Runtime cache writes remain owned by `event.waitUntil()` but no longer sit on the successful response path.
 
-## v1.65.1 — night ambience replacement
-
-- Replaced the previous night/cricket bed with ES335-001's CC0 Freesound recording `crickets.wav` (sound 440574).
-- Built a 4:13 seamless circular loop using a 5-second end-to-start crossfade; no synthetic cricket layers were added.
-- Level-matched the replacement asset to the previous raw night-bed loudness (~-21.7 LUFS, -3.0 dBTP), so the v1.65 sleep-mix gains remain unchanged.
-- The replacement is much less rhythmically repetitive than the previous bed; onset autocorrelation around the old ~0.5-second pulse drops from ~0.45 to ~0.06.
-- No runtime audio gains, weather balance, scheduler logic, visuals, or world behavior changed.
-
-## v1.65.0 — consistency pass
-
-This release restores four product contracts that had drifted apart during recent performance/event work:
-
-- **Controls auto-hide reliably:** every interaction now restarts one simple 4.2-second hide timer. A focused button no longer leaves the dock visible until the user taps elsewhere.
-- **Weather audio is normalized as one sleep mix:** Calm insects are brought forward, Snow hush is meaningfully louder, and Rain is pulled back so changing weather no longer requires compensating with device volume. The v1.64.2 AudioContext startup/resume fix remains intact.
-- **Snow sits on standing water/ice:** the permanent snow renderer now uses the same pooled surface as snowflake collision/deposition. Snow over a flooded/frozen basin is drawn as a layer on top of the pool rather than down on the buried terrain.
-- **Refresh resumes established weather:** if Alive is already in Rain or Snow when the page reloads, the scene resumes at full established weather density (with normal browser/frame fade-in only) instead of replaying the long calm→weather arrival envelope. Genuine in-session phase changes still arrive gradually.
-- **Snow + meteor interaction clarified:** an autonomous meteor impact during Snow is now a local hot impact on the snow/ice surface. It melts/steams/burns briefly and Snow can extinguish it naturally. Only the dedicated Ember phase gets the established whole-world water/ice purge behavior.
-
-No event cadence, rare-event probability, lotus/bubble behavior, owl behavior, or Alive timeline duration was changed.
+The approved recordings and core rare-event/weather visuals were not replaced or restyled in this pass.

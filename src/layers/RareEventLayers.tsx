@@ -1,7 +1,7 @@
 import { canvasPixelRatio } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
-import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
+import { getPitchAudio, getPitchAudioTransientGeneration, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { standingWaterSurfaceY, surfaceYAt, worldBaseY } from '../world/worldState'
 import { publishAmbientOwlHoot } from '../world/ambientLifeSignal'
 
@@ -1091,10 +1091,11 @@ function playMeteorBoom(soundOn: boolean) {
   source.start()
 }
 
-function playOwlCall(soundOn: boolean, eventId: number) {
+function playOwlCall(soundOn: boolean, eventId: number, isEventCurrent: () => boolean) {
   if (!soundOn) return
   const ac = getPitchAudio()
   if (!ac) return
+  const transientGeneration = getPitchAudioTransientGeneration()
 
   // Real field recording: choose one of several naturally separated call clusters
   // rather than replaying the exact same hoot every sighting. The visual timing stays
@@ -1111,7 +1112,8 @@ function playOwlCall(soundOn: boolean, eventId: number) {
 
   void loadPitchAudioAsset(ac, 'owl-field.mp3')
     .then((buffer) => {
-      if (ac.state === 'closed') return
+      if (ac.state !== 'running' || !isEventCurrent()) return
+      if (transientGeneration !== getPitchAudioTransientGeneration()) return
       const duration = Math.min(slice.duration, Math.max(0.5, buffer.duration - slice.offset - 0.05))
       if (duration <= 0.2) return
 
@@ -1237,6 +1239,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     let owlTimer: number | null = null
     let ufoHootTimer: number | null = null
     let auroraField: AuroraFieldRuntime | null = null
+    let disposed = false
 
     const resize = () => {
       width = window.innerWidth
@@ -1308,7 +1311,15 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
           }
           owlTimer = window.setTimeout(() => {
             publishAmbientOwlHoot()
-            playOwlCall(soundRef.current, requested.id)
+            playOwlCall(
+              soundRef.current,
+              requested.id,
+              () => {
+                if (disposed) return false
+                const current = eventRef.current
+                return current?.id === requested.id && current.kind === requested.kind
+              },
+            )
             owlTimer = null
           }, 5_350)
         }
@@ -1357,6 +1368,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     raf = requestAnimationFrame(draw)
 
     return () => {
+      disposed = true
       cancelAnimationFrame(raf)
       if (boomTimer !== null) window.clearTimeout(boomTimer)
       if (owlTimer !== null) window.clearTimeout(owlTimer)

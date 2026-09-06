@@ -26,6 +26,8 @@ export type AmbientLifeEvent = {
   endScale?: number
   horn?: boolean
   hornDelay?: number
+  startedAt?: number
+  cancelledAt?: number
 }
 
 export type AliveSkyEvent = {
@@ -397,12 +399,14 @@ function resolveAmbientLifeScheduleToNow(schedule: AmbientLifeSchedule, now: num
 
 function makeAmbientLifeEvent(kind: AmbientLifeEventKind, id: number): AmbientLifeEvent {
   const direction = Math.random() < 0.5 ? 1 : -1
+  const startedAt = Date.now()
 
   if (kind === 'train') {
     return {
       id,
       kind,
       direction,
+      startedAt,
       duration: between(70_000, 120_000),
       startY: between(79.4, 80.8),
       travelY: between(-3.8, -2.2),
@@ -417,6 +421,7 @@ function makeAmbientLifeEvent(kind: AmbientLifeEventKind, id: number): AmbientLi
       id,
       kind,
       direction,
+      startedAt,
       duration: between(122_000, 164_000),
       startScale: between(0.94, 1.05),
       endScale: between(0.96, 1.08),
@@ -428,6 +433,7 @@ function makeAmbientLifeEvent(kind: AmbientLifeEventKind, id: number): AmbientLi
     id,
     kind,
     direction,
+    startedAt,
     duration: between(150_000, 240_000),
     startY: between(8, 22),
     travelY: between(-3.5, 6.5),
@@ -609,6 +615,7 @@ export function useAliveWorld({
     let airplaneTimer = 0
     let trainTimer = 0
     let lanternTimer = 0
+    let ambientExitTimer = 0
     let disposed = false
 
     const currentEventPhase = () => autonomousRef.current
@@ -652,8 +659,16 @@ export function useAliveWorld({
       // compositions own the screen. Supernova is compact enough to happen in
       // the same world without abruptly erasing an Airplane, Train or Lantern.
       if ((kind === 'aurora' || kind === 'great-meteor') && ambientLifeEventsRef.current.length > 0) {
-        ambientLifeEventsRef.current = []
-        setAmbientLifeEvents([])
+        const cancelledAt = Date.now()
+        const exiting = ambientLifeEventsRef.current.map((event) => ({ ...event, cancelledAt }))
+        ambientLifeEventsRef.current = exiting
+        setAmbientLifeEvents(exiting)
+        window.clearTimeout(ambientExitTimer)
+        ambientExitTimer = window.setTimeout(() => {
+          const next = ambientLifeEventsRef.current.filter((event) => event.cancelledAt !== cancelledAt)
+          ambientLifeEventsRef.current = next
+          setAmbientLifeEvents(next)
+        }, 1_600)
       }
       rareEventIdRef.current += 1
       const event = { kind, id: rareEventIdRef.current }
@@ -1073,6 +1088,7 @@ export function useAliveWorld({
       window.clearTimeout(airplaneTimer)
       window.clearTimeout(trainTimer)
       window.clearTimeout(lanternTimer)
+      window.clearTimeout(ambientExitTimer)
       window.removeEventListener('pageshow', syncAfterVisibilityChange)
       document.removeEventListener('visibilitychange', syncAfterVisibilityChange)
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS

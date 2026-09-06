@@ -62,3 +62,9 @@ export function publishLightningIgnition(
   lightningIgnitionSignal.scene = scene
   lightningIgnitionSignal.version += 1
 }
+
+export const LIGHTNING_FLASH_EVENT = 'tqw:lightning-flash'
+
+export function publishLightningFlash() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(LIGHTNING_FLASH_EVENT))
+}

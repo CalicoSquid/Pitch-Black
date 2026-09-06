@@ -27,6 +27,7 @@ export function AliveAmbience({
   phase: AlivePhase
 }) {
   const audioReadyNonce = usePitchAudioReadyNonce()
+  const sourceEnabled = active && soundOn && nightLevel(phase) > 0.001
   const phaseRef = useRef(phase)
   const phaseGainRef = useRef<GainNode | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
@@ -43,7 +44,7 @@ export function AliveAmbience({
   }, [active, phase, soundOn])
 
   useEffect(() => {
-    if (!active || !soundOn) return
+    if (!sourceEnabled) return
 
     const audioCtx = getPitchAudio()
     if (!audioCtx) return
@@ -105,7 +106,7 @@ export function AliveAmbience({
       phaseGain.gain.setTargetAtTime(0, now, 0.42)
       try { source.stop(now + 1.8) } catch { /* already stopped */ }
     }
-  }, [active, soundOn, audioReadyNonce])
+  }, [sourceEnabled, audioReadyNonce])
 
   return null
 }

@@ -142,7 +142,8 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let frame = 0
+    let materialFrame = 0
+    let materialCarry = 0
     let raf = 0
     let idleTimer = 0
     let width = window.innerWidth
@@ -243,7 +244,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       }
     }
 
-    const updateWind = (time: number) => {
+    const updateWind = (time: number, frameScale: number) => {
       if (time > wind.nextChange) {
         if (wind.phase === 'calm') {
           wind.phase = 'building'
@@ -263,14 +264,15 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           wind.nextChange = time + 14000 + Math.random() * 24000
         }
       }
-      wind.value += (wind.target - wind.value) * 0.0035
+      const windBlend = 1 - Math.pow(1 - 0.0035, frameScale)
+      wind.value += (wind.target - wind.value) * windBlend
     }
 
     const effectiveWind = () =>
       wind.value + stormSignal.wind * stormSignal.mix * 1.55
 
     const smoothDrifts = () => {
-      if (frame % 8 !== 0) return
+      if (materialFrame % 8 !== 0) return
       driftSnapshot.set(drifts)
       const copy = driftSnapshot
       for (let i = 2; i < drifts.length - 2; i++) {
@@ -303,7 +305,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     const erodeDrifts = () => {
       const currentWind = effectiveWind()
-      if (Math.abs(currentWind) < 0.30 || frame % 5 !== 0) return
+      if (Math.abs(currentWind) < 0.30 || materialFrame % 5 !== 0) return
 
       const direction = currentWind > 0 ? 1 : -1
       const strength = Math.min(2.65, Math.abs(currentWind))
@@ -359,7 +361,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     const combDriftCrests = () => {
       const currentWind = effectiveWind()
-      if (Math.abs(currentWind) < 0.22 || frame % 24 !== 0 || drifts.length < 7) return
+      if (Math.abs(currentWind) < 0.22 || materialFrame % 24 !== 0 || drifts.length < 7) return
 
       driftSnapshot.set(drifts)
       const copy = driftSnapshot
@@ -393,7 +395,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     }
 
     const reshapeMatureDrifts = () => {
-      if (frame % 12 !== 0) return
+      if (materialFrame % 12 !== 0) return
       const currentWind = effectiveWind()
       const windShift = currentWind * 6.0
 
@@ -415,7 +417,8 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         snowfallTarget = 0.72 + Math.random() * 0.38
         nextSnowfallShift = simTime + 12000 + Math.random() * 22000
       }
-      snowfallIntensity += (snowfallTarget - snowfallIntensity) * 0.0018
+      const intensityBlend = 1 - Math.pow(1 - 0.0018, dt / (1000 / 60))
+      snowfallIntensity += (snowfallTarget - snowfallIntensity) * intensityBlend
 
       if (snowfallMix <= 0.002) return
 
@@ -565,12 +568,13 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let freezeCarry = 0
 
     const draw = (time: number) => {
-      frame += 1
       const elapsed = Math.max(0, Math.min(1000, time - lastFrameTime))
       const dt = Math.min(34, elapsed)
+      const frameScale = dt / (1000 / 60)
       lastFrameTime = time
       const speedNow = speedRef.current
       simTime += dt * speedNow
+      let materialSteps = 0
 
       const nowActive = activeRef.current
       if (nowActive && !wasActive) {
@@ -657,7 +661,19 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       ctx.clearRect(0, 0, width, height)
       ctx.globalAlpha = visualAlpha
       consumeLightningStrike()
-      updateWind(simTime)
+      updateWind(simTime, frameScale)
+      materialCarry += dt
+      const fireflyChecksByParity = [0, 0]
+      while (materialCarry >= 1000 / 60 && materialSteps < 3) {
+        materialCarry -= 1000 / 60
+        materialFrame += 1
+        materialSteps += 1
+        fireflyChecksByParity[materialFrame & 1] += 1
+        reshapeMatureDrifts()
+        erodeDrifts()
+        combDriftCrests()
+        smoothDrifts()
+      }
       const activeWind = effectiveWind()
       const motionScale = Math.min(2.05, Math.max(0.75, 0.82 + Math.sqrt(speedNow) * 0.43))
       const verticalWind = Math.abs(activeWind) * 0.06
@@ -665,9 +681,10 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       for (let i = 0; i < flakes.length; i++) {
         const f = flakes[i]
         const sway = Math.sin(simTime * 0.00028 + f.phase + f.y * 0.009) * f.drift
-        f.x += (f.vx + sway + activeWind * (0.12 + f.depth * 0.48)) * motionScale
-        f.y += (f.vy + verticalWind) * motionScale
-        f.rotation += (f.spin + activeWind * 0.0006) * motionScale
+        const motionStep = motionScale * frameScale
+        f.x += (f.vx + sway + activeWind * (0.12 + f.depth * 0.48)) * motionStep
+        f.y += (f.vy + verticalWind) * motionStep
+        f.rotation += (f.spin + activeWind * 0.0006) * motionStep
 
         if (f.x < -24) f.x = width + 24
         if (f.x > width + 24) f.x = -24
@@ -693,9 +710,11 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         // Fireflies only warm the air immediately around themselves. This
         // touches falling flakes only; accumulated drifts remain entirely in
         // the terrain simulation above/below and are never reduced here.
-        if (fireflySignal.count > 0 && frame % 2 === (i & 1)) {
+        const fireflyChecks = fireflyChecksByParity[i & 1]
+        if (fireflySignal.count > 0 && fireflyChecks > 0) {
           const heatRadius = 9
           const heatRadiusSq = heatRadius * heatRadius
+          const meltChance = 1 - Math.pow(1 - 0.16, fireflyChecks)
           let meltedByFirefly = false
 
           for (let j = 0; j < fireflySignal.count; j++) {
@@ -706,7 +725,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
             if (dy < -heatRadius || dy > heatRadius) continue
 
             const distanceSq = dx * dx + dy * dy
-            if (distanceSq < heatRadiusSq && Math.random() < 0.16) {
+            if (distanceSq < heatRadiusSq && Math.random() < meltChance) {
               meltedByFirefly = true
               break
             }
@@ -728,10 +747,6 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       }
 
       depositWorldSnow(dt, simTime, snowfallMix)
-      reshapeMatureDrifts()
-      erodeDrifts()
-      combDriftCrests()
-      smoothDrifts()
       freezeCarry += dt
       if (freezeCarry >= 48) {
         updateFreeze(Math.min(82, freezeCarry), snowfallMix)
@@ -743,16 +758,16 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       const powderMotionScale = Math.min(1.9, Math.max(0.7, 0.9 + speedNow * 0.13))
       for (let powderRead = 0; powderRead < loosePowder.length; powderRead++) {
         const p = loosePowder[powderRead]
-        p.life -= Math.min(1.8, Math.max(0.8, 0.9 + speedNow * 0.12))
+        p.life -= Math.min(1.8, Math.max(0.8, 0.9 + speedNow * 0.12)) * frameScale
         if (p.life <= 0) continue
 
         const age = 1 - p.life / p.maxLife
         const lift = Math.sin(Math.min(1, age * 1.8) * Math.PI)
         const curl = Math.sin(simTime * 0.0042 + p.phase + p.x * 0.013) * p.swirl
-        p.x += (p.vx + curl + powderWind * 0.028) * powderMotionScale
-        p.y += p.vy - lift * 0.012 + Math.cos(simTime * 0.0034 + p.phase) * 0.008
-        p.vy += 0.0042
-        p.vx *= 0.9985
+        p.x += (p.vx + curl + powderWind * 0.028) * powderMotionScale * frameScale
+        p.y += (p.vy - lift * 0.012 + Math.cos(simTime * 0.0034 + p.phase) * 0.008) * frameScale
+        p.vy += 0.0042 * frameScale
+        p.vx *= Math.pow(0.9985, frameScale)
 
         if (p.x < -6 || p.x > width + 6) continue
         const fadeIn = Math.min(1, age * 5)

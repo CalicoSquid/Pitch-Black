@@ -111,3 +111,10 @@ test('late resume cannot reopen hidden audio, and interrupted contexts can recov
   delete globalThis.document
   delete globalThis.window
 })
+
+test('cancelling transient audio invalidates pending asynchronous one-shots', async () => {
+  const audio = await loadSource('../src/audio/pitchAudio.ts')
+  const before = audio.getPitchAudioTransientGeneration()
+  audio.cancelPitchAudioTransients()
+  assert.equal(audio.getPitchAudioTransientGeneration(), before + 1)
+})

@@ -4,7 +4,7 @@ import type { Scene } from '../types'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
-import { publishLightningGroundStrike, publishLightningIgnition } from '../world/lightningSignal'
+import { publishLightningFlash, publishLightningGroundStrike, publishLightningIgnition } from '../world/lightningSignal'
 import {
   ensureWorld,
   pitchWorld,
@@ -801,6 +801,7 @@ export function StormLayer({
       // Give the horizon a brief exposure without inventing an on-screen bolt.
       flashStarted = time
       flashPower = 0.74 + Math.random() * 0.14
+      publishLightningFlash()
       forcedVisualUntil = time + 520
       if (soundOnRef.current) distantThunder(true)
     }
@@ -862,6 +863,7 @@ export function StormLayer({
 
       flashStarted = time
       flashPower = 0.70 + strength * 0.38
+      publishLightningFlash()
       boltUntil = time + 210
       // Only an occasional strong strike exposes the hidden landscape. The
       // cooldown prevents a burst of lightning from repeating the trick.
