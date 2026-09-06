@@ -1533,7 +1533,8 @@
 
 /* v1.60.2 — conservative UI/UX polish. No control-model changes: this only
    tightens hierarchy, keyboard behavior and touch comfort around the existing UI. */
-.control-dock:focus-within {
+/* Keep keyboard navigation visible without pinning the dock after a click/tap. */
+.control-dock:has(:focus-visible) {
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, -50%);
