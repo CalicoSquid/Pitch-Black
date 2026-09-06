@@ -27,3 +27,11 @@
 - Close/heavy source supplied for the audio-audit session: `195436__littlebrojay__long-thunder-edited.wav`
 - License/source pages: **pending confirmation before production release**
 - Use in TQW: the first recording supplies most natural thunder rolls; the hotter long recording is reserved for occasional strong grounded strikes and is heavily attenuated in the mix. The procedural storm rumble remains as the continuous atmospheric bed.
+
+## Sunrise wake-up — v1.66.2
+
+- Source: zidzid — `Summer Dawn Birds, Phoenix Arizona`, Freesound sound 395322.
+- Source page: https://freesound.org/people/zidzid/sounds/395322/
+- License: Creative Commons 0 (CC0 1.0).
+- Supplied master: `395322__zidzid__summer-dawn-birds-phoenix-arizona.wav`, 44.1 kHz / 16-bit / stereo, recorded at summer dawn in central Phoenix.
+- Use in TQW: a +5 dB, 6-second circular-crossfaded, 32 kHz stereo / 96 kbps MP3 derivative fades in during the latter part of sunrise. The restrained procedural chime remains the distinct wake-time cue. The original WAV is not shipped.

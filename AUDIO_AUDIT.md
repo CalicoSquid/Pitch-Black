@@ -17,3 +17,17 @@ The intent is not identical meter readings; Rain should still feel fuller than C
 ## Startup / resume
 
 The v1.64.2 lifecycle fix is retained: persistent sources are created only when the shared AudioContext is genuinely running, real AudioContext state changes rebuild persistent ambience after interruption, and any normal user gesture can satisfy browser autoplay policy. TQW does not require a Sound off/on cycle.
+
+# v1.66.2 sunrise morning ambience
+
+The supplied zidzid/Freesound dawn field recording is now the natural morning bed for Sunrise Wake-Up. The shipped derivative measures about -29.2 LUFS integrated with a peak around -11.6 dBFS before runtime gain. Runtime morning gain is bounded independently from the chime; at the default wake level (35%) the fully arrived field bed is approximately -39 LUFS before device/system volume, while the maximum slider remains around -31 LUFS before device/system volume.
+
+The original 44.1 kHz stereo WAV is not shipped. The web asset is a ~97 second, 32 kHz stereo MP3 at 96 kbps with a six-second equal-power circular seam and +5 dB source gain. Its decoded Web Audio footprint is approximately 23.7 MiB. That PCM is deliberately not retained overnight: arming primes only the ~1.2 MB compressed payload; decode waits until the latter part of dawn, and the buffer/source are released when the sunrise lifecycle ends.
+
+The natural bed begins after 55% of the dawn ramp and rises smoothly with the visual progression. The chime remains the distinct wake-time cue. Snooze fades both down and allows the birds to return with the snoozed dawn rise; Finish, Cancel, preview exit and component disposal invalidate pending fetch/decode/playback before releasing resources.
+
+## v1.66.3 sunrise audio hardening
+
+Snooze now treats below-arrival progress as an explicit bird-silence state. The running field-recording source fades to the floor and is stopped instead of remaining alive at a stale low gain; the final three-minute snooze re-rise can start the bed again once sunrise progression crosses the normal arrival threshold. A zero wake-volume update uses the same explicit fade/stop path.
+
+Sound Check no longer leaves decoded morning PCM resident when the user immediately arms an alarm. The controller retains the small compressed MP3, stops transient check sources/tones, invalidates pending decode/playback, and clears the decoded `AudioBuffer` before entering armed waiting. The field recording is then decoded again only when late dawn actually needs it. At 32 kHz stereo the nominal PCM payload is about 23.7 MiB; browsers that resample it into a 48 kHz context can account for roughly 35.5 MiB, which is why this Arm boundary matters for overnight residency.

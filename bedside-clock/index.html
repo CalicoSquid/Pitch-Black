@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+  <link rel="canonical" href="https://thisquiet.world/bedside-clock/" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="description" content="Use This Quiet World as a dim bedside clock with fullscreen, fading controls and an optional in-browser sunrise wake-up." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="This Quiet World" />
+  <meta property="og:url" content="https://thisquiet.world/bedside-clock/" />
+  <meta property="og:title" content="A Dim Bedside Clock & Sunrise Wake-Up — This Quiet World" />
+  <meta property="og:description" content="A quiet bedside clock with fullscreen, fading controls and a gradual browser-based sunrise wake-up." />
+  <meta property="og:image" content="https://thisquiet.world/social-preview.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="A Dim Bedside Clock & Sunrise Wake-Up — This Quiet World" />
+  <meta name="twitter:description" content="A quiet bedside clock with fullscreen, fading controls and a gradual browser-based sunrise wake-up." />
+  <meta name="twitter:image" content="https://thisquiet.world/social-preview.png" />
+  <title>A Dim Bedside Clock & Sunrise Wake-Up | This Quiet World</title>
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#000;color:rgba(255,255,255,.72);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7}main{width:min(680px,calc(100% - 40px));margin:0 auto;padding:72px 0 88px}a{color:rgba(255,255,255,.7)}.back{display:inline-block;margin-bottom:48px;color:rgba(255,255,255,.35);font-size:12px;letter-spacing:.08em;text-decoration:none}h1{margin:0 0 10px;font-size:clamp(28px,6vw,44px);font-weight:400;line-height:1.14;letter-spacing:.015em}h2{margin:42px 0 8px;font-size:17px;font-weight:500;color:rgba(255,255,255,.78)}p{margin:0 0 16px;color:rgba(255,255,255,.48)}.lead{font-size:18px;color:rgba(255,255,255,.62)}ul{padding-left:20px;color:rgba(255,255,255,.46)}li{margin:7px 0}.actions{display:flex;flex-wrap:wrap;gap:18px;margin-top:30px}.enter{display:inline-block;padding:10px 0;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.18)}.secondary{color:rgba(255,255,255,.38)}.limit{margin-top:30px;padding-top:18px;border-top:1px solid rgba(255,255,255,.07);font-size:13px;color:rgba(255,255,255,.32)}small{display:block;margin-top:56px;color:rgba(255,255,255,.22)}
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"WebPage",
+    "@id":"https://thisquiet.world/bedside-clock/#webpage",
+    "url":"https://thisquiet.world/bedside-clock/",
+    "name":"A Dim Bedside Clock & Sunrise Wake-Up",
+    "description":"How to use This Quiet World's dim bedside clock, fullscreen display, fading controls and optional browser-based sunrise wake-up.",
+    "isPartOf":{"@id":"https://thisquiet.world/#website"},
+    "about":{"@id":"https://thisquiet.world/#app"},
+    "inLanguage":"en"
+  }
+  </script>
+</head>
+<body>
+  <main>
+    <a class="back" href="/about/">← about this quiet world</a>
+    <h1>A Dim Bedside Clock &amp; Sunrise Wake-Up</h1>
+    <p class="lead">A clock that tries not to become the brightest thing in the room.</p>
+    <p>TQW's clock sits inside the same mostly black world as the weather and moon. The time stays intentionally dim, the date recedes when the interface sleeps, and the controls fade away after you stop interacting.</p>
+
+    <h2>Bedside clock</h2>
+    <p>Turn on <strong>Clock</strong> from the main control strip. Fullscreen removes the ordinary browser framing where your browser allows it, and double-tapping the world also toggles fullscreen. The clock shifts by tiny amounts over long intervals rather than holding one perfectly static OLED footprint.</p>
+
+    <h2>Sunrise wake-up</h2>
+    <p>Under More → Wake, you can choose a local wake-up time, a 10, 20 or 30 minute dawn, final on-page glow and a wake-sound level that is separate from nighttime ambience. The wake-up time is the moment the sunrise reaches the brightness you chose; dawn begins beforehand.</p>
+    <p>If the chosen time is too close for the full dawn duration, TQW shortens the ramp and shows the actual start time before you arm it. A preview runs quickly and does not arm an alarm.</p>
+
+    <h2>At wake-up</h2>
+    <p>The world warms from a very dim horizon toward muted rose and amber. Night sound is gently reduced without rewriting your saved mute or volume settings. An explicitly armed wake sound remains separate, so you can sleep with nighttime ambience muted and still choose an audible wake-up.</p>
+    <p>During the latter part of dawn, a quiet natural bird field recording fades in with the light. At wake time, a restrained soft chime joins it as the clearer cue. Both use the wake-sound level you chose and remain separate from nighttime ambience.</p>
+    <p>When morning arrives, <strong>Snooze 9 min</strong> softens the light and sound before bringing them back. <strong>Finish</strong> fades the temporary dawn away and leaves whatever world settings are current at that moment.</p>
+
+    <h2>What a browser can and cannot do</h2>
+    <ul>
+      <li>TQW can request a screen wake lock where the browser supports it, but support and retention vary.</li>
+      <li>The page cannot set your device's hardware display brightness or system volume.</li>
+      <li>The sunrise can work only while the browser keeps the page alive; a closed, suspended or locked page cannot be promised as a reliable alarm clock.</li>
+    </ul>
+
+    <div class="actions">
+      <a class="enter" href="/?entry=clock">Open the clock</a>
+      <a class="enter secondary" href="/?entry=sunrise">Open sunrise setup</a>
+    </div>
+    <p class="limit">For anything you absolutely must wake for, keep a device-level alarm as the reliable fallback. TQW's sunrise is a bedside browser feature, not a system alarm.</p>
+    <small>thisquiet.world</small>
+  </main>
+</body>
+</html>

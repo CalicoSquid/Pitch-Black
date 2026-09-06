@@ -1533,7 +1533,6 @@
 
 /* v1.60.2 — conservative UI/UX polish. No control-model changes: this only
    tightens hierarchy, keyboard behavior and touch comfort around the existing UI. */
-/* Keep keyboard navigation visible without pinning the dock after a click/tap. */
 .control-dock:has(:focus-visible) {
   opacity: 1;
   pointer-events: auto;
@@ -1624,3 +1623,290 @@
   outline: 1px solid rgba(255,255,255,.13);
   outline-offset: 3px;
 }
+
+/* v1.66 — Sunrise is a temporary light layer above the night world, never a
+   replacement daytime scene. Its opacity follows absolute wall-clock progress;
+   no animation loop runs while the alarm is idle. */
+.sunrise-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+.sunrise-setup,
+.sunrise-armed {
+  display: grid;
+  gap: 12px;
+  padding: 9px 3px 3px;
+}
+
+.sunrise-field {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255,255,255,.28);
+  font-size: 8px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.sunrise-time-field input {
+  justify-self: start;
+  min-width: 122px;
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 10px;
+  background: rgba(255,255,255,.025);
+  color: rgba(255,255,255,.62);
+  color-scheme: dark;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: .06em;
+}
+
+.sunrise-confirmation {
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 12px;
+  background: rgba(255,255,255,.014);
+  font-size: 9px;
+  line-height: 1.55;
+  letter-spacing: .02em;
+  color: rgba(255,255,255,.24);
+}
+
+.sunrise-confirmation strong {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: .045em;
+  color: rgba(255,255,255,.56);
+}
+
+.sunrise-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sunrise-fieldset legend {
+  margin: 0 0 7px;
+  padding: 0;
+  font-size: 8px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.28);
+}
+
+.sunrise-choice-row,
+.sunrise-check-row,
+.sunrise-active-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sunrise-choice-row button,
+.sunrise-check-row button,
+.sunrise-active-actions button,
+.sunrise-arm {
+  appearance: none;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+  color: rgba(255,255,255,.34);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: .045em;
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.sunrise-choice-row button.active,
+.sunrise-arm {
+  color: rgba(255,255,255,.62);
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.12);
+}
+
+.sunrise-choice-row button:hover,
+.sunrise-check-row button:hover,
+.sunrise-active-actions button:hover,
+.sunrise-arm:hover {
+  color: rgba(255,255,255,.64);
+  background: rgba(255,255,255,.035);
+}
+
+.sunrise-check-row button:disabled,
+.sunrise-arm:disabled {
+  cursor: default;
+  opacity: .35;
+}
+
+.sunrise-range-field input[type='range'] {
+  width: 100%;
+  min-width: 0;
+}
+
+.sunrise-range-field output {
+  min-width: 36px;
+  text-align: right;
+  color: rgba(255,255,255,.42);
+  font-variant-numeric: tabular-nums;
+}
+
+.sunrise-preview-status,
+.sunrise-armed-note,
+.sunrise-browser-note,
+.sunrise-limitations {
+  font-size: 9px;
+  line-height: 1.55;
+  letter-spacing: .018em;
+  color: rgba(255,255,255,.22);
+}
+
+.sunrise-preview-status {
+  color: rgba(205, 165, 137, .42);
+}
+
+.sunrise-limitations {
+  padding-top: 2px;
+  border-top: 1px solid rgba(255,255,255,.045);
+}
+
+.sunrise-limitations p {
+  margin: 7px 0 0;
+}
+
+.sunrise-arm {
+  width: 100%;
+}
+
+.sunrise-armed-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  color: rgba(255,255,255,.29);
+  font-size: 9px;
+  letter-spacing: .06em;
+}
+
+.sunrise-armed-head strong {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255,255,255,.58);
+}
+
+.sunrise-readiness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sunrise-readiness span {
+  padding: 5px 7px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 999px;
+  font-size: 8px;
+  letter-spacing: .025em;
+  color: rgba(255,255,255,.22);
+}
+
+.sunrise-readiness .ready { color: rgba(185, 204, 181, .48); border-color: rgba(185, 204, 181, .10); }
+.sunrise-readiness .not-ready { color: rgba(218, 181, 157, .50); border-color: rgba(218, 181, 157, .10); }
+.sunrise-readiness .quiet { color: rgba(255,255,255,.27); }
+
+.sunrise-browser-note {
+  padding-top: 9px;
+  border-top: 1px solid rgba(255,255,255,.045);
+  color: rgba(255,255,255,.18);
+}
+
+@media (max-width: 620px) {
+  .sunrise-field {
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .sunrise-time-field input { min-width: 116px; }
+  .sunrise-choice-row button,
+  .sunrise-check-row button,
+  .sunrise-active-actions button,
+  .sunrise-arm { min-height: 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sunrise-choice-row button,
+  .sunrise-check-row button,
+  .sunrise-active-actions button,
+  .sunrise-arm {
+    transition: none;
+  }
+}
+
+/* Dawn reveals the same ridges and trees used by lightning. */
+.sunrise-layer { opacity: var(--sunrise-level); transition: opacity 1500ms linear; }
+.sunrise-dawn-sky { position: absolute; inset: 0; background:
+  radial-gradient(ellipse 68% 38% at 58% 67%, rgba(235,166,102,.68) 0%, rgba(180,99,76,.34) 32%, rgba(91,60,72,.13) 58%, transparent 78%),
+  linear-gradient(180deg, #080d1b 0%, #151727 23%, #30283a 42%, #664047 57%, #aa7057 68%, #3a2b31 82%, #080a0d 96%, #000 100%); }
+.sunrise-sun { position: absolute; left: 58%; top: var(--sunrise-ridge, 65vh);
+  width: clamp(48px, 7vw, 105px); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 44% 35%, #f8dfb8 0%, #efc18e 58%, #d99b69 100%);
+  box-shadow: 0 0 36px 10px rgba(244,181,109,.13), 0 0 108px 44px rgba(226,137,82,.075);
+  opacity: .94;
+  transform: translate(-50%, calc(8px - var(--sunrise-rise))); transition: transform 1100ms linear; }
+.sunrise-landscape { position: absolute; inset: 0; width: 100%; height: 100%; }
+[data-sunrise] .global-moon, [data-sunrise] .alive-night-sky, [data-sunrise] .storm-layer-canvas {
+  filter: opacity(var(--dawn-night-opacity, 1)); transition: filter 1500ms linear;
+}
+.sunrise-dialog { box-sizing: border-box; width: min(540px, calc(100vw - 28px)); max-height: calc(100dvh - 32px);
+  padding: clamp(20px, 4vw, 32px); border: 1px solid #373132; border-radius: 24px;
+  background: #111216; color: #ddd5cc; box-shadow: 0 24px 100px #0009; overflow-y: auto; }
+.sunrise-dialog::backdrop { background: rgba(0,0,0,.65); }
+.sunrise-dialog-header { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 24px; }
+.sunrise-dialog-header p { font-size: 10px; letter-spacing: .2em; color: #bd9476; margin: 0 0 8px; }
+.sunrise-dialog-header h2 { font-size: clamp(23px, 5vw, 30px); font-weight: 400; margin: 0; }
+.sunrise-dialog button { min-height: 44px; font: inherit; font-size: 14px; color: #dfd5cb;
+  background: #ffffff08; border: 1px solid #ffffff20; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+.sunrise-dialog button:focus-visible, .sunrise-dialog input:focus-visible, .sunrise-wake-actions button:focus-visible {
+  outline: 2px solid #e7b88b; outline-offset: 4px;
+}
+.sunrise-dialog .sunrise-setup, .sunrise-dialog .sunrise-armed { gap: 20px; padding: 0; }
+.sunrise-dialog .sunrise-field { grid-template-columns: 95px minmax(0,1fr) auto; font-size: 12px; color: #bcb4ac; letter-spacing: .03em; }
+.sunrise-dialog .sunrise-time-field input { font-size: 30px; min-height: 60px; min-width: 0; width: 100%; color: #f0ddc9; }
+.sunrise-dialog .sunrise-confirmation { font-size: 13px; color: #b4ada7; padding: 14px; }
+.sunrise-dialog .sunrise-confirmation strong { font-size: 17px; color: #eee0d4; }
+.sunrise-dialog .sunrise-fieldset legend { font-size: 12px; color: #bcb4ac; }
+.sunrise-dialog input[type=range] { height: 32px; accent-color: #dbb28e; }
+.sunrise-dialog .sunrise-range-field output { color: #e0cdbd; }
+.sunrise-dialog .sunrise-arm, .sunrise-dialog .sunrise-choice-row button.active { background: #e0bc94; color: #241b17; }
+.sunrise-dialog .sunrise-limitations, .sunrise-dialog .sunrise-browser-note,
+.sunrise-dialog .sunrise-armed-note, .sunrise-dialog .sunrise-preview-status { font-size: 13px; color: #aba5a0; line-height: 1.6; }
+.sunrise-dialog .sunrise-readiness span { font-size: 12px; padding: 8px; }
+.sunrise-dialog .sunrise-readiness .ready { color: #b7d1b0; }
+.sunrise-dialog .sunrise-readiness .not-ready { color: #e0b69b; }
+.sunrise-dialog .sunrise-armed-head, .sunrise-dialog .sunrise-armed-head strong { font-size: 16px; color: #e0d3c9; }
+.sunrise-wake-actions { position: fixed; z-index: 55; bottom: max(110px, calc(70px + env(safe-area-inset-bottom)));
+  left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 32px)); text-align: center;
+  color: #e4cfba; padding: 16px; border-radius: 22px; background: #0b0d11e8; border: 1px solid #ffffff16; }
+.sunrise-wake-actions p { margin: 0 0 14px; font-size: 17px; letter-spacing: .03em; }
+.sunrise-wake-actions p span { margin-left: 10px; color: #ae9e91; }
+.sunrise-wake-actions button { min-height: 48px; border: 1px solid #ffffff24; border-radius: 12px;
+  padding: 12px 20px; background: transparent; color: #dfcdbb; font: inherit; font-size: 15px; cursor: pointer; margin: 4px; }
+.sunrise-wake-actions .sunrise-snooze-primary { min-height: 60px; min-width: 220px; background: #dfbb94; color: #241d18; font-size: 19px; }
+.sunrise-snoozed-status { background: #080a0dde; }
+@media (prefers-reduced-motion: reduce) { .sunrise-sun { transform: translate(-50%, -35%); transition: none; } }
+
+.sunrise-dialog { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.sunrise-dialog .sunrise-browser-note { margin: 0; padding-top: 0; border: 0; }
+.sunrise-dialog .sunrise-arm { position: sticky; bottom: 0; box-shadow: 0 6px 18px #111216; }

@@ -72,3 +72,13 @@ node tests/browser-soak.mjs
 Physical low-RAM Android/iOS devices, Safari audio interruptions, TV browser raster quality at the new resolution ceiling, real battery consumption, and a full-night wall-clock soak still need hardware validation. The checks above establish concrete reductions and lifecycle regressions covered by automation; they do not prove universal browser compatibility or zero memory growth in every scenario. First-use audio now decodes on demand; rare delayed cues still request their buffers ahead of playback, but slow devices may add first-use decode latency. Offline/service-worker cache behavior was not revalidated in these isolated contexts.
 
 API background: [AudioBuffer storage](https://developer.mozilla.org/en-US/docs/Web/API/AudioBuffer), [decodeAudioData](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/decodeAudioData), and [audio context interruption states](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/state).
+
+## v1.66.2 sunrise audio addendum
+
+The new morning field recording does not change idle overnight PCM residency. An audible armed sunrise primes only its compressed ~1.2 MB MP3. The 32 kHz stereo recording is decoded only once the dawn progression reaches its late-morning audio region; decoded PCM is approximately 23.7 MiB and exists only while morning audio is active or snoozed within that alarm lifecycle. The buffer is reused rather than duplicated, and release/cancel/dispose clears the source, buffer, compressed copy, fetch/decode references and owned timers.
+
+Focused tests cover deferred decode, one-source reuse, delayed decode cancellation, combined birds/chime sound check, and independence from nighttime mute. Physical low-RAM-device and full-night testing remain required; these code-level checks do not establish battery use or browser suspension reliability.
+
+### v1.66.3 Sound Check → Arm memory boundary
+
+The natural morning recording may occupy roughly 23.7 MiB as native 32 kHz stereo PCM, or about 35.5 MiB when represented at a 48 kHz Web Audio context rate. v1.66.3 ensures Sound Check cannot carry that decoded buffer into overnight armed waiting: arming stops transient playback, clears decoded PCM, retains only the ~1.2 MB compressed MP3, and defers the next decode until the late-dawn arrival region.

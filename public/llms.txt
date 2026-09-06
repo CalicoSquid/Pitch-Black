@@ -5,9 +5,11 @@
 ## Canonical pages
 - Home / app: https://thisquiet.world/
 - About and how it works: https://thisquiet.world/about/
+- Rain sounds guide: https://thisquiet.world/rain-sounds/
+- Dim bedside clock and sunrise wake-up guide: https://thisquiet.world/bedside-clock/
 
 ## What it is
-This Quiet World is designed for sleep and quiet bedside use. The screen remains predominantly black while a small nighttime world can show rain, snow, storms, embers, moonlight, fireflies, standing water, ice and occasional rare events. Optional audio includes quiet night ambience and weather sounds. It also includes a dim bedside clock and fullscreen mode.
+This Quiet World is designed for sleep and quiet bedside use. The screen remains predominantly black while a small nighttime world can show rain, snow, storms, embers, moonlight, fireflies, standing water, ice and occasional rare events. Optional audio includes quiet night ambience and weather sounds. It also includes a dim bedside clock, fullscreen mode and an optional in-browser sunrise wake-up that must remain open to be relied on.
 
 ## Alive and manual control
 Alive lets weather and persistent world state change autonomously over time. Manual controls let the user choose broad environmental states directly. Occasional nighttime events belong to the world itself and continue in either case; the pure Black state suppresses them.

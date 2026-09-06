@@ -8,9 +8,11 @@ import { AmbientLifeLayer } from './alive/AmbientLifeLayer'
 import { useAliveWorld } from './alive/useAliveWorld'
 import type { AliveSkyEvent, AmbientLifeEvent } from './alive/useAliveWorld'
 import type { LayerKey, LayerState, Scene } from './types'
+import { applyEntryMode, preferencesForEntryPersistence, readEntryMode, type PitchPreferences } from './entryIntent'
 import {
   fadePitchAudioToSilence,
   restorePitchAudioFade,
+  setPitchAudioDawnMix,
   setPitchAudioMuted,
   setPitchAudioVolume,
   suspendPitchAudio,
@@ -30,15 +32,9 @@ import { SnowScene } from './scenes/SnowScene'
 import { WorldBaseScene } from './scenes/WorldBaseScene'
 import { resetWorld, saveWorld } from './world/worldState'
 import { ClockDisplay } from './ui/ClockDisplay'
-
-type PitchPreferences = {
-  scene: Scene
-  showClock: boolean
-  soundOn: boolean
-  volume: number
-  aliveOn: boolean
-  layers: LayerState
-}
+import { SunriseDialog, SunriseWakeActions } from './sunrise/SunriseDialog'
+import { SunriseLayer } from './sunrise/SunriseLayer'
+import { useSunriseAlarm } from './sunrise/useSunriseAlarm'
 
 type WakeLockSentinelLike = {
   release: () => Promise<void>
@@ -182,12 +178,14 @@ function formatSleepRemaining(milliseconds: number) {
 function App() {
   const testMode = readVisualTestMode()
   const lanternTest = testMode === 'lantern' ? readLanternTestOptions() : { reaction: null, weather: null }
+  const [entryMode] = useState(() => typeof window === 'undefined' ? null : readEntryMode(window.location.search))
   const [initialPreferences] = useState(loadPreferences)
-  const [scene, setScene] = useState<Scene>(initialPreferences.scene)
-  const [showClock, setShowClock] = useState(initialPreferences.showClock)
-  const [soundOn, setSoundOn] = useState(initialPreferences.soundOn)
-  const [volume, setVolume] = useState(initialPreferences.volume)
-  const [aliveOn, setAliveOn] = useState(initialPreferences.aliveOn)
+  const [entryPreferences] = useState(() => applyEntryMode(initialPreferences, entryMode))
+  const [scene, setScene] = useState<Scene>(entryPreferences.scene)
+  const [showClock, setShowClock] = useState(entryPreferences.showClock)
+  const [soundOn, setSoundOn] = useState(entryPreferences.soundOn)
+  const [volume, setVolume] = useState(entryPreferences.volume)
+  const [aliveOn, setAliveOn] = useState(entryPreferences.aliveOn)
   const aliveRuntimeOn = aliveOn && testMode === null
   const [layers, setLayers] = useState<LayerState>(initialPreferences.layers)
   // Events belong to the world, not to Alive mode. Pure Black is the sole
@@ -195,11 +193,14 @@ function App() {
   const manualBlack = !aliveOn && scene === 'black' && !layers.moon && !layers.storm && !layers.fireflies
   const worldEventsActive = testMode === null && !manualBlack
   const [showUtilities, setShowUtilities] = useState(false)
+  const [sunrisePanelOpen, setSunrisePanelOpen] = useState(entryMode === 'sunrise')
   const [fullscreenOn, setFullscreenOn] = useState(false)
   const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null)
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0)
   const [keepAwake, setKeepAwake] = useState(false)
+  const [wakeLockActive, setWakeLockActive] = useState(false)
+  const [alarmWakeLockRequested, setAlarmWakeLockRequested] = useState(false)
   const [wakeLockSupported] = useState(() => typeof navigator !== 'undefined' && 'wakeLock' in navigator)
   const [firstVisit, setFirstVisit] = useState(() => {
     if (testMode) return false
@@ -216,6 +217,9 @@ function App() {
   const [testLanternOwlId, setTestLanternOwlId] = useState<number | null>(null)
   const [testSnowActive, setTestSnowActive] = useState(testMode === 'snow-fade')
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
+  const wakeLockOwnersRef = useRef(new Set<'manual' | 'alarm'>())
+  const entryWorldClaimedRef = useRef(entryMode !== 'rain')
+  const entryClockClaimedRef = useRef(entryMode !== 'clock')
   const shareStatusTimerRef = useRef<number | null>(null)
   const lastWorldTapRef = useRef<{ at: number; x: number; y: number } | null>(null)
   const controlsVisible = useIdleControls(4200)
@@ -250,6 +254,16 @@ function App() {
     const fallback = document.getElementById('tqw-boot-fallback')
     if (fallback) fallback.style.display = 'none'
   }, [])
+
+  useEffect(() => {
+    if (!entryMode) return
+    // Discovery-page entry intents are one-shot session instructions, not share
+    // URLs or new saved defaults. Remove the marker after hydration so a reload
+    // returns to the user's real preferences rather than reapplying the entry.
+    const url = new URL(window.location.href)
+    url.searchParams.delete('entry')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [entryMode])
 
   useEffect(() => {
     if (testMode !== 'snow-fade') return
@@ -371,6 +385,7 @@ function App() {
   }, [])
 
   const chooseScene = (nextScene: Scene) => {
+    entryWorldClaimedRef.current = true
     // Choosing a world is also the explicit "take control" gesture when Alive
     // is running. Manual composition starts clean rather than inheriting hidden
     // overlay choices from before Alive was enabled.
@@ -383,6 +398,8 @@ function App() {
   }
 
   const chooseBlackout = () => {
+    entryWorldClaimedRef.current = true
+    entryClockClaimedRef.current = true
     setAliveOn(false)
     if (soundOn) unlockPitchAudio()
     setScene('black')
@@ -407,6 +424,7 @@ function App() {
   }
 
   const toggleLayer = (layer: LayerKey) => {
+    entryWorldClaimedRef.current = true
     if (layer === 'storm' && soundOn) unlockPitchAudio()
 
     if (aliveOn) {
@@ -495,18 +513,22 @@ function App() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify({
-        scene,
-        showClock,
-        soundOn,
-        volume,
-        aliveOn,
-        layers,
-      } satisfies PitchPreferences))
+      const currentPreferences: PitchPreferences = { scene, showClock, soundOn, volume, aliveOn, layers }
+      // Static discovery entries are ephemeral. Until the user deliberately
+      // touches the related control, keep those fields at their saved values so
+      // opening /rain-sounds/ or /bedside-clock/ cannot silently rewrite a setup.
+      const nextPreferences = preferencesForEntryPersistence(
+        currentPreferences,
+        initialPreferences,
+        entryMode,
+        entryWorldClaimedRef.current,
+        entryClockClaimedRef.current,
+      )
+      window.localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(nextPreferences))
     } catch {
       // Preferences are optional in private/restricted browser contexts.
     }
-  }, [scene, showClock, soundOn, volume, aliveOn, layers])
+  }, [scene, showClock, soundOn, volume, aliveOn, layers, initialPreferences, entryMode])
 
   const cancelSleepTimer = useCallback(() => {
     setSleepTimerEndAt(null)
@@ -577,6 +599,7 @@ function App() {
   const releaseWakeLock = useCallback(async () => {
     const sentinel = wakeLockRef.current
     wakeLockRef.current = null
+    setWakeLockActive(false)
     if (!sentinel) return
     try {
       await sentinel.release()
@@ -586,6 +609,10 @@ function App() {
   }, [])
 
   const acquireWakeLock = useCallback(async () => {
+    if (wakeLockRef.current) {
+      setWakeLockActive(true)
+      return true
+    }
     if (!wakeLockSupported || document.visibilityState !== 'visible') return false
     const wakeLock = (navigator as WakeLockNavigator).wakeLock
     if (!wakeLock) return false
@@ -593,8 +620,12 @@ function App() {
     try {
       const sentinel = await wakeLock.request('screen')
       wakeLockRef.current = sentinel
+      setWakeLockActive(true)
       sentinel.addEventListener('release', () => {
-        if (wakeLockRef.current === sentinel) wakeLockRef.current = null
+        if (wakeLockRef.current === sentinel) {
+          wakeLockRef.current = null
+          setWakeLockActive(false)
+        }
       })
       return true
     } catch {
@@ -605,30 +636,67 @@ function App() {
   const toggleKeepAwake = async () => {
     if (keepAwake) {
       setKeepAwake(false)
-      await releaseWakeLock()
+      wakeLockOwnersRef.current.delete('manual')
+      if (wakeLockOwnersRef.current.size === 0) await releaseWakeLock()
       return
     }
 
+    wakeLockOwnersRef.current.add('manual')
     const acquired = await acquireWakeLock()
-    if (acquired) setKeepAwake(true)
+    if (acquired) {
+      setKeepAwake(true)
+    } else {
+      wakeLockOwnersRef.current.delete('manual')
+    }
   }
 
-  useEffect(() => {
-    if (!keepAwake) return
+  const requestAlarmWakeLock = useCallback(async () => {
+    setAlarmWakeLockRequested(true)
+    wakeLockOwnersRef.current.add('alarm')
+    return acquireWakeLock()
+  }, [acquireWakeLock])
 
+  const releaseAlarmWakeLock = useCallback(async () => {
+    setAlarmWakeLockRequested(false)
+    wakeLockOwnersRef.current.delete('alarm')
+    if (wakeLockOwnersRef.current.size === 0) await releaseWakeLock()
+  }, [releaseWakeLock])
+
+  useEffect(() => {
     const reacquireWhenVisible = () => {
-      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
+      if (document.visibilityState === 'visible' && wakeLockOwnersRef.current.size > 0 && !wakeLockRef.current) {
         void acquireWakeLock()
       }
     }
 
     document.addEventListener('visibilitychange', reacquireWhenVisible)
     return () => document.removeEventListener('visibilitychange', reacquireWhenVisible)
-  }, [acquireWakeLock, keepAwake])
+  }, [acquireWakeLock])
 
   useEffect(() => () => {
+    wakeLockOwnersRef.current.clear()
     void releaseWakeLock()
   }, [releaseWakeLock])
+
+  const sunrise = useSunriseAlarm({
+    initialSetupOpen: entryMode === 'sunrise',
+    wakeLockSupported,
+    alarmWakeLockReady: alarmWakeLockRequested && wakeLockActive,
+    requestAlarmWakeLock,
+    releaseAlarmWakeLock,
+    setNightAudioMix: setPitchAudioDawnMix,
+  })
+
+  useEffect(() => {
+    sunrise.setSetupOpen(sunrisePanelOpen)
+  }, [sunrisePanelOpen, sunrise.setSetupOpen])
+
+  useEffect(() => {
+    if (sunrise.runtime.lifecycle === 'holding') {
+      setShowUtilities(false)
+      setSunrisePanelOpen(false)
+    }
+  }, [sunrise.runtime.lifecycle])
 
   const showTransientShareStatus = (status: 'copied' | 'shared') => {
     setShareStatus(status)
@@ -667,6 +735,7 @@ function App() {
   }
 
   const toggleAlive = () => {
+    entryWorldClaimedRef.current = true
     if (soundOn) unlockPitchAudio()
 
     if (aliveOn) {
@@ -727,7 +796,7 @@ function App() {
 
   const isWorldSurfaceTarget = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return true
-    return !target.closest('button, input, label, .control-dock, .utility-panel')
+    return !target.closest('button, input, label, .control-dock, .utility-panel, dialog, .sunrise-wake-actions')
   }
 
   const handleWorldPointerDown = (event: React.PointerEvent<HTMLElement>) => {
@@ -830,7 +899,7 @@ function App() {
     : null
   const sleepTimerActive = sleepTimerEndAt !== null
   const blackoutActive = !aliveRuntimeOn && displayScene === 'black' && !showClock && !displayLayers.moon && !displayLayers.storm && !displayLayers.fireflies
-  const interfaceAwake = controlsVisible || showUtilities || firstVisit
+  const interfaceAwake = controlsVisible || showUtilities || sunrisePanelOpen || firstVisit
 
   return (
     <main
@@ -841,6 +910,8 @@ function App() {
       data-layer-fireflies={displayLayers.fireflies ? 'on' : 'off'}
       data-alive={aliveRuntimeOn ? 'on' : 'off'}
       data-alive-phase={alivePhase}
+      style={{ '--dawn-night-opacity': Math.max(0, 1 - sunrise.visualFraction * 2.5) } as import('react').CSSProperties}
+      data-sunrise={sunrise.previewActive ? 'preview' : sunrise.runtime.lifecycle}
       onPointerDown={handleWorldPointerDown}
       onDoubleClick={handleWorldDoubleClick}
       onPointerUp={handleWorldPointerUp}
@@ -961,10 +1032,17 @@ function App() {
           soundOn={soundOn}
           phase={testMode === 'train' || testMode === 'owl' || testMode === 'night' ? 'calm' : testMode === 'rain' || testMode === 'heavy-rain' ? 'rain' : alivePhase}
         />
+        <SunriseLayer
+          level={sunrise.visualLevel}
+          progress={sunrise.visualFraction}
+          lifecycle={sunrise.previewActive ? 'preview' : sunrise.runtime.lifecycle}
+        />
       </div>
 
 
       {showClock && <ClockDisplay awake={controlsVisible} />}
+      <SunriseDialog open={sunrisePanelOpen} onClose={() => setSunrisePanelOpen(false)} sunrise={sunrise} sleepTimerActive={sleepTimerActive} />
+      <SunriseWakeActions sunrise={sunrise} onManage={() => setSunrisePanelOpen(true)} />
 
       <div className={`first-visit-whisper ${firstVisit ? 'visible' : ''}`} aria-hidden={!firstVisit}>
         <h1 className="first-visit-title">This Quiet World</h1>
@@ -1027,6 +1105,11 @@ function App() {
             />
             <output>{Math.round(volume * 100)}%</output>
           </label>
+        </div>
+
+        <div className="utility-section">
+          <div className="utility-section-title">Wake</div>
+          <button type="button" className="utility-toggle-row" onClick={() => { setShowUtilities(false); setSunrisePanelOpen(true) }}>Sunrise wake-up <span>Set up / manage</span></button>
         </div>
 
         {wakeLockSupported && (
@@ -1123,7 +1206,10 @@ function App() {
           <span>Fireflies</span>
         </button>
         <div className="dock-divider" aria-hidden="true" />
-        <button type="button" className={showClock ? 'active' : ''} onClick={() => setShowClock((value) => !value)} aria-label="Toggle clock" aria-pressed={showClock}>
+        <button type="button" className={showClock ? 'active' : ''} onClick={() => {
+          entryClockClaimedRef.current = true
+          setShowClock((value) => !value)
+        }} aria-label="Toggle clock" aria-pressed={showClock}>
           <Clock3 size={17} strokeWidth={1.5} />
           <span>Clock</span>
         </button>

@@ -30,3 +30,23 @@
   from = "/about/index.html"
   to = "/about/"
   status = 301
+
+[[redirects]]
+  from = "/rain-sounds"
+  to = "/rain-sounds/"
+  status = 301
+
+[[redirects]]
+  from = "/rain-sounds/index.html"
+  to = "/rain-sounds/"
+  status = 301
+
+[[redirects]]
+  from = "/bedside-clock"
+  to = "/bedside-clock/"
+  status = 301
+
+[[redirects]]
+  from = "/bedside-clock/index.html"
+  to = "/bedside-clock/"
+  status = 301

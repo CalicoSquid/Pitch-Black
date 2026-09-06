@@ -2,11 +2,13 @@ type PitchAudioContext = AudioContext
 
 let pitchAudioContext: PitchAudioContext | null = null
 let pitchAudioOutputGain: GainNode | null = null
+let pitchAudioDawnGain: GainNode | null = null
 let pitchAudioFadeGain: GainNode | null = null
 let pitchAudioMuteGain: GainNode | null = null
 let pitchAudioTransientGain: GainNode | null = null
 let pitchAudioMuted = false
 let pitchAudioVolume = 1
+let pitchAudioDawnMix = 1
 let pitchAudioNeedsReadySignal = true
 let readyTimer = 0
 let audioGeneration = 0
@@ -37,16 +39,19 @@ function signalPitchAudioReady(audioCtx: AudioContext) {
 }
 
 function ensurePitchAudioMaster(audioCtx: AudioContext) {
-  if (!pitchAudioOutputGain || !pitchAudioFadeGain || !pitchAudioMuteGain) {
+  if (!pitchAudioOutputGain || !pitchAudioDawnGain || !pitchAudioFadeGain || !pitchAudioMuteGain) {
     pitchAudioOutputGain = audioCtx.createGain()
+    pitchAudioDawnGain = audioCtx.createGain()
     pitchAudioFadeGain = audioCtx.createGain()
     pitchAudioMuteGain = audioCtx.createGain()
 
     pitchAudioOutputGain.gain.value = pitchAudioVolume
+    pitchAudioDawnGain.gain.value = pitchAudioDawnMix
     pitchAudioFadeGain.gain.value = 1
     pitchAudioMuteGain.gain.value = pitchAudioMuted ? 0 : 1
 
-    pitchAudioOutputGain.connect(pitchAudioFadeGain)
+    pitchAudioOutputGain.connect(pitchAudioDawnGain)
+    pitchAudioDawnGain.connect(pitchAudioFadeGain)
     pitchAudioFadeGain.connect(pitchAudioMuteGain)
     pitchAudioMuteGain.connect(audioCtx.destination)
   }
@@ -129,6 +134,7 @@ export function unlockPitchAudio() {
       pitchAudioContext = new AudioCtx()
       observePitchAudioState(pitchAudioContext)
       pitchAudioOutputGain = null
+      pitchAudioDawnGain = null
       pitchAudioFadeGain = null
       pitchAudioMuteGain = null
       pitchAudioTransientGain = null
@@ -217,6 +223,19 @@ export function setPitchAudioVolume(volume: number) {
 
   outputGain.gain.cancelScheduledValues(audioCtx.currentTime)
   outputGain.gain.setTargetAtTime(pitchAudioVolume, audioCtx.currentTime, 0.045)
+}
+
+/**
+ * Temporary, non-persistent mix control used by the sunrise overlay. It never
+ * changes the user's saved nighttime volume/mute preference and composes with
+ * the existing sleep-timer fade instead of replacing it.
+ */
+export function setPitchAudioDawnMix(level: number) {
+  pitchAudioDawnMix = Math.min(1, Math.max(0, level))
+  const audioCtx = pitchAudioContext
+  const dawnGain = pitchAudioDawnGain
+  if (!audioCtx || !dawnGain) return
+  setContinuousAudioTarget(dawnGain.gain, pitchAudioDawnMix, audioCtx.currentTime, 0.9)
 }
 
 export function fadePitchAudioToSilence(durationSeconds: number) {

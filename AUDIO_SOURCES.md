@@ -16,3 +16,10 @@ The supplied ZIP renamed these masters generically, so their original source/lic
 - `owl.wav` -> `public/audio/owl-field.mp3`
 
 Record the original source page and license for each before treating the audio bank as legally production-cleared. Do not infer a license from the WAV file itself.
+
+## Sunrise wake-up — v1.66.2
+
+- Natural dawn birds: zidzid — `Summer Dawn Birds, Phoenix Arizona`, Freesound sound 395322. Creative Commons 0 (CC0 1.0). Source: https://freesound.org/people/zidzid/sounds/395322/
+- Supplied master: `395322__zidzid__summer-dawn-birds-phoenix-arizona.wav` (44.1 kHz, 16-bit, stereo, 1:43). Recorded at summer dawn in a central Phoenix courtyard with natural birds and faint distant city/air-conditioning ambience.
+- Shipped derivative: `public/audio/summer-dawn-birds-phoenix-arizona.mp3`. The source is raised 5 dB, given a 6-second equal-power circular crossfade for a quiet repeat, resampled to 32 kHz stereo and encoded at 96 kbps. No synthetic bird calls are added.
+- Runtime use: the compressed file is primed when an audible sunrise is armed, but decoded PCM is deferred until the latter part of dawn. It fades in with sunrise progress and is released when the alarm lifecycle ends. The procedural chime remains the clearer wake-time cue.
