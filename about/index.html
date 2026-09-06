@@ -19,7 +19,7 @@
   <meta name="twitter:image" content="https://thisquiet.world/social-preview.png" />
   <title>About This Quiet World | Black Screen for Sleep & Ambient Sounds</title>
   <style>
-    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#000;color:rgba(255,255,255,.72);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7}main{width:min(680px,calc(100% - 40px));margin:0 auto;padding:72px 0 88px}a{color:rgba(255,255,255,.7)}.back{display:inline-block;margin-bottom:48px;color:rgba(255,255,255,.35);font-size:12px;letter-spacing:.08em;text-decoration:none}h1{margin:0 0 8px;font-size:clamp(28px,6vw,44px);font-weight:400;letter-spacing:.02em}h2{margin:42px 0 8px;font-size:17px;font-weight:500;color:rgba(255,255,255,.78)}p{margin:0 0 16px;color:rgba(255,255,255,.48)}.lead{font-size:18px;color:rgba(255,255,255,.62)}ul{padding-left:20px;color:rgba(255,255,255,.46)}li{margin:6px 0}.enter{display:inline-block;margin-top:28px;padding:10px 0;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.18)}small{display:block;margin-top:56px;color:rgba(255,255,255,.22)}
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#000;color:rgba(255,255,255,.72);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7}main{width:min(680px,calc(100% - 40px));margin:0 auto;padding:72px 0 88px}a{color:rgba(255,255,255,.7)}.back{display:inline-block;margin-bottom:48px;color:rgba(255,255,255,.35);font-size:12px;letter-spacing:.08em;text-decoration:none}h1{margin:0 0 8px;font-size:clamp(28px,6vw,44px);font-weight:400;letter-spacing:.02em}h2{margin:42px 0 8px;font-size:17px;font-weight:500;color:rgba(255,255,255,.78)}p{margin:0 0 16px;color:rgba(255,255,255,.48)}.lead{font-size:18px;color:rgba(255,255,255,.62)}ul{padding-left:20px;color:rgba(255,255,255,.46)}li{margin:6px 0}.actions{display:flex;flex-wrap:wrap;align-items:center;gap:22px;margin-top:28px}.enter,.share{display:inline-block;padding:10px 0;border:0;border-bottom:1px solid rgba(255,255,255,.18);background:transparent;color:rgba(255,255,255,.7);font:inherit;text-decoration:none;cursor:pointer}.share{color:rgba(255,255,255,.42)}.share:focus-visible,.enter:focus-visible{outline:1px solid rgba(255,255,255,.3);outline-offset:4px}small{display:block;margin-top:56px;color:rgba(255,255,255,.22)}
   </style>
   <script type="application/ld+json">
   {
@@ -66,8 +66,29 @@
     <p><a href="/rain-sounds/">Rain sounds with a dark screen</a> explains manual Rain, optional storms, Alive and the sound controls.</p>
     <p><a href="/bedside-clock/">Dim bedside clock &amp; sunrise wake-up</a> covers the clock, fullscreen display and the browser-based sunrise alarm.</p>
 
-    <a class="enter" href="/">Enter This Quiet World</a>
+    <div class="actions">
+      <a class="enter" href="/">Enter This Quiet World</a>
+      <button class="share" type="button" id="share-tqw">Share This Quiet World</button>
+    </div>
     <small>thisquiet.world</small>
+    <script>
+      (() => {
+        const button = document.getElementById('share-tqw');
+        if (!button) return;
+        button.addEventListener('click', async () => {
+          const data = { title: 'This Quiet World', text: 'A living black screen for sleep.', url: 'https://thisquiet.world/' };
+          try {
+            if (navigator.share) { await navigator.share(data); return; }
+            await navigator.clipboard.writeText(data.url);
+            button.textContent = 'Link copied';
+            setTimeout(() => { button.textContent = 'Share This Quiet World'; }, 1800);
+          } catch (error) {
+            if (error && error.name === 'AbortError') return;
+            window.prompt('Copy this link', data.url);
+          }
+        });
+      })();
+    </script>
   </main>
 </body>
 </html>

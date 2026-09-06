@@ -30,8 +30,9 @@ import { EmberScene } from './scenes/EmberScene'
 import { RainScene } from './scenes/RainScene'
 import { SnowScene } from './scenes/SnowScene'
 import { WorldBaseScene } from './scenes/WorldBaseScene'
-import { resetWorld, saveWorld } from './world/worldState'
+import { saveWorld } from './world/worldState'
 import { ClockDisplay } from './ui/ClockDisplay'
+import { SleepTimerDialog } from './ui/SleepTimerDialog'
 import { SunriseDialog, SunriseWakeActions } from './sunrise/SunriseDialog'
 import { SunriseLayer } from './sunrise/SunriseLayer'
 import { useSunriseAlarm } from './sunrise/useSunriseAlarm'
@@ -47,17 +48,11 @@ type WakeLockNavigator = Navigator & {
   }
 }
 
-type BeforeInstallPromptEventLike = Event & {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
-}
-
 type VisualTestMode = 'fog' | 'storm' | 'moon-veil' | 'owl' | 'owl-army' | 'owl-ufo' | 'aurora' | 'supernova' | 'train' | 'lantern' | 'night' | 'rain' | 'heavy-rain' | 'snow-fade' | 'meteor' | 'meteor-shower' | 'lotus' | 'bubbles'
 
 const PREFERENCES_STORAGE_KEY = 'pitchblack-preferences-v2'
 const FIRST_VISIT_STORAGE_KEY = 'this-quiet-world-welcomed-v2'
 const SLEEP_FADE_MS = 60_000
-const SLEEP_TIMER_OPTIONS = [30, 60, 120, 240] as const
 
 const DEFAULT_PREFERENCES: PitchPreferences = {
   scene: 'black',
@@ -106,19 +101,6 @@ function readSharedWorld(): Partial<PitchPreferences> | null {
           fireflies: params.get('fireflies') === '1',
         },
   }
-}
-
-function buildSharedWorldUrl(scene: Scene, layers: LayerState, showClock: boolean, aliveOn: boolean) {
-  const url = new URL(window.location.href)
-  url.search = ''
-  url.hash = ''
-  url.searchParams.set('world', scene === 'calm' ? 'black' : scene)
-  if (aliveOn) url.searchParams.set('alive', '1')
-  if (!aliveOn && layers.moon) url.searchParams.set('moon', '1')
-  if (!aliveOn && layers.storm) url.searchParams.set('storm', '1')
-  if (!aliveOn && layers.fireflies) url.searchParams.set('fireflies', '1')
-  if (showClock) url.searchParams.set('clock', '1')
-  return url.toString()
 }
 
 function loadPreferences(): PitchPreferences {
@@ -175,6 +157,18 @@ function formatSleepRemaining(milliseconds: number) {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
 }
 
+function formatUtilityWakeTime(timestamp: number, now = Date.now()) {
+  const wake = new Date(timestamp)
+  const today = new Date(now)
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(wake)
+  if (wake.toDateString() === today.toDateString()) return `Today, ${time}`
+  if (wake.toDateString() === tomorrow.toDateString()) return `Tomorrow, ${time}`
+  const date = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(wake)
+  return `${date}, ${time}`
+}
+
 function App() {
   const testMode = readVisualTestMode()
   const lanternTest = testMode === 'lantern' ? readLanternTestOptions() : { reaction: null, weather: null }
@@ -194,6 +188,7 @@ function App() {
   const worldEventsActive = testMode === null && !manualBlack
   const [showUtilities, setShowUtilities] = useState(false)
   const [sunrisePanelOpen, setSunrisePanelOpen] = useState(entryMode === 'sunrise')
+  const [sleepTimerPanelOpen, setSleepTimerPanelOpen] = useState(false)
   const [fullscreenOn, setFullscreenOn] = useState(false)
   const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null)
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
@@ -211,8 +206,6 @@ function App() {
       return true
     }
   })
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEventLike | null>(null)
-  const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared'>('idle')
   const [testEventId, setTestEventId] = useState(51_100)
   const [testLanternOwlId, setTestLanternOwlId] = useState<number | null>(null)
   const [testSnowActive, setTestSnowActive] = useState(testMode === 'snow-fade')
@@ -220,7 +213,6 @@ function App() {
   const wakeLockOwnersRef = useRef(new Set<'manual' | 'alarm'>())
   const entryWorldClaimedRef = useRef(entryMode !== 'rain')
   const entryClockClaimedRef = useRef(entryMode !== 'clock')
-  const shareStatusTimerRef = useRef<number | null>(null)
   const lastWorldTapRef = useRef<{ at: number; x: number; y: number } | null>(null)
   const controlsVisible = useIdleControls(4200)
   const {
@@ -338,25 +330,6 @@ function App() {
       window.removeEventListener('keydown', dismiss)
     }
   }, [dismissFirstVisit, firstVisit])
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault()
-      setInstallPrompt(event as BeforeInstallPromptEventLike)
-    }
-    const handleInstalled = () => setInstallPrompt(null)
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-    window.addEventListener('appinstalled', handleInstalled)
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-      window.removeEventListener('appinstalled', handleInstalled)
-    }
-  }, [])
-
-  useEffect(() => () => {
-    if (shareStatusTimerRef.current !== null) window.clearTimeout(shareStatusTimerRef.current)
-  }, [])
 
   useEffect(() => {
     if (!showUtilities) return
@@ -698,41 +671,6 @@ function App() {
     }
   }, [sunrise.runtime.lifecycle])
 
-  const showTransientShareStatus = (status: 'copied' | 'shared') => {
-    setShareStatus(status)
-    if (shareStatusTimerRef.current !== null) window.clearTimeout(shareStatusTimerRef.current)
-    shareStatusTimerRef.current = window.setTimeout(() => setShareStatus('idle'), 1800)
-  }
-
-  const shareWorld = async () => {
-    const url = buildSharedWorldUrl(scene, layers, showClock, aliveOn)
-    const shareData = { title: 'This Quiet World', text: 'A living black screen for sleep.', url }
-
-    try {
-      if (typeof navigator.share === 'function') {
-        await navigator.share(shareData)
-        showTransientShareStatus('shared')
-      } else {
-        await navigator.clipboard.writeText(url)
-        showTransientShareStatus('copied')
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-      try {
-        await navigator.clipboard.writeText(url)
-        showTransientShareStatus('copied')
-      } catch {
-        window.prompt('Copy this world', url)
-      }
-    }
-  }
-
-  const installApp = async () => {
-    if (!installPrompt) return
-    await installPrompt.prompt()
-    const choice = await installPrompt.userChoice
-    if (choice.outcome === 'accepted') setInstallPrompt(null)
-  }
 
   const toggleAlive = () => {
     entryWorldClaimedRef.current = true
@@ -1042,6 +980,16 @@ function App() {
 
       {showClock && <ClockDisplay awake={controlsVisible} />}
       <SunriseDialog open={sunrisePanelOpen} onClose={() => setSunrisePanelOpen(false)} sunrise={sunrise} sleepTimerActive={sleepTimerActive} />
+      <SleepTimerDialog
+        open={sleepTimerPanelOpen}
+        onClose={() => setSleepTimerPanelOpen(false)}
+        active={sleepTimerActive}
+        endAt={sleepTimerEndAt}
+        selectedMinutes={sleepTimerMinutes}
+        remainingMs={sleepTimerRemaining}
+        onSet={setSleepTimer}
+        onCancel={cancelSleepTimer}
+      />
       <SunriseWakeActions sunrise={sunrise} onManage={() => setSunrisePanelOpen(true)} />
 
       <div className={`first-visit-whisper ${firstVisit ? 'visible' : ''}`} aria-hidden={!firstVisit}>
@@ -1066,109 +1014,93 @@ function App() {
       >
         <div className="utility-section">
           <div className="utility-section-title">Sleep</div>
-          <div className="utility-row utility-timer-row">
-            <span className="utility-label">Fade out</span>
-            <div className="sleep-timer-options">
-              <button type="button" className={!sleepTimerActive ? 'active' : ''} onClick={cancelSleepTimer}>Off</button>
-              {SLEEP_TIMER_OPTIONS.map((minutes) => (
-                <button
-                  type="button"
-                  key={minutes}
-                  className={sleepTimerMinutes === minutes ? 'active' : ''}
-                  onClick={() => setSleepTimer(minutes)}
-                >
-                  {minutes < 60 ? `${minutes}m` : `${minutes / 60}h`}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {sleepTimerActive && (
-            <div className="sleep-timer-status" aria-live="polite">
-              sound fades during the final minute · {formatSleepRemaining(sleepTimerRemaining)} left
-            </div>
-          )}
-
-          <label className="utility-row volume-row">
-            <span className="utility-label">Volume</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={Math.round(volume * 100)}
-              onChange={(event) => {
-                if (soundOn) unlockPitchAudio()
-                setVolume(Number(event.target.value) / 100)
-              }}
-              aria-label="Master volume"
-            />
-            <output>{Math.round(volume * 100)}%</output>
-          </label>
+          <button
+            type="button"
+            className="utility-menu-row"
+            onClick={() => { setShowUtilities(false); setSleepTimerPanelOpen(true) }}
+          >
+            <span className="utility-menu-copy">
+              <strong>Sleep timer</strong>
+              <small>Fade nighttime sound away</small>
+            </span>
+            <span className={`utility-menu-state ${sleepTimerActive ? 'active' : ''}`}>
+              {sleepTimerActive ? `${formatSleepRemaining(sleepTimerRemaining)} left` : 'Off'}
+            </span>
+          </button>
         </div>
 
         <div className="utility-section">
           <div className="utility-section-title">Wake</div>
-          <button type="button" className="utility-toggle-row" onClick={() => { setShowUtilities(false); setSunrisePanelOpen(true) }}>Sunrise wake-up <span>Set up / manage</span></button>
-        </div>
-
-        {wakeLockSupported && (
-          <div className="utility-section">
-            <div className="utility-section-title">Display</div>
-            <button
-              type="button"
-              className={`utility-toggle-row ${keepAwake ? 'active' : ''}`}
-              onClick={() => void toggleKeepAwake()}
-              aria-pressed={keepAwake}
-            >
-              <span>Keep screen on</span>
-              <span className="quiet-switch" aria-hidden="true"><i /></span>
-            </button>
-          </div>
-        )}
-
-        <div className="utility-section utility-actions">
-          <div className="utility-section-title">World</div>
-          <button type="button" onClick={() => void shareWorld()}>
-            {shareStatus === 'copied' ? 'Link copied' : shareStatus === 'shared' ? 'Shared' : 'Share this world'}
-          </button>
           <button
             type="button"
-            onClick={() => {
-              resetWorld()
-              setShowUtilities(false)
-            }}
+            className="utility-menu-row"
+            onClick={() => { setShowUtilities(false); setSunrisePanelOpen(true) }}
           >
-            Reset world
+            <span className="utility-menu-copy">
+              <strong>Sunrise alarm</strong>
+              <small>Wake with dawn and morning birds</small>
+            </span>
+            <span className={`utility-menu-state ${sunrise.active ? 'active' : ''}`}>
+              {sunrise.active && (sunrise.runtime.snoozeWakeAt ?? sunrise.runtime.plan?.wakeAt)
+                ? formatUtilityWakeTime(sunrise.runtime.snoozeWakeAt ?? sunrise.runtime.plan!.wakeAt)
+                : 'Off'}
+            </span>
           </button>
         </div>
 
-        {installPrompt && (
-          <div className="utility-section utility-actions">
-            <div className="utility-section-title">App</div>
-            <button type="button" onClick={() => void installApp()}>
-              Install this quiet world
-            </button>
-          </div>
-        )}
+        <div className="utility-section">
+          <div className="utility-section-title">Utilities</div>
+          <label className="utility-volume-control">
+            <span className="utility-menu-copy">
+              <strong>Volume</strong>
+              <small>Nighttime ambience</small>
+            </span>
+            <span className="utility-volume-slider">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={Math.round(volume * 100)}
+                onChange={(event) => {
+                  if (soundOn) unlockPitchAudio()
+                  setVolume(Number(event.target.value) / 100)
+                }}
+                aria-label="Nighttime ambience volume"
+              />
+              <output>{Math.round(volume * 100)}%</output>
+            </span>
+          </label>
 
-        <div className="utility-section utility-about">
-          <div className="utility-section-title">About</div>
-          <h2>This Quiet World</h2>
-          <p className="utility-about-tagline">A living black screen for sleep.</p>
-          <p>
-            A free, ad-free ambient sleep website with rain, snow, storms, embers, moonlight,
-            fireflies, gentle night sounds, a dim bedside clock and fullscreen mode.
-          </p>
-          <p>
-            Choose a scene yourself, or let <strong>Alive</strong> carry the weather, water and
-            ice forward on its own. The quiet nighttime events belong to the world either way.
-            No account, feed or distractions.
-          </p>
-          <a className="utility-about-link" href="/about/">About &amp; how it works</a>
+          <button
+            type="button"
+            className={`utility-menu-row ${keepAwake ? 'active' : ''}`}
+            onClick={() => void toggleKeepAwake()}
+            aria-pressed={wakeLockSupported ? keepAwake : undefined}
+            disabled={!wakeLockSupported}
+          >
+            <span className="utility-menu-copy">
+              <strong>Keep screen on</strong>
+              <small>{!wakeLockSupported
+                ? 'Not available in this browser'
+                : wakeLockActive
+                  ? 'Screen wake lock is active'
+                  : 'Ask the browser to stay awake'}</small>
+            </span>
+            {wakeLockSupported
+              ? <span className="quiet-switch" aria-hidden="true"><i /></span>
+              : <span className="utility-menu-state">Unavailable</span>}
+          </button>
+
+          <a className="utility-menu-row utility-menu-link" href="/about/">
+            <span className="utility-menu-copy">
+              <strong>About</strong>
+              <small>How This Quiet World works</small>
+            </span>
+            <span className="utility-menu-state" aria-hidden="true">›</span>
+          </a>
         </div>
       </section>
-
       <nav className={`control-dock ${interfaceAwake ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
         <button type="button" className={`alive-control ${aliveOn ? 'active alive-active' : ''}`} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
           <Orbit size={17} strokeWidth={1.5} />
