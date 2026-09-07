@@ -19,6 +19,7 @@ import {
 
 const SUNRISE_SETUP_STORAGE_KEY = 'this-quiet-world-sunrise-setup-v1'
 const PREVIEW_DURATION_MS = 24_000
+const PREVIEW_HOLD_MS = 5_000
 const PREVIEW_EXIT_FADE_MS = 2_000
 
 type PreviewExit = {
@@ -186,12 +187,11 @@ export function useSunriseAlarm({
     const planId = runtime.plan.id
     const wakeStillHolding = () => {
       const latest = runtimeRef.current
-      return latest.lifecycle === 'holding' && latest.plan?.id === planId
+      return runtimeMorningAmbienceFraction(latest, Date.now()) > 0 && latest.plan?.id === planId
     }
     if (runtime.lifecycle === 'holding') {
       if (runtime.plan.wakeVolume > 0.001) {
-        // Morning ambience is already arriving during dawn when possible. Holding
-        // also starts it at full level after a suspended/late tab resume.
+        // Wake audio starts at the confirmed alarm time, never during visual dawn.
         void audio.updateMorningAmbience(1, runtime.plan.wakeVolume, wakeStillHolding, 2.5)
         void audio.startWake(runtime.plan.wakeVolume, wakeStillHolding)
       } else audio.soften(1.2)
@@ -219,7 +219,7 @@ export function useSunriseAlarm({
             const planId = latest.plan.id
             const stillHolding = () => {
               const currentRuntime = runtimeRef.current
-              return currentRuntime.lifecycle === 'holding' && currentRuntime.plan?.id === planId
+              return runtimeMorningAmbienceFraction(currentRuntime, Date.now()) > 0 && currentRuntime.plan?.id === planId
             }
             void audio.updateMorningAmbience(1, latest.plan.wakeVolume, stillHolding, 1.5)
             void audio.startWake(latest.plan.wakeVolume, stillHolding)
@@ -258,57 +258,33 @@ export function useSunriseAlarm({
   const visualLevel = Math.min(1, visualFraction * finalIntensity)
 
   useEffect(() => {
-    if (visualFraction <= 0.0005) {
+    if ((!previewActive && runtime.lifecycle !== 'holding' && runtime.lifecycle !== 'finishing') || visualFraction <= 0.0005) {
       setNightAudioMix(1)
       return
     }
     setNightAudioMix(Math.max(0.18, 1 - visualFraction * 0.82))
-  }, [setNightAudioMix, visualFraction])
+  }, [setNightAudioMix, visualFraction, previewActive, runtime.lifecycle])
 
-  // Let the natural morning bed arrive only in the latter part of dawn. The
-  // controller keeps the compressed asset small while armed and defers decoded
-  // PCM until this effect actually reaches the audible portion of sunrise.
+  // Preview demonstrates the same sequence: silent dawn, then wake audio.
   useEffect(() => {
-    if (previewStartedAt !== null) {
-      const previewId = previewStartedAt
-      // A zero wake-volume slider is an explicit silence command for a source
-      // that may already be running from earlier in the preview.
-      void getAudio().updateMorningAmbience(
-        previewFraction,
-        settings.wakeVolume,
-        () => previewStartedRef.current === previewId && previewExitRef.current === null,
-        0.45,
-      )
-      return
-    }
-
-    if ((runtime.lifecycle !== 'dawn' && runtime.lifecycle !== 'snoozed') || !runtime.plan) return
-    const planId = runtime.plan.id
-
-    // Snooze owns a quiet middle section. Birds remain fully stopped until the
-    // final re-rise rather than following the initial visual soften-down and
-    // accidentally cancelling their scheduled stop.
-    const snoozeBirdProgress = runtimeMorningAmbienceFraction(runtime, now)
-
+    if (previewStartedAt === null) return
+    const previewId = previewStartedAt
     void getAudio().updateMorningAmbience(
-      snoozeBirdProgress,
-      runtime.plan.wakeVolume,
-      () => {
-        const latest = runtimeRef.current
-        return (latest.lifecycle === 'dawn' || latest.lifecycle === 'snoozed' || latest.lifecycle === 'holding') && latest.plan?.id === planId
-      },
-      6,
+      now - previewStartedAt >= PREVIEW_DURATION_MS ? 1 : 0,
+      settings.wakeVolume,
+      () => previewStartedRef.current === previewId && previewExitRef.current === null,
+      0.45,
     )
-  }, [getAudio, now, previewFraction, previewStartedAt, runtime.lifecycle, runtime.plan, runtime.snoozeWakeAt, runtimeFraction, settings.wakeVolume])
+  }, [getAudio, now, previewStartedAt, settings.wakeVolume])
 
   useEffect(() => {
     if (previewStartedAt === null) return
     const elapsed = now - previewStartedAt
-    if (!previewChimed && elapsed >= PREVIEW_DURATION_MS * 0.78 && settings.wakeVolume > 0.001) {
+    if (!previewChimed && elapsed >= PREVIEW_DURATION_MS && settings.wakeVolume > 0.001) {
       setPreviewChimed(true)
       void getAudio().previewChime(settings.wakeVolume)
     }
-    if (elapsed < PREVIEW_DURATION_MS) return
+    if (elapsed < PREVIEW_DURATION_MS + PREVIEW_HOLD_MS) return
 
     // Hold the overlay while it explicitly fades out. Unmounting it here would
     // bypass the CSS transition and make preview completion visibly snap to night.

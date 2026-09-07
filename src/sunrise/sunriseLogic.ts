@@ -42,6 +42,7 @@ export type SunrisePlan = {
 export type SunriseRuntime = {
   lifecycle: SunriseLifecycle
   plan: SunrisePlan | null
+  snoozeFromLevel: number
   snoozedAt: number | null
   snoozeWakeAt: number | null
   snoozeHoldUntil: number | null
@@ -61,6 +62,7 @@ export const DEFAULT_SUNRISE_SETTINGS: SunriseSettings = {
 export const IDLE_SUNRISE_RUNTIME: SunriseRuntime = {
   lifecycle: 'idle',
   plan: null,
+  snoozeFromLevel: 0,
   snoozedAt: null,
   snoozeWakeAt: null,
   snoozeHoldUntil: null,
@@ -213,9 +215,9 @@ export function snoozeFraction(runtime: SunriseRuntime, nowMs: number) {
   // nighttime darkness, then begin a fresh three-minute dawn into the snoozed
   // wake time. Keeping the floor at zero also restores the user's normal night
   // audio mix while the wake-specific bird/chime graph stays softened.
-  if (nowMs <= snoozedAt) return 1
+  if (nowMs <= snoozedAt) return runtime.snoozeFromLevel
   if (nowMs < snoozedAt + SUNRISE_SNOOZE_SOFTEN_MS) {
-    return 1 - smoothstep((nowMs - snoozedAt) / SUNRISE_SNOOZE_SOFTEN_MS)
+    return runtime.snoozeFromLevel * (1 - smoothstep((nowMs - snoozedAt) / SUNRISE_SNOOZE_SOFTEN_MS))
   }
 
   const rampStart = Math.max(snoozedAt + SUNRISE_SNOOZE_SOFTEN_MS, snoozeWakeAt - SUNRISE_SNOOZE_RAMP_MS)
@@ -241,16 +243,12 @@ export function runtimeVisualFraction(runtime: SunriseRuntime, nowMs: number) {
   return 0
 }
 
-/**
- * Audio-specific dawn fraction. Snooze deliberately keeps natural morning
- * ambience at zero through its quiet middle, then lets it follow the final
- * three-minute visual re-rise back toward wake time.
- */
+/** Wake audio is eligible only during the current alarm's actual hold window. */
 export function runtimeMorningAmbienceFraction(runtime: SunriseRuntime, nowMs: number) {
-  if (runtime.lifecycle !== 'snoozed') return runtimeVisualFraction(runtime, nowMs)
-  if (runtime.snoozeWakeAt === null) return 0
-  if (nowMs < runtime.snoozeWakeAt - SUNRISE_SNOOZE_RAMP_MS) return 0
-  return runtimeVisualFraction(runtime, nowMs)
+  if (runtime.lifecycle !== 'holding' || !runtime.plan) return 0
+  const wakeAt = runtime.snoozeWakeAt ?? runtime.plan.wakeAt
+  const holdUntil = runtime.snoozeHoldUntil ?? runtime.plan.holdUntil
+  return nowMs >= wakeAt && nowMs < holdUntil ? 1 : 0
 }
 
 export function makeArmedRuntime(plan: SunrisePlan): SunriseRuntime {
@@ -267,6 +265,7 @@ export function makeSnoozedRuntime(runtime: SunriseRuntime, nowMs: number): Sunr
   return {
     ...runtime,
     lifecycle: 'snoozed',
+    snoozeFromLevel: runtimeVisualFraction(runtime, nowMs),
     snoozedAt: nowMs,
     snoozeWakeAt,
     snoozeHoldUntil: snoozeWakeAt + SUNRISE_HOLD_MS,

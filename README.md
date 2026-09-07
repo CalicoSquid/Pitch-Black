@@ -1,3 +1,7 @@
+## Alarm-time audio
+
+Dawn changes the visuals only. Nighttime audio stays at its configured level until the selected wake time, when birds/chime and Snooze/Finish begin. Snooze keeps wake sound off until the next alarm time. Preview follows the same order.
+
 ## Sunrise interface and landscape
 
 - Sunrise setup opens in a dedicated, readable dialog from More, with keyboard focus containment and Escape to close.

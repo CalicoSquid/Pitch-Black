@@ -135,29 +135,33 @@ test('hook lifecycle keeps the snoozed hold deadline after returning to holding'
 })
 
 
-test('snooze morning ambience stays off until the final re-rise, then reaches full arrival', () => {
-  const now = localTs(2026, 9, 7, 6, 40)
-  const plan = sunrise.createSunrisePlan(settings('07:00', 20), now, 7)
-  assert.ok(plan)
+test('wake audio waits for the exact alarm time, including after snooze', () => {
+  const plan = sunrise.createSunrisePlan(settings('06:00'), localTs(2026, 9, 7, 5, 30))
+  const dawn = { ...sunrise.makeArmedRuntime(plan), lifecycle: 'dawn' }
+  assert.equal(sunrise.runtimeMorningAmbienceFraction(dawn, plan.wakeAt - 1), 0)
+  const holding = sunrise.advanceSunriseRuntime(dawn, plan.wakeAt, plan.wakeAt - 1, true)
+  assert.equal(sunrise.runtimeMorningAmbienceFraction(holding, plan.wakeAt), 1)
+  assert.equal(sunrise.runtimeMorningAmbienceFraction(holding, plan.wakeAt - 1), 0)
+  assert.equal(sunrise.runtimeMorningAmbienceFraction(holding, plan.holdUntil), 0)
+  const snoozed = sunrise.makeSnoozedRuntime(holding, plan.wakeAt)
+  assert.equal(sunrise.runtimeMorningAmbienceFraction(snoozed, snoozed.snoozeWakeAt - 1), 0)
+  const next = sunrise.advanceSunriseRuntime(snoozed, snoozed.snoozeWakeAt, snoozed.snoozeWakeAt - 1, true)
+  assert.equal(sunrise.runtimeMorningAmbienceFraction(next, snoozed.snoozeWakeAt), 1)
+})
 
-  const holding = { ...sunrise.makeArmedRuntime(plan), lifecycle: 'holding' }
-  const snoozedAt = localTs(2026, 9, 7, 7, 0)
-  const snoozed = sunrise.makeSnoozedRuntime(holding, snoozedAt)
-  assert.ok(snoozed.snoozeWakeAt)
-
-  assert.equal(
-    sunrise.runtimeMorningAmbienceFraction(snoozed, snoozedAt + 30_000),
-    0,
-    'birds stay fully off through the quiet middle of snooze',
-  )
-
-  const finalRampAt = snoozed.snoozeWakeAt - sunrise.SUNRISE_SNOOZE_RAMP_MS + 90_000
-  assert.ok(
-    sunrise.runtimeMorningAmbienceFraction(snoozed, finalRampAt) > 0,
-    'final snooze ramp is allowed to bring the morning bed back',
-  )
-  assert.equal(
-    sunrise.runtimeMorningAmbienceFraction(snoozed, snoozed.snoozeWakeAt),
-    1,
-  )
+test('early dawn snooze fades from the current light and schedules nine minutes from the tap', () => {
+  const plan = sunrise.createSunrisePlan(settings('06:00'), localTs(2026, 9, 7, 5, 30))
+  const now = localTs(2026, 9, 7, 5, 52)
+  const dawn = { ...sunrise.makeArmedRuntime(plan), lifecycle: 'dawn' }
+  const before = sunrise.runtimeVisualFraction(dawn, now)
+  assert.ok(before > 0 && before < 1)
+  const snoozed = sunrise.makeSnoozedRuntime(dawn, now)
+  assert.equal(sunrise.runtimeVisualFraction(snoozed, now), before)
+  assert.ok(sunrise.runtimeVisualFraction(snoozed, now + 1000) < before)
+  assert.equal(sunrise.runtimeMorningAmbienceFraction(snoozed, now), 0)
+  assert.equal(snoozed.snoozeWakeAt, now + sunrise.SUNRISE_SNOOZE_MS)
+  assert.equal(sunrise.runtimeVisualFraction(snoozed, now + sunrise.SUNRISE_SNOOZE_SOFTEN_MS), 0)
+  const finished = sunrise.makeFinishingRuntime(dawn, now, 'finished', sunrise.SUNRISE_FINISH_FADE_MS)
+  assert.equal(sunrise.runtimeVisualFraction(finished, now), before)
+  assert.equal(sunrise.advanceSunriseRuntime(finished, finished.finishEndsAt, now, true).lifecycle, 'finished')
 })

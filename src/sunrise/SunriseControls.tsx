@@ -30,6 +30,7 @@ export function SunriseControls({ sunrise, sleepTimerActive }: { sunrise: Sunris
   const activeWakeAt = sunrise.runtime.lifecycle === 'snoozed' && sunrise.runtime.snoozeWakeAt !== null
     ? sunrise.runtime.snoozeWakeAt
     : plan?.wakeAt ?? null
+  const waking = sunrise.runtime.lifecycle === 'holding'
   const holding = sunrise.runtime.lifecycle === 'holding'
   const snoozed = sunrise.runtime.lifecycle === 'snoozed'
   const finishing = sunrise.runtime.lifecycle === 'finishing'
@@ -52,7 +53,7 @@ export function SunriseControls({ sunrise, sleepTimerActive }: { sunrise: Sunris
           {previewPlan && (
             <div className="sunrise-confirmation" aria-live="polite">
               <strong>{formatWakeConfirmation(previewPlan.wakeAt, sunrise.now)}</strong>
-              <span>Chosen time is when dawn reaches its selected brightness.</span>
+              <span>Dawn is visual-only. Wake sound begins at this time.</span>
               <span>
                 Dawn begins at {formatTime(previewPlan.startAt)}
                 {previewPlan.shortened
@@ -167,8 +168,8 @@ export function SunriseControls({ sunrise, sleepTimerActive }: { sunrise: Sunris
           {finishing && <div className="sunrise-armed-note">Sunrise and wake sound are fading away. Your current world settings stay as they are.</div>}
 
           <div className="sunrise-active-actions">
-            {holding && <button type="button" onClick={sunrise.snooze}>Snooze {Math.round(SUNRISE_SNOOZE_MS / 60_000)} min</button>}
-            {holding && <button type="button" onClick={sunrise.finish}>Finish</button>}
+            {waking && <button type="button" onClick={sunrise.snooze}>Snooze {Math.round(SUNRISE_SNOOZE_MS / 60_000)} min</button>}
+            {waking && <button type="button" onClick={sunrise.finish}>Finish</button>}
             {!holding && !finishing && <button type="button" onClick={sunrise.edit}>Edit</button>}
             {!finishing && <button type="button" onClick={sunrise.cancel}>Cancel</button>}
           </div>
