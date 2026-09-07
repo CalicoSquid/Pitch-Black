@@ -29,21 +29,13 @@ export function SunriseDialog({ open, onClose, sunrise, sleepTimerActive }: {
 }
 
 export function SunriseWakeActions({ sunrise, onManage }: { sunrise: Controller; onManage: () => void }) {
-  const phase = sunrise.runtime.lifecycle
-  const time = sunrise.runtime.snoozeWakeAt ?? sunrise.runtime.plan?.wakeAt
-  const label = time ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(time) : ''
-  if (sunrise.previewActive) return <div className="sunrise-wake-actions" role="region" aria-label="Sunrise preview">
+  // The live alarm no longer opens a second floating card: App swaps the bedside
+  // control dock for Snooze / Finish instead. Keep this lightweight surface only
+  // for the accelerated preview, where an explicit way back is still useful.
+  if (!sunrise.previewActive) return null
+  return <div className="sunrise-wake-actions" role="region" aria-label="Sunrise preview">
     <p>{sunrise.previewExiting ? 'Returning to night' : 'A glimpse of morning'}</p>
     {!sunrise.previewExiting && <button type="button" onClick={sunrise.stopPreview}>End preview</button>}
     <button type="button" onClick={onManage}>Sunrise settings</button>
   </div>
-  if (phase === 'holding') return <div className="sunrise-wake-actions" role="region" aria-label="Wake-up controls">
-    <p>Good morning <span>{label}</span></p>
-    <div><button type="button" className="sunrise-snooze-primary" onClick={sunrise.snooze}>Snooze &middot; 9 min</button>
-    <button type="button" onClick={sunrise.finish}>Finish</button></div>
-  </div>
-  if (phase === 'snoozed') return <div className="sunrise-wake-actions sunrise-snoozed-status" role="status">
-    <p>Waking again at {label}</p><button type="button" onClick={sunrise.finish}>Finish</button>
-  </div>
-  return null
 }

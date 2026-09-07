@@ -189,6 +189,7 @@ function App() {
   const [showUtilities, setShowUtilities] = useState(false)
   const [sunrisePanelOpen, setSunrisePanelOpen] = useState(entryMode === 'sunrise')
   const [sleepTimerPanelOpen, setSleepTimerPanelOpen] = useState(false)
+  const [snoozeConfirmationVisible, setSnoozeConfirmationVisible] = useState(false)
   const [fullscreenOn, setFullscreenOn] = useState(false)
   const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null)
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null)
@@ -671,6 +672,21 @@ function App() {
     }
   }, [sunrise.runtime.lifecycle])
 
+  const previousSunriseLifecycleRef = useRef(sunrise.runtime.lifecycle)
+  useEffect(() => {
+    const previous = previousSunriseLifecycleRef.current
+    const current = sunrise.runtime.lifecycle
+    previousSunriseLifecycleRef.current = current
+
+    if (current === 'snoozed' && previous !== 'snoozed') {
+      setSnoozeConfirmationVisible(true)
+      const timeout = window.setTimeout(() => setSnoozeConfirmationVisible(false), 1800)
+      return () => window.clearTimeout(timeout)
+    }
+
+    if (current !== 'snoozed') setSnoozeConfirmationVisible(false)
+  }, [sunrise.runtime.lifecycle])
+
 
   const toggleAlive = () => {
     entryWorldClaimedRef.current = true
@@ -1101,7 +1117,39 @@ function App() {
           </a>
         </div>
       </section>
-      <nav className={`control-dock ${interfaceAwake ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
+      {(sunrise.runtime.lifecycle === 'holding' || snoozeConfirmationVisible) && (
+        <nav
+          className={`control-dock sunrise-alarm-dock visible ${snoozeConfirmationVisible && sunrise.runtime.lifecycle !== 'holding' ? 'confirming-snooze' : ''}`}
+          aria-label={sunrise.runtime.lifecycle === 'holding' ? 'Wake-up controls' : 'Snooze confirmation'}
+          role={snoozeConfirmationVisible && sunrise.runtime.lifecycle !== 'holding' ? 'status' : undefined}
+        >
+          {sunrise.runtime.lifecycle === 'holding' ? (
+            <>
+              <div className="sunrise-alarm-message" aria-live="polite">
+                <span>Good morning</span>
+                {(sunrise.runtime.snoozeWakeAt ?? sunrise.runtime.plan?.wakeAt) && (
+                  <strong>{new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(sunrise.runtime.snoozeWakeAt ?? sunrise.runtime.plan!.wakeAt)}</strong>
+                )}
+              </div>
+              <div className="dock-divider sunrise-alarm-divider" aria-hidden="true" />
+              <button type="button" className="sunrise-dock-snooze" onClick={sunrise.snooze}>
+                <span>Snooze · 9 min</span>
+              </button>
+              <button type="button" className="sunrise-dock-finish" onClick={sunrise.finish}>
+                <span>Finish</span>
+              </button>
+            </>
+          ) : (
+            <div className="sunrise-snooze-confirmation">
+              <span>Waking again at</span>
+              {sunrise.runtime.snoozeWakeAt && (
+                <strong>{new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(sunrise.runtime.snoozeWakeAt)}</strong>
+              )}
+            </div>
+          )}
+        </nav>
+      )}
+      <nav className={`control-dock ${interfaceAwake && sunrise.runtime.lifecycle !== 'holding' && !snoozeConfirmationVisible ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
         <button type="button" className={`alive-control ${aliveOn ? 'active alive-active' : ''}`} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
           <Orbit size={17} strokeWidth={1.5} />
           <span>Alive</span>

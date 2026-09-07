@@ -1903,8 +1903,6 @@
 .sunrise-wake-actions p span { margin-left: 10px; color: #ae9e91; }
 .sunrise-wake-actions button { min-height: 48px; border: 1px solid #ffffff24; border-radius: 12px;
   padding: 12px 20px; background: transparent; color: #dfcdbb; font: inherit; font-size: 15px; cursor: pointer; margin: 4px; }
-.sunrise-wake-actions .sunrise-snooze-primary { min-height: 60px; min-width: 220px; background: #dfbb94; color: #241d18; font-size: 19px; }
-.sunrise-snoozed-status { background: #080a0dde; }
 @media (prefers-reduced-motion: reduce) { .sunrise-sun { transform: translate(-50%, -35%); transition: none; } }
 
 .sunrise-dialog { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -2127,3 +2125,110 @@ a.utility-menu-row:focus-visible,
   opacity: .52;
 }
 .utility-menu-row:disabled:hover { background: transparent; }
+
+/* v1.66.6 — when the sunrise reaches wake time, the existing bedside dock
+   becomes the alarm. Snooze briefly confirms in the same physical surface,
+   then gives the untouched night UI back instead of leaving a modal behind. */
+.sunrise-alarm-dock {
+  z-index: 56;
+  overflow: hidden;
+  min-width: min(520px, calc(100vw - 20px));
+  justify-content: center;
+  gap: 6px;
+  padding: 7px;
+  background: rgba(7,7,7,.86);
+  border-color: rgba(255,255,255,.09);
+}
+.sunrise-alarm-message {
+  min-width: 148px;
+  padding: 0 14px 0 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  color: rgba(238,218,198,.72);
+}
+.sunrise-alarm-message span,
+.sunrise-snooze-confirmation span {
+  font-size: 12px;
+  letter-spacing: .035em;
+}
+.sunrise-alarm-message strong,
+.sunrise-snooze-confirmation strong {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,.48);
+}
+.sunrise-alarm-divider { margin: 0 1px; }
+.control-dock.sunrise-alarm-dock button {
+  height: 48px;
+  min-width: 112px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.control-dock.sunrise-alarm-dock button span {
+  font-size: 11px;
+  letter-spacing: .035em;
+  text-transform: none;
+  opacity: 1;
+}
+.control-dock.sunrise-alarm-dock .sunrise-dock-snooze {
+  min-width: 172px;
+  background: #dfbb94;
+  color: #241d18;
+}
+.control-dock.sunrise-alarm-dock .sunrise-dock-snooze:hover,
+.control-dock.sunrise-alarm-dock .sunrise-dock-snooze:focus-visible {
+  background: #e8c7a4;
+  color: #1f1915;
+}
+.control-dock.sunrise-alarm-dock .sunrise-dock-finish {
+  border: 1px solid rgba(255,255,255,.08);
+  color: rgba(239,220,202,.6);
+}
+.sunrise-alarm-dock.confirming-snooze {
+  min-width: min(330px, calc(100vw - 20px));
+  width: auto;
+  min-height: 61px;
+}
+.sunrise-snooze-confirmation {
+  padding: 0 20px;
+  min-height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  color: rgba(238,218,198,.68);
+}
+
+@media (max-width: 560px) {
+  .sunrise-alarm-dock {
+    min-width: calc(100vw - 18px);
+    gap: 4px;
+  }
+  .sunrise-alarm-message {
+    min-width: 0;
+    padding: 0 8px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+  .sunrise-alarm-message span { font-size: 10px; }
+  .sunrise-alarm-message strong { font-size: 11px; }
+  .sunrise-alarm-divider { display: none; }
+  .control-dock.sunrise-alarm-dock button {
+    min-width: 82px;
+    padding: 0 14px;
+  }
+  .control-dock.sunrise-alarm-dock .sunrise-dock-snooze { min-width: 136px; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .sunrise-alarm-dock { min-height: 0; }
+  .control-dock.sunrise-alarm-dock button { height: 44px; }
+  .sunrise-alarm-dock.confirming-snooze { min-height: 57px; }
+}
