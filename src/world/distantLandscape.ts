@@ -240,7 +240,7 @@ export function drawDistantDepth(ctx: CanvasRenderingContext2D, width: number, h
   for (let c = 0; c < clumpCount; c++) {
     const start = width * (0.06 + seededFrac(801.3 + c * 21.2) * 0.78)
     const span = width * (0.08 + seededFrac(877.4 + c * 17.9) * (shortLandscape ? 0.12 : 0.16))
-    const clumpLayer: 'near' = 'near'
+    const clumpLayer = 'near' as const
     const count = 2 + Math.floor(seededFrac(992.4 + c * 9.6) * (clumpLayer === 'near' ? 4 : 3))
 
     for (let i = 0; i < count; i++) {
@@ -262,7 +262,7 @@ export function drawDistantDepth(ctx: CanvasRenderingContext2D, width: number, h
   const solitaryCount = shortLandscape ? 2 : 3
   for (let i = 0; i < solitaryCount; i++) {
     const x = width * (0.10 + seededFrac(1612.4 + i * 41.7) * 0.80)
-    const layer: 'near' = 'near'
+    const layer = 'near' as const
     const ridgeY = distantRidgeY(x, width, height, layer)
     const treeHeight = (shortLandscape ? 15 : 21) * (0.86 + seededFrac(1755.7 + i * 15.3) * 0.28)
     const treeWidth = treeHeight * (0.18 + seededFrac(1833.9 + i * 12.2) * 0.08)

@@ -123,7 +123,7 @@ export function SunriseControls({ sunrise, sleepTimerActive }: { sunrise: Sunris
             </div>
           )}
 
-          <p className="sunrise-browser-note">Keep TQW open and your device volume audible. This browser wake-up cannot run reliably when the page is closed or the device is locked.</p>
+          <p className="sunrise-browser-note">Keep TQW open and your device volume audible. Refreshing or closing this page cancels the alarm. It cannot run reliably while your device is locked.</p>
           {sleepTimerActive && <p className="sunrise-browser-note">Your sleep timer fades night sound only. Sunrise will still wake you.</p>}
 
           <button type="button" className="sunrise-arm" onClick={() => void sunrise.arm()} disabled={sunrise.arming || sunrise.previewActive}>
@@ -173,7 +173,7 @@ export function SunriseControls({ sunrise, sleepTimerActive }: { sunrise: Sunris
             {!finishing && <button type="button" onClick={sunrise.cancel}>Cancel</button>}
           </div>
 
-          <div className="sunrise-browser-note">Keep this page open. Background, locked-screen and closed-page alarms cannot be guaranteed by a browser.</div>
+          <div className="sunrise-browser-note">Keep this page open. Refreshing or closing it cancels the alarm. Background and locked-screen alarms cannot be guaranteed by a browser.</div>
         </div>
       )}
     </div>

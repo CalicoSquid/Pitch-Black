@@ -1,7 +1,29 @@
+## Development and release checks
+
+Use Node 22.16 or newer and install the locked dependencies with `npm ci`.
+
+- `npm run dev`: local development.
+- `npm run check`: lint (including warnings), all Node regression tests, and the production build.
+- `npm run test:browser:install`: install Chromium once.
+- `npm run test:browser`: mobile/desktop controls, dialog interaction, and sunrise lifecycle checks; starts its own local server.
+- `npm run test:performance`: the focused resource-budget regressions.
+
+On Windows, use `npm.cmd` if PowerShell blocks npm.ps1. To use an installed Edge browser, set `PLAYWRIGHT_CHANNEL=msedge` for the browser tests.
+
+The longer browser performance and soak scripts use the same pinned Playwright dependency. Start the app on port 4173, then run `node tests/browser-performance.mjs` or `node tests/browser-soak.mjs`. Reports go into ignored `.perf-tools/`; the tooling itself no longer lives there. Firefox/WebKit checks require installing those engines with Playwright. The lotus visual script uses the development server on port 5173.
+
+## v1.66.8 — bedside controls and release checks
+
+- Clock, nighttime sound and More remain visible while scene/fullscreen controls scroll separately, with a visible scrollbar and a trailing fade on small screens.
+- Opening settings immediately hides first-visit copy. Alarm setup explicitly explains that refresh/close cancels the alarm, and nighttime mute labels distinguish it from sunrise audio.
+- Scheduler refs update after commit; preview completion and exit use cancellable timers. Lint remains enabled, with three documented local exceptions for synchronizing external world/audio resources.
+- Adds locked browser tooling, a standard test/check entry point, browser regressions and CI. Includes the existing local CSS/dead-code cleanup.
+- The production deployment was observed at v1.66.4 during the September 20 review. This release is prepared locally; deployment is a separate action.
+
 ## Sunrise interface and landscape
 
 - Sunrise setup opens in a dedicated, readable dialog from More, with keyboard focus containment and Escape to close.
-- Wake-up shows large Snooze and Finish controls directly over the world. Snooze keeps its next wake time visible.
+- At wake time, the bedside control dock temporarily becomes the Snooze / Finish surface instead of opening a second floating card. Snooze briefly confirms the next wake time in that same dock, then returns to the normal night controls.
 - Preview closes setup so the dawn can be seen unobstructed, with direct preview exit and settings controls.
 - Dawn reuses the deterministic ridges and trees revealed by lightning. A warm sun rises behind the landscape while the foreground remains dark; moon, night sky and storm visuals recede without resetting their state.
 - The landscape canvas redraws only on entry/resize and releases its backing store after the exit fade. Reduced motion keeps the sun stationary.

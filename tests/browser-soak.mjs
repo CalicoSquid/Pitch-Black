@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { writeFile } from 'node:fs/promises'
-import { chromium } from '../.perf-tools/node_modules/playwright/index.mjs'
-const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE, args: ['--autoplay-policy=no-user-gesture-required'] })
+import { mkdir, writeFile } from 'node:fs/promises'
+import { chromium } from 'playwright'
+await mkdir('.perf-tools', { recursive: true })
+const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE, channel: process.env.PLAYWRIGHT_CHANNEL, args: ['--autoplay-policy=no-user-gesture-required'] })
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, serviceWorkers: 'block' })
 await context.addInitScript(() => {
   window.__live = 0
@@ -33,7 +34,7 @@ const click = async (name) => {
 try {
   await page.goto('http://127.0.0.1:4173/')
   await click('Black: clear the visible world to pure black')
-  await click('Enable all sound')
+  await click('Enable nighttime sound')
   for (let cycle = 0; cycle < 12; cycle++) {
     await click('Rain scene')
     await page.waitForTimeout(700)
@@ -43,10 +44,10 @@ try {
     await page.waitForTimeout(300)
     await click('Toggle storm layer')
     await click('Black: clear the visible world to pure black')
-    await click('Mute all sound')
+    await click('Mute nighttime sound')
     await page.waitForTimeout(4000)
     assert.equal(await page.evaluate(() => window.__live), 0, `sources leaked after cycle ${cycle}`)
-    await click('Enable all sound')
+    await click('Enable nighttime sound')
     if (cycle % 3 === 2) {
       await cdp.send('HeapProfiler.collectGarbage')
       const heap = await cdp.send('Runtime.getHeapUsage')
@@ -69,7 +70,7 @@ try {
   })
   await page.waitForTimeout(2000)
   assert.ok(await page.evaluate(() => window.__contexts.every(c => c.state === 'running')))
-  await click('Mute all sound')
+  await click('Mute nighttime sound')
   await page.waitForTimeout(2000)
   assert.equal(await page.evaluate(() => window.__live), 0)
   assert.deepEqual(errors, [])

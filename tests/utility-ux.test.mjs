@@ -22,7 +22,7 @@ test('More is reduced to Sleep, Wake and Utilities while immediate controls stay
   const dock = app.slice(dockStart)
   assert.match(dock, /aria-label="Toggle clock"/)
   assert.match(dock, /Enter fullscreen|Exit fullscreen/)
-  assert.match(dock, /Mute all sound|Enable all sound/)
+  assert.match(dock, /Mute nighttime sound|Enable nighttime sound/)
 })
 
 test('sleep timer uses a dedicated alarm-style dialog with explicit start, status and cancel actions', async () => {

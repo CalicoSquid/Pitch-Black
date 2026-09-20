@@ -97,9 +97,9 @@ export function EmberScene({
 
     let trail: Array<{ x: number; y: number; age: number }> = []
     let fragments: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
-    let sparks: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
-    let steam: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number; opacity: number }> = []
-    let smoke: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
+    const sparks: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
+    const steam: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number; opacity: number }> = []
+    const smoke: Array<{ x: number; y: number; vx: number; vy: number; life: number; size: number }> = []
     let lastLightningVersion = lightningGroundStrikeSignal.version
     let lastWorldResetVersion = worldResetSignal.version
 

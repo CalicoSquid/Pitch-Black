@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { LayerState, Scene } from '../types'
 import type { RareEventKind, RareEventState } from '../layers/RareEventLayers'
@@ -511,14 +511,14 @@ export function useAliveWorld({
   const rareEventIdRef = useRef(0)
   const ambientLifeIdRef = useRef(0)
 
-  // Keep the event engine attached to the world rather than to Alive mode.
-  // These refs update synchronously with render so long-lived scheduler callbacks
-  // always judge the environment the user is actually looking at.
-  sceneRef.current = scene
-  autonomousRef.current = autonomous
-  eventsEnabledRef.current = eventsEnabled
-  manualStormActiveRef.current = manualStormActive
-  manualMoonVisibleRef.current = manualMoonVisible
+  // Publish committed controls before scheduler callbacks run.
+  useLayoutEffect(() => {
+    sceneRef.current = scene
+    autonomousRef.current = autonomous
+    eventsEnabledRef.current = eventsEnabled
+    manualStormActiveRef.current = manualStormActive
+    manualMoonVisibleRef.current = manualMoonVisible
+  }, [scene, autonomous, eventsEnabled, manualStormActive, manualMoonVisible])
 
   const eventPhase = autonomous
     ? phase
@@ -556,6 +556,8 @@ export function useAliveWorld({
     if (eventsEnabled) return
     rareEventsRef.current = []
     ambientLifeEventsRef.current = []
+    // Clear the external scheduler snapshot at the explicit Black boundary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRareEvents([])
     setAmbientLifeEvents([])
     setSkyEvent(null)
@@ -592,6 +594,8 @@ export function useAliveWorld({
       aliveLayersRef.current = EMPTY_ALIVE_LAYERS
       rareEventsRef.current = []
       ambientLifeEventsRef.current = []
+      // Disabling the engine synchronizes its externally scheduled presentation.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAliveLayers(EMPTY_ALIVE_LAYERS)
       setMoonHalo(false)
       setFireflyMultiplier(1)

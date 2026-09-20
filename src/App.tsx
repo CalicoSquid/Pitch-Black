@@ -208,7 +208,7 @@ function App() {
     }
   })
   const [testEventId, setTestEventId] = useState(51_100)
-  const [testLanternOwlId, setTestLanternOwlId] = useState<number | null>(null)
+  const [completedLanternOwlId, setTestLanternOwlId] = useState<number | null>(null)
   const [testSnowActive, setTestSnowActive] = useState(testMode === 'snow-fade')
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null)
   const wakeLockOwnersRef = useRef(new Set<'manual' | 'alarm'>())
@@ -297,14 +297,13 @@ function App() {
 
 
   useEffect(() => {
-    if (testMode !== 'lantern' || lanternTest.reaction !== 'owl') {
-      setTestLanternOwlId(null)
-      return
-    }
-    setTestLanternOwlId(null)
+    if (testMode !== 'lantern' || lanternTest.reaction !== 'owl') return
     const timer = window.setTimeout(() => setTestLanternOwlId(testEventId + 90_000), 31_000)
     return () => window.clearTimeout(timer)
   }, [lanternTest.reaction, testEventId, testMode])
+
+  const testLanternOwlId = completedLanternOwlId === testEventId + 90_000 && lanternTest.reaction === 'owl'
+    ? completedLanternOwlId : null
 
   const dismissFirstVisit = useCallback(() => {
     setFirstVisit(false)
@@ -661,30 +660,25 @@ function App() {
     setNightAudioMix: setPitchAudioDawnMix,
   })
 
+  const setSunriseSetupOpen = sunrise.setSetupOpen
   useEffect(() => {
-    sunrise.setSetupOpen(sunrisePanelOpen)
-  }, [sunrisePanelOpen, sunrise.setSetupOpen])
+    setSunriseSetupOpen(sunrisePanelOpen)
+  }, [sunrisePanelOpen, setSunriseSetupOpen])
 
-  useEffect(() => {
+  // Adjust transient UI with the lifecycle before children render the new phase.
+  const [previousSunriseLifecycle, setPreviousSunriseLifecycle] = useState(sunrise.runtime.lifecycle)
+  if (previousSunriseLifecycle !== sunrise.runtime.lifecycle) {
+    setPreviousSunriseLifecycle(sunrise.runtime.lifecycle)
+    setSnoozeConfirmationVisible(sunrise.runtime.lifecycle === 'snoozed')
     if (sunrise.runtime.lifecycle === 'holding') {
       setShowUtilities(false)
       setSunrisePanelOpen(false)
     }
-  }, [sunrise.runtime.lifecycle])
-
-  const previousSunriseLifecycleRef = useRef(sunrise.runtime.lifecycle)
+  }
   useEffect(() => {
-    const previous = previousSunriseLifecycleRef.current
-    const current = sunrise.runtime.lifecycle
-    previousSunriseLifecycleRef.current = current
-
-    if (current === 'snoozed' && previous !== 'snoozed') {
-      setSnoozeConfirmationVisible(true)
-      const timeout = window.setTimeout(() => setSnoozeConfirmationVisible(false), 1800)
-      return () => window.clearTimeout(timeout)
-    }
-
-    if (current !== 'snoozed') setSnoozeConfirmationVisible(false)
+    if (sunrise.runtime.lifecycle !== 'snoozed') return
+    const timeout = window.setTimeout(() => setSnoozeConfirmationVisible(false), 1800)
+    return () => window.clearTimeout(timeout)
   }, [sunrise.runtime.lifecycle])
 
 
@@ -1008,7 +1002,7 @@ function App() {
       />
       <SunriseWakeActions sunrise={sunrise} onManage={() => setSunrisePanelOpen(true)} />
 
-      <div className={`first-visit-whisper ${firstVisit ? 'visible' : ''}`} aria-hidden={!firstVisit}>
+      <div hidden={showUtilities || sunrisePanelOpen || sleepTimerPanelOpen} className={`first-visit-whisper ${firstVisit ? 'visible' : ''}`} aria-hidden={!firstVisit}>
         <h1 className="first-visit-title">This Quiet World</h1>
         <div className="first-visit-hint">A living black screen for sleep. Choose a scene below, or let <strong>Alive</strong> take over.</div>
         <div className="first-visit-secondary">Double-tap anywhere for fullscreen.</div>
@@ -1149,7 +1143,9 @@ function App() {
           )}
         </nav>
       )}
-      <nav className={`control-dock ${interfaceAwake && sunrise.runtime.lifecycle !== 'holding' && !snoozeConfirmationVisible ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
+      <nav className={`control-dock main-control-dock ${interfaceAwake && sunrise.runtime.lifecycle !== 'holding' && !snoozeConfirmationVisible ? 'visible' : ''} ${aliveOn ? 'alive-running' : ''}`} aria-label="This quiet world controls">
+        <div className="dock-scenes" role="group" aria-label="Scenes and fullscreen, swipe to explore"
+          onFocus={(event) => event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })}>
         <button type="button" className={`alive-control ${aliveOn ? 'active alive-active' : ''}`} onClick={toggleAlive} aria-label={aliveOn ? 'Stop Alive mode' : 'Let the world live on its own'} aria-pressed={aliveOn}>
           <Orbit size={17} strokeWidth={1.5} />
           <span>Alive</span>
@@ -1186,6 +1182,12 @@ function App() {
           <span>Fireflies</span>
         </button>
         <div className="dock-divider" aria-hidden="true" />
+        <button type="button" className={fullscreenOn ? 'active' : ''} onClick={() => void goFullscreen()} aria-label={fullscreenOn ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreenOn}>
+          {fullscreenOn ? <Shrink size={17} strokeWidth={1.5} /> : <Expand size={17} strokeWidth={1.5} />}
+          <span>Fullscreen</span>
+        </button>
+        </div>
+        <div className="dock-essentials">
         <button type="button" className={showClock ? 'active' : ''} onClick={() => {
           entryClockClaimedRef.current = true
           setShowClock((value) => !value)
@@ -1193,13 +1195,9 @@ function App() {
           <Clock3 size={17} strokeWidth={1.5} />
           <span>Clock</span>
         </button>
-        <button type="button" className={soundOn ? 'active' : ''} onClick={toggleSound} aria-label={soundOn ? 'Mute all sound' : 'Enable all sound'} aria-pressed={soundOn}>
+        <button type="button" className={soundOn ? 'active' : ''} onClick={toggleSound} aria-label={soundOn ? 'Mute nighttime sound' : 'Enable nighttime sound'} aria-pressed={soundOn}>
           {soundOn ? <Volume2 size={17} strokeWidth={1.5} /> : <VolumeX size={17} strokeWidth={1.5} />}
           <span>{soundOn ? 'Sound' : 'Muted'}</span>
-        </button>
-        <button type="button" className={fullscreenOn ? 'active' : ''} onClick={() => void goFullscreen()} aria-label={fullscreenOn ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreenOn}>
-          {fullscreenOn ? <Shrink size={17} strokeWidth={1.5} /> : <Expand size={17} strokeWidth={1.5} />}
-          <span>Fullscreen</span>
         </button>
         <button
           type="button"
@@ -1212,6 +1210,7 @@ function App() {
           <span className="more-glyph" aria-hidden="true">•••</span>
           <span>More</span>
         </button>
+        </div>
       </nav>
     </main>
   )

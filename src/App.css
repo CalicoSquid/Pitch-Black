@@ -9,8 +9,7 @@
 }
 
 .scene-layer,
-.scene-canvas,
-.moon-scene {
+.scene-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -43,45 +42,6 @@
 .brand-whisper.visible { opacity: 1; pointer-events: auto; }
 .brand-whisper:hover,
 .brand-whisper:focus-visible { color: rgba(255,255,255,.32); outline: none; }
-
-.utility-popover {
-  position: absolute;
-  top: 45px;
-  top: max(45px, calc(env(safe-area-inset-top) + 23px));
-  left: 50%;
-  transform: translate(-50%, -5px);
-  padding: 4px;
-  border: 1px solid rgba(255,255,255,.065);
-  border-radius: 999px;
-  background: rgba(6,6,6,.86);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 220ms ease, transform 220ms ease;
-}
-.utility-popover.visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, 0);
-}
-.utility-popover button {
-  appearance: none;
-  border: 0;
-  border-radius: 999px;
-  padding: 7px 11px 6px;
-  background: transparent;
-  color: rgba(255,255,255,.28);
-  font: inherit;
-  font-size: 8px;
-  letter-spacing: .11em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.utility-popover button:hover,
-.utility-popover button:focus-visible {
-  background: rgba(255,255,255,.035);
-  color: rgba(255,255,255,.52);
-  outline: none;
-}
 
 .control-dock {
   position: absolute;
@@ -129,22 +89,6 @@
 .control-dock button.active { color: rgba(255,255,255,.66); background: rgba(255,255,255,.045); }
 .control-dock button span { font-size: 8px; letter-spacing: .08em; text-transform: uppercase; opacity: .72; }
 .dock-divider { width: 1px; height: 23px; margin: 0 2px; background: rgba(255,255,255,.07); }
-
-.hint {
-  position: absolute;
-  left: 50%;
-  bottom: 8px;
-  bottom: max(8px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  font-size: 8px;
-  letter-spacing: .13em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: rgba(255,255,255,.08);
-  opacity: 0;
-  transition: opacity 900ms ease;
-}
-.hint.visible { opacity: 1; }
 
 .sleep-clock {
   position: absolute;
@@ -201,66 +145,6 @@
   opacity: .52;
 }
 
-
-.moon-scene {
-  background:
-    radial-gradient(circle at 50% 50%, rgba(24,27,31,.11), transparent 26%),
-    #000;
-}
-.moon-wrap {
-  position: absolute;
-  left: 50%;
-  top: 42%;
-  transform: translate(-50%, -50%);
-  display: grid;
-  justify-items: center;
-  gap: 25px;
-  animation: moon-breathe 12s ease-in-out infinite alternate;
-}
-.moon-disc {
-  position: relative;
-  width: clamp(112px, 20vw, 230px);
-  aspect-ratio: 1;
-  overflow: hidden;
-  border-radius: 50%;
-  background: #111417;
-  box-shadow: 0 0 42px rgba(168,178,188,.025);
-}
-.moon-texture {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: .72;
-  filter: contrast(.92) brightness(.72);
-}
-.moon-shadow {
-  position: absolute;
-  inset: -4%;
-  width: 108%;
-  height: 108%;
-  background: rgba(0,0,0,.92);
-  filter: blur(.6px);
-}
-.moon-grain {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset -8px -9px 22px rgba(0,0,0,.28), inset 5px 5px 18px rgba(255,255,255,.018);
-}
-.moon-caption {
-  font-size: 8px;
-  letter-spacing: .19em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,.08);
-}
-
-@keyframes moon-breathe {
-  from { transform: translate(-50%, -50%) translateY(-3px); }
-  to { transform: translate(-50%, -50%) translateY(3px); }
-}
-
 @media (max-width: 620px) {
   .control-dock {
     gap: 0;
@@ -269,8 +153,7 @@
   }
   .control-dock button { min-width: 44px; padding: 0 7px; }
   .control-dock button span { display: none; }
-  .hint { display: none; }
-  .moon-wrap { top: 39%; }
+
   .sleep-clock { top: 67%; width: 92vw; }
   .sleep-clock-time { font-size: clamp(48px, 15vw, 82px); }
   .sleep-clock-date { font-size: 8px; letter-spacing: .13em; }
@@ -283,12 +166,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .moon-wrap { animation: none; }
-  .control-dock, .brand-whisper, .utility-popover, .hint, .sleep-clock, .sleep-clock-date { transition-duration: 0ms; }
+
+  .control-dock,
+.brand-whisper,
+.sleep-clock,
+.sleep-clock-date { transition-duration: 0ms; }
 }
 
-
-.storm-scene,
 .ember-scene {
   position: absolute;
   inset: 0;
@@ -298,21 +182,7 @@
   z-index: 1;
 }
 
-.storm-moon {
-  position: absolute;
-  left: 50%;
-  top: 42%;
-  width: clamp(105px, 18vw, 210px);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  overflow: hidden;
-  border-radius: 50%;
-  opacity: .14;
-  background: #111417;
-}
-
 .control-dock::-webkit-scrollbar { display: none; }
-
 
 .scene-layer {
   z-index: 1;
@@ -330,10 +200,8 @@
 }
 
 .brand-whisper,
-.utility-popover,
 .sleep-clock,
-.control-dock,
-.hint {
+.control-dock {
   z-index: 20;
 }
 
@@ -369,7 +237,6 @@
   display: none;
 }
 
-
 /* Shared world base is always the first canvas above the moon. Weather/fire canvases layer over it. */
 .world-base-canvas {
   z-index: 1;
@@ -380,13 +247,11 @@
   z-index: 3;
 }
 
-
 /* Storm sits above the world/weather canvases so its clouds can naturally veil
    the moon and scenery without changing any underlying scene renderer. */
 .storm-layer-canvas {
   z-index: 4;
 }
-
 
 /* Short landscape phones need their own composition: width-based desktop rules
    make the moon enormous and leave the clock nowhere to breathe. */
@@ -413,149 +278,6 @@
   }
 }
 
-.sleep-panel {
-  position: absolute;
-  left: 50%;
-  bottom: max(74px, calc(env(safe-area-inset-bottom) + 66px));
-  width: min(460px, calc(100vw - 24px));
-  transform: translate(-50%, 8px);
-  padding: 14px;
-  border: 1px solid rgba(255,255,255,.07);
-  border-radius: 20px;
-  background: rgba(7,7,7,.82);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 18px 70px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.025);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 40;
-  transition: opacity 220ms ease, transform 260ms cubic-bezier(.2,.8,.2,1);
-}
-
-.sleep-panel.visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, 0);
-}
-
-.sleep-panel-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 35px;
-}
-
-.sleep-panel-label {
-  width: 62px;
-  flex: 0 0 62px;
-  font-size: 8px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,.25);
-}
-
-.sleep-timer-options {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
-  width: 100%;
-}
-
-.sleep-timer-options button {
-  appearance: none;
-  border: 1px solid rgba(255,255,255,.055);
-  border-radius: 999px;
-  min-height: 30px;
-  padding: 0 7px;
-  background: rgba(255,255,255,.018);
-  color: rgba(255,255,255,.28);
-  font: inherit;
-  font-size: 8px;
-  letter-spacing: .06em;
-  cursor: pointer;
-  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
-}
-
-.sleep-timer-options button:hover,
-.sleep-timer-options button:focus-visible,
-.sleep-timer-options button.active {
-  outline: none;
-  color: rgba(255,255,255,.68);
-  background: rgba(255,255,255,.055);
-  border-color: rgba(255,255,255,.095);
-}
-
-.sleep-timer-status {
-  margin: 4px 0 8px 74px;
-  font-size: 8px;
-  line-height: 1.45;
-  letter-spacing: .045em;
-  color: rgba(255,255,255,.18);
-}
-
-.volume-row {
-  margin-top: 8px;
-}
-
-.volume-row input[type='range'] {
-  width: 100%;
-  height: 20px;
-  margin: 0;
-  accent-color: rgba(255,255,255,.5);
-  cursor: pointer;
-}
-
-.volume-row output {
-  width: 34px;
-  flex: 0 0 34px;
-  text-align: right;
-  font-size: 8px;
-  font-variant-numeric: tabular-nums;
-  color: rgba(255,255,255,.28);
-}
-
-.keep-awake-row {
-  appearance: none;
-  width: 100%;
-  min-height: 44px;
-  margin-top: 8px;
-  padding: 8px 2px 2px 74px;
-  border: 0;
-  border-top: 1px solid rgba(255,255,255,.055);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  background: transparent;
-  color: rgba(255,255,255,.28);
-  text-align: left;
-  cursor: pointer;
-}
-
-.keep-awake-row:disabled {
-  cursor: default;
-  opacity: .46;
-}
-
-.keep-awake-row strong,
-.keep-awake-row small {
-  display: block;
-  font-weight: 400;
-}
-
-.keep-awake-row strong {
-  font-size: 9px;
-  letter-spacing: .055em;
-  color: rgba(255,255,255,.36);
-}
-
-.keep-awake-row small {
-  margin-top: 3px;
-  font-size: 8px;
-  letter-spacing: .025em;
-  color: rgba(255,255,255,.16);
-}
-
 .quiet-switch {
   position: relative;
   width: 30px;
@@ -578,46 +300,13 @@
   transition: transform 180ms ease, background 180ms ease;
 }
 
-.keep-awake-row.active .quiet-switch {
-  background: rgba(255,255,255,.075);
-  border-color: rgba(255,255,255,.15);
-}
-
-.keep-awake-row.active .quiet-switch i {
-  transform: translateX(14px);
-  background: rgba(255,255,255,.68);
-}
-
 @media (max-width: 620px) {
-  .sleep-panel {
-    bottom: max(72px, calc(env(safe-area-inset-bottom) + 66px));
-    padding: 12px;
-    border-radius: 18px;
-  }
 
-  .sleep-panel-row {
-    gap: 8px;
-  }
-
-  .sleep-panel-label {
-    width: 52px;
-    flex-basis: 52px;
-  }
-
-  .sleep-timer-status {
-    margin-left: 60px;
-  }
-
-  .keep-awake-row {
-    padding-left: 60px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sleep-panel,
-  .sleep-timer-options button,
   .quiet-switch,
-  .quiet-switch i {
+.quiet-switch i {
     transition-duration: 0ms;
   }
 }
@@ -668,10 +357,9 @@
   .sleep-clock { transform: translate(-50%, -50%); }
 }
 
-
 /* Alive mode micro-events are intentionally transient and unlabeled. */
 .global-moon::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 50%;
   top: 50%;
@@ -711,7 +399,7 @@
 }
 
 .alive-shooting-star::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 1px;
   top: 1px;
@@ -781,22 +469,7 @@
   white-space: nowrap;
 }
 
-.brand-menu-dots {
-  display: inline-block;
-  margin-left: .08em;
-  letter-spacing: .16em;
-  color: rgba(255,255,255,.14);
-  transform: translateY(-1px);
-  transition: color 260ms ease;
-}
-
-.brand-whisper:hover .brand-menu-dots,
-.brand-whisper:focus-visible .brand-menu-dots,
-.brand-whisper[aria-expanded='true'] .brand-menu-dots {
-  color: rgba(255,255,255,.36);
-}
-
-.brand-whisper[aria-expanded='true'] {
+.brand-whisper[aria-expanded="true"] {
   color: rgba(255,255,255,.34);
 }
 
@@ -846,129 +519,6 @@
   color: rgba(255,255,255,.16);
 }
 
-.utility-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 35px;
-}
-
-.utility-label {
-  width: 62px;
-  flex: 0 0 62px;
-  font-size: 8px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,.25);
-}
-
-.utility-toggle-row,
-.utility-actions button {
-  appearance: none;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: rgba(255,255,255,.32);
-  font: inherit;
-  cursor: pointer;
-  transition: color 180ms ease, background 180ms ease;
-}
-
-.utility-toggle-row {
-  min-height: 39px;
-  padding: 4px 3px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border-radius: 10px;
-  font-size: 9px;
-  letter-spacing: .055em;
-  text-align: left;
-}
-
-.utility-toggle-row:hover,
-.utility-toggle-row:focus-visible,
-.utility-actions button:hover,
-.utility-actions button:focus-visible {
-  outline: none;
-  color: rgba(255,255,255,.62);
-  background: rgba(255,255,255,.025);
-}
-
-.utility-toggle-row.active { color: rgba(255,255,255,.62); }
-.utility-toggle-row.active .quiet-switch {
-  background: rgba(255,255,255,.075);
-  border-color: rgba(255,255,255,.15);
-}
-.utility-toggle-row.active .quiet-switch i {
-  transform: translateX(14px);
-  background: rgba(255,255,255,.68);
-}
-
-.utility-action-icon {
-  width: 30px;
-  height: 22px;
-  flex: 0 0 30px;
-  display: grid;
-  place-items: center;
-  color: rgba(255,255,255,.25);
-}
-.utility-toggle-row.active .utility-action-icon { color: rgba(255,255,255,.62); }
-
-.utility-note {
-  margin: 1px 3px 0;
-  font-size: 8px;
-  letter-spacing: .035em;
-  color: rgba(255,255,255,.13);
-}
-
-.utility-actions {
-  display: grid;
-  gap: 2px;
-}
-
-.utility-actions .utility-section-title { margin-bottom: 4px; }
-.utility-actions button {
-  min-height: 34px;
-  padding: 0 8px;
-  border-radius: 10px;
-  text-align: left;
-  font-size: 9px;
-  letter-spacing: .055em;
-}
-
-.utility-panel .sleep-timer-status {
-  margin-left: 74px;
-}
-
-.utility-about h2 {
-  margin: 1px 2px 5px;
-  font-size: 12px;
-  line-height: 1.35;
-  font-weight: 400;
-  letter-spacing: .055em;
-  color: rgba(255,255,255,.46);
-}
-
-.utility-about p {
-  margin: 0 2px 7px;
-  font-size: 9px;
-  line-height: 1.65;
-  letter-spacing: .018em;
-  color: rgba(255,255,255,.24);
-}
-
-.utility-about p:last-child { margin-bottom: 1px; }
-.utility-about .utility-about-tagline {
-  margin-bottom: 8px;
-  color: rgba(255,255,255,.34);
-}
-.utility-about strong {
-  font-weight: 500;
-  color: rgba(255,255,255,.38);
-}
-
 .first-visit-secondary {
   margin-top: -5px;
   font-size: 7px;
@@ -995,81 +545,13 @@
     border-radius: 18px;
   }
 
-  .utility-row { gap: 8px; }
-  .utility-label { width: 52px; flex-basis: 52px; }
-  .utility-panel .sleep-timer-status { margin-left: 60px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .utility-panel,
-  .brand-menu-dots,
-  .utility-toggle-row,
-  .utility-actions button {
+  .utility-panel {
     transition-duration: 0ms;
   }
 }
-
-.brand-whisper.has-active-utility .brand-menu-dots {
-  color: rgba(255,255,255,.28);
-}
-
-
-/* v1.33 — Alive is a complete autonomous state, not an additive overlay mode. */
-.alive-status {
-  position: absolute;
-  left: 50%;
-  bottom: max(118px, calc(env(safe-area-inset-bottom) + 110px));
-  transform: translateX(-50%);
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  pointer-events: none;
-  color: rgba(255,255,255,.18);
-  font-size: 8px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  opacity: .58;
-  transition: opacity 500ms ease;
-}
-
-.alive-status.awake { opacity: .94; }
-
-.alive-status i,
-.control-dock .alive-control.alive-active::after {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(207, 226, 214, .72);
-  box-shadow: 0 0 8px rgba(183, 216, 195, .16);
-  animation: alive-live-pulse 3.8s ease-in-out infinite;
-}
-
-.control-dock .alive-control {
-  position: relative;
-}
-
-.control-dock .alive-control.alive-active::after {
-  content: '';
-  position: absolute;
-  top: 8px;
-  right: 12px;
-}
-
-.control-dock.alive-running .manual-world-control {
-  opacity: .30;
-}
-
-.control-dock.alive-running .manual-world-control:hover,
-.control-dock.alive-running .manual-world-control:focus-visible {
-  opacity: .78;
-}
-
-@keyframes alive-live-pulse {
-  0%, 100% { opacity: .40; transform: scale(.88); }
-  50% { opacity: 1; transform: scale(1.12); }
-}
-
 
 /* v1.33.1 — Alive always has a quiet night sky. Stars are ambience, not a
    user-facing layer: sparse enough for OLED use, alive enough to prove the world is moving. */
@@ -1082,12 +564,12 @@
   transition: opacity 12s ease;
 }
 
-.alive-night-sky[data-phase='rain-front'],
-.alive-night-sky[data-phase='cold-front'] { opacity: .42; }
-.alive-night-sky[data-phase='rain'] { opacity: .18; }
-.alive-night-sky[data-phase='storm'] { opacity: .035; }
-.alive-night-sky[data-phase='snow'] { opacity: .30; }
-.alive-night-sky[data-phase='clearing'] { opacity: .60; }
+.alive-night-sky[data-phase="rain-front"],
+.alive-night-sky[data-phase="cold-front"] { opacity: .42; }
+.alive-night-sky[data-phase="rain"] { opacity: .18; }
+.alive-night-sky[data-phase="storm"] { opacity: .035; }
+.alive-night-sky[data-phase="snow"] { opacity: .30; }
+.alive-night-sky[data-phase="clearing"] { opacity: .60; }
 
 .alive-night-sky i {
   position: absolute;
@@ -1163,7 +645,7 @@
 }
 
 .alive-meteor-shower-star::after {
-  content: '';
+  content: "";
   position: absolute;
   right: 1px;
   top: 1px;
@@ -1175,14 +657,12 @@
 }
 
 @media (max-width: 620px) {
-  .alive-status {
-    bottom: max(108px, calc(env(safe-area-inset-bottom) + 100px));
-  }
+
   .alive-moon-veil { top: 37%; }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {
-  .alive-status { bottom: max(82px, calc(env(safe-area-inset-bottom) + 76px)); }
+
   .alive-moon-veil { top: 27%; width: clamp(180px, 58vh, 300px); height: clamp(72px, 24vh, 118px); }
 }
 
@@ -1193,8 +673,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .alive-status i,
-  .control-dock .alive-control.alive-active::after,
   .alive-night-sky i { animation: none; }
   .alive-moon-veil {
     display: block;
@@ -1222,26 +700,6 @@
 
 .brand-whisper.visible {
   pointer-events: none;
-}
-
-/* Alive communicates through the selected button state only. No floating
-   status label and no duplicate live dot competing with the terrain. */
-.alive-status {
-  display: none !important;
-}
-
-.control-dock .alive-control.alive-active::after {
-  display: none !important;
-  content: none;
-}
-
-.control-dock.alive-running .manual-world-control {
-  opacity: .42;
-}
-
-.control-dock.alive-running .manual-world-control:hover,
-.control-dock.alive-running .manual-world-control:focus-visible {
-  opacity: .88;
 }
 
 /* The utility panel now belongs to the dock's More button, so it opens above
@@ -1318,9 +776,6 @@
 
 /* Obsolete helper copy is intentionally gone from the DOM; keep legacy class
    inert in case an old cached shell briefly overlaps a new stylesheet. */
-.hint {
-  display: none !important;
-}
 
 @media (max-width: 620px) {
   .control-dock {
@@ -1382,7 +837,7 @@
   }
 
   .first-visit-hint,
-  .first-visit-secondary {
+.first-visit-secondary {
     line-height: 1.25;
   }
 
@@ -1394,9 +849,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .utility-panel,
-  .control-dock,
-  .brand-whisper,
-  .first-visit-whisper {
+.control-dock,
+.brand-whisper,
+.first-visit-whisper {
     transition-duration: 0ms;
   }
 }
@@ -1411,7 +866,6 @@
   color: currentColor;
 }
 
-
 /* Rare event canvases: production Alive hero and micro-event layers. */
 .rare-sky-event-canvas {
   z-index: 0;
@@ -1420,7 +874,6 @@
 .rare-ground-event-canvas {
   z-index: 1;
 }
-
 
 /* v1.56 — Ambient Life. Tiny, non-blocking signs that the night continues
    beyond the procedural foreground. These sit behind local precipitation. */
@@ -1530,7 +983,6 @@
   .ambient-airplane { display: none; }
 }
 
-
 /* v1.60.2 — conservative UI/UX polish. No control-model changes: this only
    tightens hierarchy, keyboard behavior and touch comfort around the existing UI. */
 .control-dock:has(:focus-visible) {
@@ -1564,64 +1016,18 @@
   opacity: .90;
 }
 
-.sleep-timer-options button {
-  min-height: 36px;
-}
-
-.volume-row input[type='range'] {
-  height: 28px;
-}
-
-.utility-toggle-row,
-.utility-actions button {
-  min-height: 40px;
-}
-
 .utility-panel button:focus-visible,
 .utility-panel input:focus-visible {
   outline: 1px solid rgba(255,255,255,.13);
   outline-offset: 2px;
 }
 
-.utility-about p {
-  font-size: 10px;
-  line-height: 1.6;
-}
-
 @media (max-width: 620px) {
-  .sleep-timer-options button {
-    min-height: 38px;
-  }
 
-  .utility-toggle-row,
-  .utility-actions button {
-    min-height: 42px;
-  }
-
-  .utility-about p {
-    font-size: 10px;
-  }
-}
-
-.utility-about-link {
-  display: inline-block;
-  margin: 1px 2px 0;
-  padding: 7px 0;
-  color: rgba(255,255,255,.32);
-  font-size: 9px;
-  line-height: 1.4;
-  letter-spacing: .045em;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(255,255,255,.09);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .utility-about-link:hover { color: rgba(255,255,255,.48); }
-}
 
-.utility-about-link:focus-visible {
-  outline: 1px solid rgba(255,255,255,.13);
-  outline-offset: 3px;
 }
 
 /* v1.66 — Sunrise is a temporary light layer above the night world, never a
@@ -1752,7 +1158,7 @@
   opacity: .35;
 }
 
-.sunrise-range-field input[type='range'] {
+.sunrise-range-field input[type="range"] {
   width: 100%;
   min-width: 0;
 }
@@ -1766,8 +1172,7 @@
 
 .sunrise-preview-status,
 .sunrise-armed-note,
-.sunrise-browser-note,
-.sunrise-limitations {
+.sunrise-browser-note {
   font-size: 9px;
   line-height: 1.55;
   letter-spacing: .018em;
@@ -1776,15 +1181,6 @@
 
 .sunrise-preview-status {
   color: rgba(205, 165, 137, .42);
-}
-
-.sunrise-limitations {
-  padding-top: 2px;
-  border-top: 1px solid rgba(255,255,255,.045);
-}
-
-.sunrise-limitations p {
-  margin: 7px 0 0;
 }
 
 .sunrise-arm {
@@ -1840,16 +1236,16 @@
 
   .sunrise-time-field input { min-width: 116px; }
   .sunrise-choice-row button,
-  .sunrise-check-row button,
-  .sunrise-active-actions button,
-  .sunrise-arm { min-height: 42px; }
+.sunrise-check-row button,
+.sunrise-active-actions button,
+.sunrise-arm { min-height: 42px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sunrise-choice-row button,
-  .sunrise-check-row button,
-  .sunrise-active-actions button,
-  .sunrise-arm {
+.sunrise-check-row button,
+.sunrise-active-actions button,
+.sunrise-arm {
     transition: none;
   }
 }
@@ -1866,7 +1262,9 @@
   opacity: .94;
   transform: translate(-50%, calc(8px - var(--sunrise-rise))); transition: transform 1100ms linear; }
 .sunrise-landscape { position: absolute; inset: 0; width: 100%; height: 100%; }
-[data-sunrise] .global-moon, [data-sunrise] .alive-night-sky, [data-sunrise] .storm-layer-canvas {
+[data-sunrise] .global-moon,
+[data-sunrise] .alive-night-sky,
+[data-sunrise] .storm-layer-canvas {
   filter: opacity(var(--dawn-night-opacity, 1)); transition: filter 1500ms linear;
 }
 .sunrise-dialog { box-sizing: border-box; width: min(540px, calc(100vw - 28px)); max-height: calc(100dvh - 32px);
@@ -1878,10 +1276,13 @@
 .sunrise-dialog-header h2 { font-size: clamp(23px, 5vw, 30px); font-weight: 400; margin: 0; }
 .sunrise-dialog button { min-height: 44px; font: inherit; font-size: 14px; color: #dfd5cb;
   background: #ffffff08; border: 1px solid #ffffff20; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
-.sunrise-dialog button:focus-visible, .sunrise-dialog input:focus-visible, .sunrise-wake-actions button:focus-visible {
+.sunrise-dialog button:focus-visible,
+.sunrise-dialog input:focus-visible,
+.sunrise-wake-actions button:focus-visible {
   outline: 2px solid #e7b88b; outline-offset: 4px;
 }
-.sunrise-dialog .sunrise-setup, .sunrise-dialog .sunrise-armed { gap: 20px; padding: 0; }
+.sunrise-dialog .sunrise-setup,
+.sunrise-dialog .sunrise-armed { gap: 20px; padding: 0; }
 .sunrise-dialog .sunrise-field { grid-template-columns: 95px minmax(0,1fr) auto; font-size: 12px; color: #bcb4ac; letter-spacing: .03em; }
 .sunrise-dialog .sunrise-time-field input { font-size: 30px; min-height: 60px; min-width: 0; width: 100%; color: #f0ddc9; }
 .sunrise-dialog .sunrise-confirmation { font-size: 13px; color: #b4ada7; padding: 14px; }
@@ -1889,13 +1290,16 @@
 .sunrise-dialog .sunrise-fieldset legend { font-size: 12px; color: #bcb4ac; }
 .sunrise-dialog input[type=range] { height: 32px; accent-color: #dbb28e; }
 .sunrise-dialog .sunrise-range-field output { color: #e0cdbd; }
-.sunrise-dialog .sunrise-arm, .sunrise-dialog .sunrise-choice-row button.active { background: #e0bc94; color: #241b17; }
-.sunrise-dialog .sunrise-limitations, .sunrise-dialog .sunrise-browser-note,
-.sunrise-dialog .sunrise-armed-note, .sunrise-dialog .sunrise-preview-status { font-size: 13px; color: #aba5a0; line-height: 1.6; }
+.sunrise-dialog .sunrise-arm,
+.sunrise-dialog .sunrise-choice-row button.active { background: #e0bc94; color: #241b17; }
+.sunrise-dialog .sunrise-browser-note,
+.sunrise-dialog .sunrise-armed-note,
+.sunrise-dialog .sunrise-preview-status { font-size: 13px; color: #aba5a0; line-height: 1.6; }
 .sunrise-dialog .sunrise-readiness span { font-size: 12px; padding: 8px; }
 .sunrise-dialog .sunrise-readiness .ready { color: #b7d1b0; }
 .sunrise-dialog .sunrise-readiness .not-ready { color: #e0b69b; }
-.sunrise-dialog .sunrise-armed-head, .sunrise-dialog .sunrise-armed-head strong { font-size: 16px; color: #e0d3c9; }
+.sunrise-dialog .sunrise-armed-head,
+.sunrise-dialog .sunrise-armed-head strong { font-size: 16px; color: #e0d3c9; }
 .sunrise-wake-actions { position: fixed; z-index: 55; bottom: max(110px, calc(70px + env(safe-area-inset-bottom)));
   left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 32px)); text-align: center;
   color: #e4cfba; padding: 16px; border-radius: 22px; background: #0b0d11e8; border: 1px solid #ffffff16; }
@@ -2025,7 +1429,7 @@ a.utility-menu-row:focus-visible,
   gap: 10px;
 }
 
-.utility-volume-slider input[type='range'] {
+.utility-volume-slider input[type="range"] {
   width: 100%;
   height: 34px;
   margin: 0;
@@ -2095,7 +1499,7 @@ a.utility-menu-row:focus-visible,
   }
 
   .utility-menu-row,
-  .utility-volume-control {
+.utility-volume-control {
     min-height: 62px;
     padding: 10px 8px;
   }
@@ -2113,12 +1517,13 @@ a.utility-menu-row:focus-visible,
     padding: 14px 18px;
   }
   .utility-section + .utility-section { margin-top: 10px; padding-top: 10px; }
-  .utility-menu-row, .utility-volume-control { min-height: 50px; }
+  .utility-menu-row,
+.utility-volume-control { min-height: 50px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   button.utility-menu-row,
-  a.utility-menu-row { transition: none; }
+a.utility-menu-row { transition: none; }
 }
 .utility-menu-row:disabled {
   cursor: default;
@@ -2231,4 +1636,19 @@ a.utility-menu-row:focus-visible,
   .sunrise-alarm-dock { min-height: 0; }
   .control-dock.sunrise-alarm-dock button { height: 44px; }
   .sunrise-alarm-dock.confirming-snooze { min-height: 57px; }
+}
+
+/* Keep bedside actions in reach while the world choices scroll independently. */
+.main-control-dock { overflow: hidden; }
+.dock-scenes, .dock-essentials { display: flex; align-items: center; gap: 4px; }
+.dock-scenes { min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
+.dock-scenes .dock-divider { flex-shrink: 0; }
+.dock-scenes button { scroll-margin-inline: 12px; }
+.dock-essentials { flex: 0 0 auto; border-left: 1px solid rgba(255,255,255,.09); padding-left: 4px; }
+.first-visit-whisper[hidden] { display: none; }
+@media (max-width: 620px) {
+  .main-control-dock { width: calc(100vw - 12px); }
+  .dock-scenes { flex: 1 1 auto; gap: 2px; padding-right: 12px; mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent); }
+  .dock-essentials { gap: 0; padding-left: 2px; }
+  .dock-essentials button { min-width: 48px; padding: 0 5px; }
 }

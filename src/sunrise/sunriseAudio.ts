@@ -130,8 +130,7 @@ export class SunriseAudioController {
     const abort = typeof AbortController !== 'undefined' ? new AbortController() : null
     this.morningAbort = abort
 
-    let request: Promise<ArrayBuffer | null>
-    request = fetch(MORNING_AMBIENCE_URL, {
+    const request: Promise<ArrayBuffer | null> = fetch(MORNING_AMBIENCE_URL, {
       cache: 'force-cache',
       ...(abort ? { signal: abort.signal } : {}),
     })
@@ -170,8 +169,7 @@ export class SunriseAudioController {
     const compressed = this.morningCompressed
     if (!compressed) return null
 
-    let decoding: Promise<AudioBuffer | null>
-    decoding = context.decodeAudioData(compressed.slice(0))
+    const decoding: Promise<AudioBuffer | null> = context.decodeAudioData(compressed.slice(0))
       .then((buffer) => {
         if (generation !== this.generation || this.context !== context || context.state === 'closed') return null
         this.morningBuffer = buffer

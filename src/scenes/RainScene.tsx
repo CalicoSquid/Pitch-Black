@@ -861,7 +861,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       document.removeEventListener('visibilitychange', syncRainVisibility)
       window.removeEventListener('pageshow', syncRainVisibility)
     }
-  }, [])
+  }, [audioTest])
 
   return <canvas className="scene-canvas" ref={canvasRef} aria-hidden="true" />
 }

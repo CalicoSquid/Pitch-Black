@@ -42,7 +42,7 @@ function wrapAngle(angle: number) {
 }
 
 function populationForWidth(width: number, multiplier = 1) {
-  let base = 0
+  let base: number
   if (width < 560) base = 8 + Math.floor(Math.random() * 5)
   else if (width < 900) base = 10 + Math.floor(Math.random() * 5)
   else base = 12 + Math.floor(Math.random() * 7)
@@ -126,9 +126,9 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
 
     const spawnFirefly = (time: number) => {
       const edgeRoll = Math.random()
-      let x = 0
-      let y = 0
-      let heading = 0
+      let x: number
+      let y: number
+      let heading: number
 
       if (edgeRoll < 0.39) {
         x = -16 - Math.random() * 12
@@ -290,8 +290,8 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
       let targetSpeed = firefly.targetSpeed
 
       if (firefly.exiting && time >= firefly.exitAt) {
-        let targetX = firefly.x
-        let targetY = firefly.y
+        let targetX: number
+        let targetY: number
         if (firefly.exitEdge === 0) {
           targetX = -58
           targetY = firefly.exitTarget

@@ -1,7 +1,7 @@
-import {chromium, firefox, webkit} from '../.perf-tools/node_modules/playwright/index.mjs';
+import {chromium, firefox, webkit} from 'playwright';
 import assert from 'node:assert/strict';
 const engine=process.argv[2] || 'chromium';
-const browser=await ({chromium, firefox, webkit})[engine].launch(engine==='chromium' ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE} : {});
+const browser=await ({chromium, firefox, webkit})[engine].launch(engine==='chromium' ? {executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,channel:process.env.PLAYWRIGHT_CHANNEL} : {});
 const page=await browser.newPage({viewport:{width:1200,height:560},deviceScaleFactor:1});
 await page.goto('http://127.0.0.1:5173/about/');
 const result=await page.evaluate(async()=>{

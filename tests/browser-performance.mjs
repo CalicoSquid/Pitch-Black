@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { chromium, firefox, webkit } from '../.perf-tools/node_modules/playwright/index.mjs'
+import { chromium, firefox, webkit } from 'playwright'
 
 const root = new URL('../.perf-tools/', import.meta.url)
 await mkdir(root, { recursive: true })
 const results = []
 const mode = process.argv[2] || 'chromium'
 const type = { chromium, firefox, webkit }[mode]
-const browser = await type.launch({ headless: true, ...(mode === 'chromium' ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE, args: ['--autoplay-policy=no-user-gesture-required'] } : {}) })
+const browser = await type.launch({ headless: true, ...(mode === 'chromium' ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE, channel: process.env.PLAYWRIGHT_CHANNEL, args: ['--autoplay-policy=no-user-gesture-required'] } : {}) })
 
 async function instrument(context) {
   await context.addInitScript(() => {
@@ -65,7 +65,7 @@ try {
     page.on('pageerror', error => errors.push(error.message))
     await page.goto(`http://127.0.0.1:${port}/`)
     await click(page, 'Black: clear the visible world to pure black')
-    await click(page, 'Enable all sound')
+    await click(page, 'Enable nighttime sound')
     await page.waitForTimeout(5000)
     const black = await snapshot(page)
     console.log(mode, port, 'black', black)

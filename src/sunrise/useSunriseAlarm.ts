@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { SunriseAudioController, type SunriseAudioStatus } from './sunriseAudio'
 import {
   DEFAULT_SUNRISE_SETTINGS,
@@ -94,9 +94,9 @@ export function useSunriseAlarm({
   const [armAudioReady, setArmAudioReady] = useState(false)
   const [previewStartedAt, setPreviewStartedAt] = useState<number | null>(null)
   const [previewExit, setPreviewExit] = useState<PreviewExit | null>(null)
-  const [previewChimed, setPreviewChimed] = useState(false)
+  const previewChimedRef = useRef(false)
   const [arming, setArming] = useState(false)
-  const lastObservedAtRef = useRef(Date.now())
+  const lastObservedAtRef = useRef(now)
   const runtimeRef = useRef(runtime)
   const previewStartedRef = useRef<number | null>(null)
   const previewExitRef = useRef<PreviewExit | null>(null)
@@ -104,9 +104,11 @@ export function useSunriseAlarm({
   const audioRef = useRef<SunriseAudioController | null>(null)
   const actionGenerationRef = useRef(0)
 
-  runtimeRef.current = runtime
-  previewStartedRef.current = previewStartedAt
-  previewExitRef.current = previewExit
+  useLayoutEffect(() => {
+    runtimeRef.current = runtime
+    previewStartedRef.current = previewStartedAt
+    previewExitRef.current = previewExit
+  }, [runtime, previewStartedAt, previewExit])
 
   const getAudio = useCallback(() => {
     if (!audioRef.current) {
@@ -175,6 +177,8 @@ export function useSunriseAlarm({
   useEffect(() => {
     if (runtime.lifecycle !== 'finished' && runtime.lifecycle !== 'cancelled') return
     setNightAudioMix(1)
+    // Release the external audio graph and wake-lock ownership at the lifecycle boundary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void releaseAlarmResources(runtime.lifecycle === 'finished' ? 0.8 : 0.25)
     const reset = window.setTimeout(() => setRuntime(IDLE_SUNRISE_RUNTIME), 1_500)
     return () => window.clearTimeout(reset)
@@ -299,38 +303,47 @@ export function useSunriseAlarm({
       },
       6,
     )
-  }, [getAudio, now, previewFraction, previewStartedAt, runtime.lifecycle, runtime.plan, runtime.snoozeWakeAt, runtimeFraction, settings.wakeVolume])
+  }, [getAudio, now, previewFraction, previewStartedAt, runtime, settings.wakeVolume])
+
+  useEffect(() => {
+    if (previewStartedAt === null || settings.wakeVolume <= 0.001) return
+    const timer = window.setTimeout(() => {
+      if (previewChimedRef.current) return
+      previewChimedRef.current = true
+      void getAudio().previewChime(settings.wakeVolume)
+    }, Math.max(0, previewStartedAt + PREVIEW_DURATION_MS * 0.78 - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [getAudio, previewStartedAt, settings.wakeVolume])
 
   useEffect(() => {
     if (previewStartedAt === null) return
-    const elapsed = now - previewStartedAt
-    if (!previewChimed && elapsed >= PREVIEW_DURATION_MS * 0.78 && settings.wakeVolume > 0.001) {
-      setPreviewChimed(true)
-      void getAudio().previewChime(settings.wakeVolume)
-    }
-    if (elapsed < PREVIEW_DURATION_MS) return
-
-    // Hold the overlay while it explicitly fades out. Unmounting it here would
-    // bypass the CSS transition and make preview completion visibly snap to night.
-    setPreviewStartedAt(null)
-    setPreviewExit({ startedAt: now, fromFraction: 1 })
-    setPreviewChimed(false)
-    audioRef.current?.soften(PREVIEW_EXIT_FADE_MS / 1000)
-  }, [getAudio, now, previewChimed, previewStartedAt, settings.wakeVolume])
+    const timer = window.setTimeout(() => {
+      const now = Date.now()
+      setNow(now)
+      setPreviewStartedAt(null)
+      setPreviewExit({ startedAt: now, fromFraction: 1 })
+      previewChimedRef.current = false
+      audioRef.current?.soften(PREVIEW_EXIT_FADE_MS / 1000)
+    }, Math.max(0, previewStartedAt + PREVIEW_DURATION_MS - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [previewStartedAt])
 
   useEffect(() => {
-    if (previewExit === null || now < previewExit.startedAt + PREVIEW_EXIT_FADE_MS) return
-    setPreviewExit(null)
-    setNightAudioMix(1)
-    const audio = audioRef.current
-    if (audio && !isRuntimeActive(runtimeRef.current)) {
-      clearReleaseTimer()
-      audioRef.current = null
-      audio.setStatusListener(null)
-      void audio.release(0.5)
-      setAudioStatus('idle')
-    }
-  }, [clearReleaseTimer, now, previewExit, setNightAudioMix])
+    if (previewExit === null) return
+    const timer = window.setTimeout(() => {
+      setPreviewExit(null)
+      setNightAudioMix(1)
+      const audio = audioRef.current
+      if (audio && !isRuntimeActive(runtimeRef.current)) {
+        clearReleaseTimer()
+        audioRef.current = null
+        audio.setStatusListener(null)
+        void audio.release(0.5)
+        setAudioStatus('idle')
+      }
+    }, Math.max(0, previewExit.startedAt + PREVIEW_EXIT_FADE_MS - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [clearReleaseTimer, previewExit, setNightAudioMix])
 
   const updateSettings = useCallback(<K extends keyof SunriseSettings>(key: K, value: SunriseSettings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }))
@@ -347,7 +360,7 @@ export function useSunriseAlarm({
     setNow(armedAt)
     setPreviewStartedAt(null)
     setPreviewExit(null)
-    setPreviewChimed(false)
+    previewChimedRef.current = false
     setNightAudioMix(1)
 
     const audio = getAudio()
@@ -484,7 +497,7 @@ export function useSunriseAlarm({
     const startedAt = Date.now()
     setNow(startedAt)
     setPreviewStartedAt(startedAt)
-    setPreviewChimed(false)
+    previewChimedRef.current = false
     return true
   }, [active, clearReleaseTimer, getAudio, settings.wakeVolume])
 
@@ -497,7 +510,7 @@ export function useSunriseAlarm({
     setNow(nowMs)
     setPreviewStartedAt(null)
     setPreviewExit({ startedAt: nowMs, fromFraction })
-    setPreviewChimed(false)
+    previewChimedRef.current = false
     audioRef.current?.soften(PREVIEW_EXIT_FADE_MS / 1000)
   }, [])
 

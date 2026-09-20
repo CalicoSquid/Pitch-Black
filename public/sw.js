@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.66.4-dawn-polish'
+const CACHE_NAME = 'this-quiet-world-v1.66.8-bedside-controls'
 const APP_SHELL = [
   '/',
   '/index.html',

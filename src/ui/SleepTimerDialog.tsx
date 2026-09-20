@@ -58,9 +58,11 @@ export function SleepTimerDialog({
     if (!open && dialog.open) dialog.close()
   }, [open])
 
-  useEffect(() => {
+  const [previousSelection, setPreviousSelection] = useState({ open, selectedMinutes })
+  if (previousSelection.open !== open || previousSelection.selectedMinutes !== selectedMinutes) {
+    setPreviousSelection({ open, selectedMinutes })
     if (open) setChoice(selectedMinutes ?? 60)
-  }, [open, selectedMinutes])
+  }
 
   const apply = () => {
     onSet(choice)

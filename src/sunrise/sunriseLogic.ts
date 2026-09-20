@@ -315,7 +315,7 @@ export function advanceSunriseRuntime(
   if (!runtime.plan || runtime.lifecycle === 'idle' || runtime.lifecycle === 'finished' || runtime.lifecycle === 'cancelled') return runtime
 
   const refreshedPlan = refreshPlanForLocalTimezone(runtime.plan, nowMs)
-  let next = refreshedPlan === runtime.plan ? runtime : { ...runtime, plan: refreshedPlan }
+  const next = refreshedPlan === runtime.plan ? runtime : { ...runtime, plan: refreshedPlan }
 
   if (next.lifecycle === 'finishing') {
     if (next.finishEndsAt !== null && nowMs >= next.finishEndsAt) return finalizeRuntime(next)

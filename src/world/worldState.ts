@@ -124,19 +124,6 @@ function loadWorld() {
   }
 }
 
-export function resetWorld() {
-  pitchWorld.drifts.fill(0)
-  pitchWorld.water.fill(0)
-  pitchWorld.ice.fill(0)
-  pitchWorld.ember.fill(0)
-  pitchWorld.char.fill(0)
-  pitchWorld.wetness = 0
-  pitchWorld.waterLevel = 0
-  pitchWorld.cloudCover = 0.12
-  worldResetSignal.version += 1
-  saveWorld()
-}
-
 export function saveWorld() {
   try {
     window.localStorage.setItem(WORLD_STORAGE_KEY, JSON.stringify({

@@ -150,14 +150,14 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let height = window.innerHeight
     let dpr = canvasPixelRatio(width, height, 1.5)
     let flakes: Flake[] = []
-    let loosePowder: LoosePowder[] = []
+    const loosePowder: LoosePowder[] = []
     let lastLightningVersion = lightningGroundStrikeSignal.version
     let drifts = pitchWorld.drifts
     let driftSnapshot = new Float32Array(drifts.length)
     let idleCleared = false
     let lastAudioGainNode: GainNode | null = null
     let lastAudioTargetGain = Number.NaN
-    let wind: WindState = {
+    const wind: WindState = {
       value: 0,
       target: 0,
       phase: 'calm',

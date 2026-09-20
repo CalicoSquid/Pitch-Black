@@ -14,7 +14,10 @@ export function useIdleControls(delay = 3200) {
   }, [delay])
 
   useEffect(() => {
-    wake()
+    timer.current = window.setTimeout(() => {
+      timer.current = null
+      setVisible(false)
+    }, delay)
     // Every real interaction restarts one simple hide timer. Keeping focus on a
     // control must not pin the dock open; the user never needs to tap elsewhere.
     const events: (keyof WindowEventMap)[] = [
@@ -36,7 +39,7 @@ export function useIdleControls(delay = 3200) {
       if (timer.current !== null) window.clearTimeout(timer.current)
       timer.current = null
     }
-  }, [wake])
+  }, [delay, wake])
 
   return visible
 }
