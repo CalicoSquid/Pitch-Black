@@ -1,4 +1,4 @@
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioTransientGeneration, getPitchAudioTransientOutput } from '../audio/pitchAudio'
@@ -1228,7 +1228,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.35)
+    const surface = createCanvasSurface(canvas, ctx, 1.35)
     let raf = 0
     let currentId = -1
     let currentKind: RareEventKind | null = null
@@ -1244,12 +1244,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.35)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
       auroraField = null
     }
 
@@ -1284,7 +1279,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
           ufoHootTimer = null
         }
         ctx.clearRect(0, 0, width, height)
-        raf = requestAnimationFrame(draw)
+        raf = requestSceneFrame(draw)
         return
       }
 
@@ -1334,7 +1329,7 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
       const elapsed = time - startedAt
       const minFrameMs = currentKind === 'great-meteor' ? 0 : 30
       if (minFrameMs > 0 && time - lastRenderedAt < minFrameMs) {
-        raf = requestAnimationFrame(draw)
+        raf = requestSceneFrame(draw)
         return
       }
       lastRenderedAt = time
@@ -1360,20 +1355,21 @@ export function RareSkyEventLayer({ event, soundOn = false, onComplete }: LayerP
         return
       }
 
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
     }
 
     resize()
     window.addEventListener('resize', resize)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     return () => {
       disposed = true
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       if (boomTimer !== null) window.clearTimeout(boomTimer)
       if (owlTimer !== null) window.clearTimeout(owlTimer)
       if (ufoHootTimer !== null) window.clearTimeout(ufoHootTimer)
       window.removeEventListener('resize', resize)
+      surface.dispose()
     }
   }, [])
 
@@ -1396,7 +1392,7 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.25)
+    const surface = createCanvasSurface(canvas, ctx, 1.25)
     let raf = 0
     let currentId = -1
     let startedAt = 0
@@ -1480,12 +1476,7 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.25)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
       fogField = null
     }
 
@@ -1540,7 +1531,7 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
         currentId = -1
         completed = false
         ctx.clearRect(0, 0, width, height)
-        raf = requestAnimationFrame(draw)
+        raf = requestSceneFrame(draw)
         return
       }
 
@@ -1554,7 +1545,7 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
 
       const elapsed = time - startedAt
       if (time - lastRenderedAt < 30) {
-        raf = requestAnimationFrame(draw)
+        raf = requestSceneFrame(draw)
         return
       }
       lastRenderedAt = time
@@ -1568,15 +1559,16 @@ export function RareGroundEventLayer({ event, onComplete }: LayerProps) {
         return
       }
 
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
     }
 
     resize()
     window.addEventListener('resize', resize)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.removeEventListener('resize', resize)
+      surface.dispose()
     }
   }, [])
 

@@ -1,4 +1,4 @@
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef, useState } from 'react'
 import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
 import { usePitchAudioReadyNonce } from '../audio/usePitchAudioReadyNonce'
@@ -7,6 +7,7 @@ import { lightningGroundStrikeSignal } from '../world/lightningSignal'
 import { ensureWorld, pitchWorld, snowSurfaceYAtIndex, stormSignal } from '../world/worldState'
 
 type Flake = {
+  sprite: HTMLCanvasElement
   x: number
   y: number
   size: number
@@ -148,7 +149,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     let idleTimer = 0
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.5)
+    const surface = createCanvasSurface(canvas, ctx, 1.5)
     let flakes: Flake[] = []
     const loosePowder: LoosePowder[] = []
     let lastLightningVersion = lightningGroundStrikeSignal.version
@@ -183,12 +184,15 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
     }
 
 
+    // At most 128 tiny sprites (~512 KiB); never grow a cache per falling flake.
+    const snowSprites = new Map<number, HTMLCanvasElement>()
+
     const createFlake = (randomY = false): Flake => {
       const depth = Math.random()
       const size = 0.65 + depth * 2.5
       const alpha = 0.12 + depth * 0.34
       const seed = Math.random() * 1000
-      return {
+      const flake = {
         x: Math.random() * width,
         y: randomY ? Math.random() * height : -16 - Math.random() * 90,
         size,
@@ -210,18 +214,14 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         farFillStyle: `rgba(226, 233, 239, ${alpha * 0.65})`,
         strokeStyle: `rgba(231, 237, 242, ${alpha})`,
       }
+      return { ...flake, sprite: spriteFor(flake) }
     }
 
     const resetCanvas = () => {
       width = window.innerWidth
       height = window.innerHeight
       snowDepthCeiling = Math.min(52, Math.max(28, height * 0.06))
-      dpr = canvasPixelRatio(width, height, 1.5)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
 
       const count = Math.min(230, Math.max(85, Math.floor((width * height) / 7600)))
       flakes = Array.from({ length: count }, () => createFlake(true))
@@ -305,7 +305,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
 
     const erodeDrifts = () => {
       const currentWind = effectiveWind()
-      if (Math.abs(currentWind) < 0.30 || materialFrame % 5 !== 0) return
+      if (Math.abs(currentWind) < 0.30 || materialFrame % 5 !== 0 || drifts.length < 7) return
 
       const direction = currentWind > 0 ? 1 : -1
       const strength = Math.min(2.65, Math.abs(currentWind))
@@ -489,10 +489,8 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       }
     }
 
-    const drawFlake = (f: Flake) => {
+    const paintFlake = (ctx: CanvasRenderingContext2D, f: Omit<Flake, 'sprite'>) => {
       ctx.save()
-      ctx.translate(f.x, f.y)
-      ctx.rotate(f.rotation)
 
       if (f.depth < 0.26) {
         ctx.beginPath()
@@ -527,6 +525,32 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
         }
         ctx.stroke()
       }
+      ctx.restore()
+    }
+
+    const spriteFor = (f: Omit<Flake, 'sprite'>) => {
+      // Split bins at the dot/arm/branch boundaries to preserve all three styles.
+      const depthBin = f.depth < 0.26 ? Math.floor(f.depth / 0.26 * 4)
+        : f.depth < 0.55 ? 4 + Math.floor((f.depth - 0.26) / 0.29 * 5)
+          : 9 + Math.min(6, Math.floor((f.depth - 0.55) / 0.45 * 7))
+      const branchBin = Math.min(3, Math.floor((f.branch - 0.42) / 0.28 * 4))
+      const key = depthBin * 8 + branchBin * 2 + (f.seedSin > 0 ? 1 : 0)
+      const cached = snowSprites.get(key)
+      if (cached) return cached
+      const sprite = document.createElement('canvas')
+      sprite.width = sprite.height = 32
+      const spriteCtx = sprite.getContext('2d')!
+      spriteCtx.setTransform(2, 0, 0, 2, 16, 16)
+      paintFlake(spriteCtx, f)
+      snowSprites.set(key, sprite)
+      return sprite
+    }
+
+    const drawFlake = (f: Flake) => {
+      ctx.save()
+      ctx.translate(f.x, f.y)
+      ctx.rotate(f.rotation)
+      ctx.drawImage(f.sprite, -8, -8, 16, 16)
       ctx.restore()
     }
 
@@ -652,7 +676,7 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
           idleCleared = true
         }
         idleTimer = window.setTimeout(() => {
-          raf = requestAnimationFrame(draw)
+          raf = requestSceneFrame(draw)
         }, 200)
         return
       }
@@ -784,17 +808,18 @@ export function SnowScene({ soundOn, speed, active, alive }: { soundOn: boolean;
       loosePowder.length = powderWrite
 
       ctx.globalAlpha = 1
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
     }
 
     resetCanvas()
     window.addEventListener('resize', resetCanvas)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resetCanvas)
+      surface.dispose()
     }
   }, [])
 

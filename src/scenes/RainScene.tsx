@@ -1,4 +1,4 @@
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef, useState } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
@@ -170,7 +170,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
     let frame = 0
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.5)
+    const surface = createCanvasSurface(canvas, ctx, 1.5)
     let drops: RainDrop[] = []
     let ripples: Ripple[] = []
     let splashes: Splash[] = []
@@ -225,12 +225,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.5)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
       ensureWorld(width, height)
       if (driftSnapshot.length !== pitchWorld.drifts.length) driftSnapshot = new Float32Array(pitchWorld.drifts.length)
       if (waterSnapshot.length !== pitchWorld.water.length) waterSnapshot = new Float32Array(pitchWorld.water.length)
@@ -641,7 +636,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
           idleCleared = true
         }
         idleTimer = window.setTimeout(() => {
-          raf = requestAnimationFrame(draw)
+          raf = requestSceneFrame(draw)
         }, 200)
         return
       }
@@ -820,7 +815,7 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
       splashes.length = splashWrite
 
       ctx.globalAlpha = 1
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
     }
 
     const syncRainVisibility = () => {
@@ -852,12 +847,13 @@ export function RainScene({ soundOn, speed, active, alive, audioTest }: { soundO
     window.addEventListener('resize', resize)
     document.addEventListener('visibilitychange', syncRainVisibility)
     window.addEventListener('pageshow', syncRainVisibility)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      surface.dispose()
       document.removeEventListener('visibilitychange', syncRainVisibility)
       window.removeEventListener('pageshow', syncRainVisibility)
     }

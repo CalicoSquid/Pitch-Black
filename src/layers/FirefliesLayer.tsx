@@ -1,4 +1,4 @@
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import { fireflySignal } from '../world/fireflySignal'
 import { pitchWorld, snowSurfaceYAtIndex, worldIndexAt } from '../world/worldState'
@@ -88,7 +88,7 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.25)
+    const surface = createCanvasSurface(canvas, ctx, 1.25)
     let raf = 0
     let idleTimer = 0
     let last = performance.now()
@@ -104,12 +104,7 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.25)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
 
       if (activeRef.current && fireflies.length > targetPopulation + 2) {
         targetPopulation = populationForWidth(width, abundanceRef.current)
@@ -406,7 +401,7 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
     )
 
     const draw = (time: number) => {
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
       const dt = Math.min(0.05, Math.max(0.001, (time - last) / 1000))
       last = time
 
@@ -448,9 +443,9 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
           ctx.clearRect(0, 0, width, height)
           canvasCleared = true
         }
-        cancelAnimationFrame(raf)
+        cancelSceneFrame(raf)
         idleTimer = window.setTimeout(() => {
-          raf = requestAnimationFrame(draw)
+          raf = requestSceneFrame(draw)
         }, 220)
         return
       }
@@ -500,14 +495,15 @@ export function FirefliesLayer({ active, visible, abundance = 1 }: { active: boo
 
     resize()
     window.addEventListener('resize', resize)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     return () => {
       fireflySignal.count = 0
       fireflySignal.extinguishRequests.fill(0)
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      surface.dispose()
     }
   }, [])
 

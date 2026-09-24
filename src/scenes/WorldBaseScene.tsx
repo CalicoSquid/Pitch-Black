@@ -1,4 +1,4 @@
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { ambientLanternSignal, ambientTrainSignal } from '../world/ambientLifeSignal'
@@ -541,7 +541,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.5)
+
     let raf = 0
     let idleTimer = 0
     let last = performance.now()
@@ -550,16 +550,12 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
     let idleCleared = false
     let materialTick = 0
     const terrainCache = createTerrainRenderCache()
+    const surface = createCanvasSurface(canvas, ctx, 1.5, () => invalidateTerrainRenderCache(terrainCache))
 
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.5)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
       invalidateTerrainRenderCache(terrainCache)
       ensureWorld(width, height)
     }
@@ -573,7 +569,7 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
     }
 
     const draw = (time: number) => {
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
       const frameElapsed = time - last
       if (frameElapsed < minFrameMs) return
 
@@ -617,9 +613,9 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
           idleCleared = true
         }
         if (!ambientTrainSignal.active && !ambientLanternSignal.active) {
-          cancelAnimationFrame(raf)
+          cancelSceneFrame(raf)
           idleTimer = window.setTimeout(() => {
-            raf = requestAnimationFrame(draw)
+            raf = requestSceneFrame(draw)
           }, 220)
         }
         return
@@ -639,12 +635,13 @@ export function WorldBaseScene({ scene }: { scene: Scene }) {
 
     resize()
     window.addEventListener('resize', resize)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      surface.dispose()
     }
   }, [])
 

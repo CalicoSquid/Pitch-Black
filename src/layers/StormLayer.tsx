@@ -1,5 +1,5 @@
 import { seededFrac, clamp01, smoothStep, smoothPulse, fbm2D, drawDistantDepth } from '../world/distantLandscape'
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
@@ -373,7 +373,7 @@ export function StormLayer({
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.25)
+    const surface = createCanvasSurface(canvas, ctx, 1.25)
     const thunderTest = import.meta.env.DEV
       ? new URLSearchParams(window.location.search).get('thunder')
       : null
@@ -413,12 +413,7 @@ export function StormLayer({
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.25)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
       ensureWorld(width, height)
       upperLayer = createStormDensityLayer(width, height, 'upper')
       mainLayer = createStormDensityLayer(width, height, 'main')
@@ -718,7 +713,7 @@ export function StormLayer({
     }
 
     const draw = (time: number) => {
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
 
       const dt = Math.min(50, time - last)
       last = time
@@ -744,9 +739,9 @@ export function StormLayer({
         stormSignal.wind = 0
         stormSignal.flash = 0
         pitchWorld.cloudCover += (0.12 - pitchWorld.cloudCover) * 0.18
-        cancelAnimationFrame(raf)
+        cancelSceneFrame(raf)
         idleTimer = window.setTimeout(() => {
-          raf = requestAnimationFrame(draw)
+          raf = requestSceneFrame(draw)
         }, 180)
         return
       }
@@ -914,12 +909,13 @@ export function StormLayer({
     window.addEventListener('resize', resize)
     document.addEventListener('visibilitychange', syncStormVisibility)
     window.addEventListener('pageshow', syncStormVisibility)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      surface.dispose()
       document.removeEventListener('visibilitychange', syncStormVisibility)
       window.removeEventListener('pageshow', syncStormVisibility)
       stormSignal.mix = 0

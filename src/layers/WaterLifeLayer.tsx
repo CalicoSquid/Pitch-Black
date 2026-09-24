@@ -1,5 +1,5 @@
 import { drawLotus, advanceLotus, type Lotus } from './lotus'
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import type { Scene } from '../types'
 import { getPitchAudio, getPitchAudioTransientOutput } from '../audio/pitchAudio'
@@ -142,7 +142,7 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
 
     let width = 1
     let height = 1
-    let dpr = canvasPixelRatio(width, height, 1.25)
+    const surface = createCanvasSurface(canvas, ctx, 1.25)
     let raf = 0
     let idleTimer = 0
     let disposed = false
@@ -163,12 +163,7 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
       width = window.innerWidth
       for (const lotus of lotuses) lotus.x *= width / Math.max(1, previousWidth)
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.25)
-      canvas.width = Math.max(1, Math.round(width * dpr))
-      canvas.height = Math.max(1, Math.round(height * dpr))
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
     }
 
     const currentWaterY = () => standingWaterSurfaceY(height)
@@ -428,7 +423,7 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
       previousHadBubbles = hasBubbles
       previousWaterY = waterY
 
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
 
       // WaterLife is deliberately low-frequency compared with the weather
@@ -459,27 +454,28 @@ export function WaterLifeLayer({ scene, stormActive, soundOn, moonVisible, testM
         // Only discard elapsed time while truly idle. Active bubble physics must
         // receive the full scheduled dt rather than just the final rAF delay.
         if (!hasLife && test === null) lastFrame = performance.now()
-        raf = requestAnimationFrame(draw)
+        raf = requestSceneFrame(draw)
       }, wait)
     }
 
     const wakeForLightning = () => {
       window.clearTimeout(idleTimer)
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       nextFrameDue = performance.now()
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
     }
 
     resize()
     window.addEventListener('resize', resize)
     window.addEventListener(LIGHTNING_FLASH_EVENT, wakeForLightning)
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     return () => {
       disposed = true
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
       window.removeEventListener('resize', resize)
+      surface.dispose()
       window.removeEventListener(LIGHTNING_FLASH_EVENT, wakeForLightning)
       ctx.clearRect(0, 0, width, height)
     }

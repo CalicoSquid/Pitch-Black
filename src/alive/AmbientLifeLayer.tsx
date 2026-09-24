@@ -1,3 +1,4 @@
+import { requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { loadPitchAudioAsset } from '../audio/audioAssets'
 import { getPitchAudio, getPitchAudioOutput } from '../audio/pitchAudio'
@@ -149,12 +150,12 @@ function Train({ event, phase }: { event: AmbientLifeEvent; phase?: AlivePhase }
         clearAmbientTrain()
         return
       }
-      raf = requestAnimationFrame(frame)
+      raf = requestSceneFrame(frame)
     }
 
-    raf = requestAnimationFrame(frame)
+    raf = requestSceneFrame(frame)
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       clearAmbientTrain()
     }
   }, [event.id])
@@ -558,12 +559,12 @@ function Lantern({
         finish()
         return
       }
-      raf = requestAnimationFrame(frame)
+      raf = requestSceneFrame(frame)
     }
 
-    raf = requestAnimationFrame(frame)
+    raf = requestSceneFrame(frame)
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       clearAmbientLantern()
     }
   }, [event.id, onComplete])

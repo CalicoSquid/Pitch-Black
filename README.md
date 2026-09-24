@@ -12,6 +12,21 @@ On Windows, use `npm.cmd` if PowerShell blocks npm.ps1. To use an installed Edge
 
 The longer browser performance and soak scripts use the same pinned Playwright dependency. Start the app on port 4173, then run `node tests/browser-performance.mjs` or `node tests/browser-soak.mjs`. Reports go into ignored `.perf-tools/`; the tooling itself no longer lives there. Firefox/WebKit checks require installing those engines with Playwright. The lotus visual script uses the development server on port 5173.
 
+## v1.66.9 — adaptive rendering and Raspberry Pi performance
+
+- Snow keeps its detailed flakes, motion, wind and accumulation, but renders from a bounded cache of up to 128 tiny sprites rather than re-stroking every branch every frame.
+- Procedural canvases use one shared scheduler, capped at 60 fps on the full profile and 30 fps on balanced/low. Recognized ARM/Linux browsers start balanced, including Raspberry Pi Firefox; other devices start full and adapt to measured missed frame deadlines / drawing cost. RAM is not used as a graphics-performance proxy.
+- Persistent slow frames lower the profile for this page visit. Quality does not repeatedly rise and fall when scenes become idle. Canvas resolution changes preserve particles and world state; hidden tabs suspend procedural drawing and resume without creating duplicate loops.
+- Registered procedural canvas backing stores share a total budget: 16 million pixels full, 8 million balanced, 4 million low, with additional per-canvas caps. Small sprite/texture caches, the separately drawn sunrise landscape and browser compositor allocations are outside that budget. Text and controls keep native resolution; backdrop blur is disabled on reduced profiles.
+- For a conservative manual fallback, append `?quality=low` to the site URL (or `&quality=low` if it already has a query). `?quality=balanced` is also available. This is a per-visit setting, not a change to saved world/preferences.
+- Adds governor, scheduler, total pixel budget and browser snow regressions. Includes a guard for snow's directional terrain loop at exceptionally narrow viewport sizes. Service worker cache bumped with the release.
+
+Validation: production build, lint and 44 Node regression tests passed. Firefox production checks passed for controls at four viewport sizes, snow, 4K profile limits, scene changes, hidden/resume, storm/fireflies, resize, aurora and fog. Audio-dependent headless checks did not complete in this environment: the sunrise preview check fails identically on the original build, and the audio-resource check times out waiting for running audio sources. These are not reported as passing; audio and sunrise still need a device smoke test. At 1080p in the headless Firefox comparison, snow stayed near 60 fps while on-screen snow strokes fell from ~63,000/second to zero. At 4K the test environment fell back to low and remained functional (~15–16 fps); this is not a Raspberry Pi GPU benchmark or a promise of 30 fps on every device. The Pi's actual graphics-driver behavior still needs a device check after deployment.
+
+To reproduce the rendering check: `npx playwright install firefox`, start a production preview on port 4173, then run `node tests/browser-render-budget.mjs`. Optionally set `PERF_COMPARE_BASELINE=1` with the old production build on port 4174. Run the controls suite in Firefox with `npx playwright test --browser=firefox`.
+
+Deploy through the existing hosting workflow (`npm ci`, `npm run build`, publish `dist`). Once deployed, reload the Pi tab; a tab already open on the old JavaScript needs a reload to run the new code.
+
 ## v1.66.8 — bedside controls and release checks
 
 - Clock, nighttime sound and More remain visible while scene/fullscreen controls scroll separately, with a visible scrollbar and a trailing fade on small screens.

@@ -1652,3 +1652,12 @@ a.utility-menu-row { transition: none; }
   .dock-essentials { gap: 0; padding-left: 2px; }
   .dock-essentials button { min-width: 48px; padding: 0 5px; }
 }
+
+/* Keep controls inexpensive when the measured rendering budget is reduced. */
+html[data-render-quality="balanced"] .control-dock,
+html[data-render-quality="low"] .control-dock,
+html[data-render-quality="balanced"] .utility-panel,
+html[data-render-quality="low"] .utility-panel {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

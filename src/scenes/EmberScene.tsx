@@ -1,4 +1,4 @@
-import { canvasPixelRatio } from '../rendering/canvasBudget'
+import { createCanvasSurface, requestSceneFrame, cancelSceneFrame } from '../rendering/canvasBudget'
 import { useEffect, useRef } from 'react'
 import { setContinuousAudioTarget, getPitchAudio, getPitchAudioOutput, getPitchAudioTransientOutput } from '../audio/pitchAudio'
 import { lightningGroundStrikeSignal } from '../world/lightningSignal'
@@ -75,7 +75,7 @@ export function EmberScene({
 
     let width = window.innerWidth
     let height = window.innerHeight
-    let dpr = canvasPixelRatio(width, height, 1.5)
+    const surface = createCanvasSurface(canvas, ctx, 1.5)
     let raf = 0
     let idleTimer = 0
     let last = performance.now()
@@ -473,12 +473,7 @@ export function EmberScene({
     const resize = () => {
       width = window.innerWidth
       height = window.innerHeight
-      dpr = canvasPixelRatio(width, height, 1.5)
-      canvas.width = Math.round(width * dpr)
-      canvas.height = Math.round(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      surface.resize(width, height)
       ensureWorld(width, height)
       ensureFields()
     }
@@ -1080,7 +1075,7 @@ export function EmberScene({
         }
         idleTimer = window.setTimeout(() => {
           idleTimer = 0
-          raf = requestAnimationFrame(draw)
+          raf = requestSceneFrame(draw)
         }, 200)
         return
       }
@@ -1094,18 +1089,19 @@ export function EmberScene({
       drawImpact(time, dt, render)
       drawFire(time, dt, render)
 
-      raf = requestAnimationFrame(draw)
+      raf = requestSceneFrame(draw)
     }
 
-    raf = requestAnimationFrame(draw)
+    raf = requestSceneFrame(draw)
 
     window.addEventListener('resize', resize)
 
     return () => {
-      cancelAnimationFrame(raf)
+      cancelSceneFrame(raf)
       window.clearTimeout(idleTimer)
       window.clearTimeout(fireStopTimer)
       window.removeEventListener('resize', resize)
+      surface.dispose()
       if (whooshGain && audioCtx) whooshGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05)
       if (fireGain && audioCtx) setContinuousAudioTarget(fireGain.gain, 0, audioCtx.currentTime, 0.18)
       const endingWhooshSource = whooshSource
