@@ -9,11 +9,11 @@ export type PitchPreferences = {
   layers: LayerState
 }
 
-export type EntryMode = 'rain' | 'clock' | 'sunrise'
+export type EntryMode = 'rain' | 'clock' | 'sunrise' | 'sleep-timer'
 
 export function readEntryMode(search: string): EntryMode | null {
   const entry = new URLSearchParams(search).get('entry')
-  return entry === 'rain' || entry === 'clock' || entry === 'sunrise' ? entry : null
+  return entry === 'rain' || entry === 'clock' || entry === 'sunrise' || entry === 'sleep-timer' ? entry : null
 }
 
 export function applyEntryMode(preferences: PitchPreferences, entryMode: EntryMode | null): PitchPreferences {

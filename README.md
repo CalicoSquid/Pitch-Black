@@ -108,3 +108,8 @@ The crawlable utility pages intentionally satisfy distinct search intents instea
 - `/sleep-tools/` — hub linking the distinct utilities and the full This Quiet World experience.
 
 The service worker caches each static page under its own canonical route and bypasses `sitemap.xml`, `robots.txt` and `llms.txt` completely.
+
+
+## Sleep timer search entry
+
+`/sleep-timer/` is a static, crawlable entry page for the existing in-app sleep timer. Its CTA opens `/?entry=sleep-timer`, which presents the real `SleepTimerDialog`; timer state and fade behavior remain owned by `App.tsx` rather than duplicated on the static page.

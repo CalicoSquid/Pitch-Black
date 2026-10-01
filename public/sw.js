@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.68.0-search-intent'
+const CACHE_NAME = 'this-quiet-world-v1.68.0-sleep-timer-entry'
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -6,6 +6,7 @@ const APP_SHELL = [
   '/rain-sounds/',
   '/bedside-clock/',
   '/sleep-tools/',
+  '/sleep-timer/',
   '/black-screen/',
   '/black-screen-for-sleep/',
   '/manifest.webmanifest',
@@ -21,6 +22,7 @@ const STATIC_NAVIGATION_CACHE_KEYS = new Map([
   ['/rain-sounds/', '/rain-sounds/'],
   ['/bedside-clock/', '/bedside-clock/'],
   ['/sleep-tools/', '/sleep-tools/'],
+  ['/sleep-timer/', '/sleep-timer/'],
   ['/black-screen/', '/black-screen/'],
   ['/black-screen-for-sleep/', '/black-screen-for-sleep/'],
 ])

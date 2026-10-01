@@ -82,6 +82,16 @@
   status = 301
 
 [[redirects]]
+  from = "/sleep-timer"
+  to = "/sleep-timer/"
+  status = 301
+
+[[redirects]]
+  from = "/sleep-timer/index.html"
+  to = "/sleep-timer/"
+  status = 301
+
+[[redirects]]
   from = "/black-screen-with-clock"
   to = "/bedside-clock/"
   status = 301

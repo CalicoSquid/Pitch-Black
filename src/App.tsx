@@ -188,7 +188,7 @@ function App() {
   const worldEventsActive = testMode === null && !manualBlack
   const [showUtilities, setShowUtilities] = useState(false)
   const [sunrisePanelOpen, setSunrisePanelOpen] = useState(entryMode === 'sunrise')
-  const [sleepTimerPanelOpen, setSleepTimerPanelOpen] = useState(false)
+  const [sleepTimerPanelOpen, setSleepTimerPanelOpen] = useState(entryMode === 'sleep-timer')
   const [snoozeConfirmationVisible, setSnoozeConfirmationVisible] = useState(false)
   const [fullscreenOn, setFullscreenOn] = useState(false)
   const [sleepTimerEndAt, setSleepTimerEndAt] = useState<number | null>(null)

@@ -12,7 +12,8 @@ test('About remains consolidated and discovery pages are static, canonical HTML 
     ['../bedside-clock/index.html', 'https://thisquiet.world/bedside-clock/', 'Black Screen With Clock'],
     ['../black-screen/index.html', 'https://thisquiet.world/black-screen/', 'Black Screen'],
     ['../black-screen-for-sleep/index.html', 'https://thisquiet.world/black-screen-for-sleep/', 'Black Screen for Sleep'],
-    ['../sleep-tools/index.html', 'https://thisquiet.world/sleep-tools/', 'Free Sleep Tools — Black Screen, Rain Sounds & Night Clock'],
+    ['../sleep-tools/index.html', 'https://thisquiet.world/sleep-tools/', 'Free Sleep Tools — Black Screen, Rain Sounds, Sleep Timer & Night Clock'],
+    ['../sleep-timer/index.html', 'https://thisquiet.world/sleep-timer/', 'Online Sleep Timer for Rain & Ambient Sounds'],
   ]
   const titles = new Set()
   const descriptions = new Set()
@@ -32,22 +33,28 @@ test('About remains consolidated and discovery pages are static, canonical HTML 
 })
 
 test('discovery links, sitemap, Vite entries and redirects all agree on canonical routes', async () => {
-  const [about, sitemap, vite, netlify, rain, bedside, hub, black, sleepBlack, app] = await Promise.all([
+  const [about, sitemap, vite, netlify, rain, bedside, hub, sleepTimer, black, sleepBlack, app] = await Promise.all([
     text('../about/index.html'), text('../public/sitemap.xml'), text('../vite.config.ts'), text('../netlify.toml'),
-    text('../rain-sounds/index.html'), text('../bedside-clock/index.html'), text('../sleep-tools/index.html'),
+    text('../rain-sounds/index.html'), text('../bedside-clock/index.html'), text('../sleep-tools/index.html'), text('../sleep-timer/index.html'),
     text('../black-screen/index.html'), text('../black-screen-for-sleep/index.html'), text('../src/App.tsx'),
   ])
-  const routes = ['/rain-sounds/', '/bedside-clock/', '/black-screen/', '/black-screen-for-sleep/', '/sleep-tools/']
+  const routes = ['/rain-sounds/', '/bedside-clock/', '/black-screen/', '/black-screen-for-sleep/', '/sleep-tools/', '/sleep-timer/']
   for (const route of routes) assert.ok(sitemap.includes(`https://thisquiet.world${route}`))
-  for (const route of ['/rain-sounds/', '/bedside-clock/', '/black-screen/', '/black-screen-for-sleep/', '/sleep-tools/']) {
+  for (const route of ['/rain-sounds/', '/bedside-clock/', '/black-screen/', '/black-screen-for-sleep/', '/sleep-tools/', '/sleep-timer/']) {
     assert.ok(about.includes(`href="${route}"`))
   }
-  for (const entry of ['rain-sounds/index.html', 'bedside-clock/index.html', 'black-screen/index.html', 'black-screen-for-sleep/index.html', 'sleep-tools/index.html']) {
+  for (const entry of ['rain-sounds/index.html', 'bedside-clock/index.html', 'black-screen/index.html', 'black-screen-for-sleep/index.html', 'sleep-tools/index.html', 'sleep-timer/index.html']) {
     assert.ok(vite.includes(`'${entry}'`))
   }
-  for (const route of ['/rain-sounds', '/bedside-clock', '/black-screen', '/black-screen-for-sleep', '/sleep-tools']) assert.ok(netlify.includes(`from = "${route}"`))
-  for (const route of ['/black-screen/', '/black-screen-for-sleep/', '/rain-sounds/', '/bedside-clock/']) assert.ok(hub.includes(`href="${route}"`))
+  for (const route of ['/rain-sounds', '/bedside-clock', '/black-screen', '/black-screen-for-sleep', '/sleep-tools', '/sleep-timer']) assert.ok(netlify.includes(`from = "${route}"`))
+  for (const route of ['/black-screen/', '/black-screen-for-sleep/', '/rain-sounds/', '/bedside-clock/', '/sleep-timer/']) assert.ok(hub.includes(`href="${route}"`))
   assert.ok(app.includes('href="/sleep-tools/"'))
+  assert.ok(app.includes("entryMode === 'sleep-timer'"))
+  assert.ok(sleepTimer.includes('href="/?entry=sleep-timer"'))
+  assert.match(sleepTimer, /30 minutes/)
+  assert.match(sleepTimer, /final minute/)
+  assert.ok(rain.includes('href="/sleep-timer/"'))
+  assert.ok(sleepBlack.includes('href="/sleep-timer/"'))
   assert.ok(rain.includes('href="/?entry=rain"'))
   assert.ok(bedside.includes('href="/?entry=sunrise"'))
   assert.match(rain, /id="rain-audio"/)
@@ -68,7 +75,7 @@ test('discovery links, sitemap, Vite entries and redirects all agree on canonica
 
 test('service worker gives every static page its own cache key and never falls back to home for those routes', async () => {
   const sw = await text('../public/sw.js')
-  for (const route of ['/about/', '/rain-sounds/', '/bedside-clock/', '/sleep-tools/', '/black-screen/', '/black-screen-for-sleep/']) {
+  for (const route of ['/about/', '/rain-sounds/', '/bedside-clock/', '/sleep-tools/', '/sleep-timer/', '/black-screen/', '/black-screen-for-sleep/']) {
     assert.ok(sw.includes(`['${route}', '${route}']`))
   }
   assert.match(sw, /if \(staticCacheKey\)[\s\S]*status: 503/)
@@ -154,7 +161,7 @@ test('slashless static navigations cache under their canonical page key, never /
   const fetchHandler = handlers.get('fetch')
   assert.equal(typeof fetchHandler, 'function')
 
-  for (const route of ['/about', '/rain-sounds', '/bedside-clock', '/sleep-tools', '/black-screen', '/black-screen-for-sleep']) {
+  for (const route of ['/about', '/rain-sounds', '/bedside-clock', '/sleep-tools', '/sleep-timer', '/black-screen', '/black-screen-for-sleep']) {
     writes.length = 0
     const waits = []
     let responsePromise

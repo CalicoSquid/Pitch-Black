@@ -34,6 +34,9 @@ test('discovery entry intents apply only their advertised initial setting', () =
 
   const sunrise = entry.applyEntryMode(saved, 'sunrise')
   assert.equal(sunrise, saved)
+
+  const sleepTimer = entry.applyEntryMode(saved, 'sleep-timer')
+  assert.equal(sleepTimer, saved)
 })
 
 test('incidental entry settings do not overwrite saved preferences, while deliberate unrelated changes do persist', () => {
@@ -58,5 +61,6 @@ test('entry query parsing ignores unrelated values', () => {
   assert.equal(entry.readEntryMode('?entry=rain'), 'rain')
   assert.equal(entry.readEntryMode('?entry=clock&x=1'), 'clock')
   assert.equal(entry.readEntryMode('?entry=sunrise'), 'sunrise')
+  assert.equal(entry.readEntryMode('?entry=sleep-timer'), 'sleep-timer')
   assert.equal(entry.readEntryMode('?entry=storm'), null)
 })

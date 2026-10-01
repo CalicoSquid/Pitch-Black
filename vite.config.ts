@@ -23,6 +23,7 @@ export default defineConfig({
         blackScreen: resolve(process.cwd(), 'black-screen/index.html'),
         blackScreenForSleep: resolve(process.cwd(), 'black-screen-for-sleep/index.html'),
         sleepTools: resolve(process.cwd(), 'sleep-tools/index.html'),
+        sleepTimer: resolve(process.cwd(), 'sleep-timer/index.html'),
       },
     },
   },
