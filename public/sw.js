@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.67.0-search-doors'
+const CACHE_NAME = 'this-quiet-world-v1.67.1-static-bypass'
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -23,6 +23,15 @@ const STATIC_NAVIGATION_CACHE_KEYS = new Map([
   ['/sleep-tools/', '/sleep-tools/'],
   ['/black-screen/', '/black-screen/'],
   ['/black-screen-for-sleep/', '/black-screen-for-sleep/'],
+])
+
+// These machine-readable files must never be treated as SPA navigations.
+// Returning without respondWith() lets the browser/crawler fetch the origin
+// response directly, preserving XML/plain-text content types and bodies.
+const NETWORK_ONLY_STATIC_PATHS = new Set([
+  '/sitemap.xml',
+  '/robots.txt',
+  '/llms.txt',
 ])
 
 function normalizeNavigationPath(pathname) {
@@ -58,6 +67,10 @@ self.addEventListener('fetch', (event) => {
   // A worker registered by a previous local production preview can otherwise
   // keep serving stale /src modules even after Vite has restarted.
   if (url.pathname.startsWith('/src/') || url.pathname.startsWith('/@') || url.pathname.startsWith('/node_modules/.vite/')) return
+
+  // Do not let the SPA HTML fallback swallow crawler/static endpoints when
+  // they are opened directly in a browser under service-worker control.
+  if (NETWORK_ONLY_STATIC_PATHS.has(url.pathname)) return
 
   if (request.mode === 'navigate') {
     const staticCacheKey = STATIC_NAVIGATION_CACHE_KEYS.get(normalizeNavigationPath(url.pathname))

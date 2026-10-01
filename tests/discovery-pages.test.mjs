@@ -68,6 +68,51 @@ test('service worker gives every static page its own cache key and never falls b
 })
 
 
+
+test('service worker bypasses sitemap and crawler text files instead of feeding them to the SPA fallback', async () => {
+  const sw = await text('../public/sw.js')
+  for (const route of ['/sitemap.xml', '/robots.txt', '/llms.txt']) {
+    assert.ok(sw.includes(`'${route}'`))
+  }
+  assert.match(sw, /NETWORK_ONLY_STATIC_PATHS\.has\(url\.pathname\)\) return/)
+
+  const handlers = new Map()
+  const context = {
+    URL,
+    Set,
+    Map,
+    Promise,
+    Response,
+    self: {
+      location: { origin: 'https://thisquiet.world' },
+      addEventListener(type, handler) { handlers.set(type, handler) },
+      skipWaiting() { return Promise.resolve() },
+      clients: { claim() { return Promise.resolve() } },
+    },
+    caches: {
+      keys: async () => [],
+      delete: async () => true,
+      match: async () => undefined,
+      open: async () => ({ addAll: async () => {}, put: async () => {} }),
+    },
+    fetch: async () => { throw new Error('worker must not fetch bypassed static endpoints') },
+  }
+  vm.runInNewContext(sw, context)
+  const fetchHandler = handlers.get('fetch')
+
+  for (const route of ['/sitemap.xml', '/robots.txt', '/llms.txt']) {
+    let responded = false
+    let waited = false
+    fetchHandler({
+      request: { method: 'GET', mode: 'navigate', url: `https://thisquiet.world${route}` },
+      respondWith() { responded = true },
+      waitUntil() { waited = true },
+    })
+    assert.equal(responded, false, `${route} must bypass service-worker response handling`)
+    assert.equal(waited, false, `${route} must not be cached by the service worker`)
+  }
+})
+
 test('slashless static navigations cache under their canonical page key, never /index.html', async () => {
   const sw = await text('../public/sw.js')
   const handlers = new Map()

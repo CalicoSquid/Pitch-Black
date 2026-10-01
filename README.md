@@ -90,3 +90,8 @@ Deploy through the existing hosting workflow (`npm ci`, `npm run build`, publish
 - Runtime cache writes remain owned by `event.waitUntil()` but no longer sit on the successful response path.
 
 The approved recordings and core rare-event/weather visuals were not replaced or restyled in this pass.
+
+
+### Service-worker crawler endpoint bypass
+
+`/sitemap.xml`, `/robots.txt`, and `/llms.txt` bypass the service worker completely. This prevents a browser with an older cached app shell from displaying the SPA under those machine-readable URLs and preserves the origin response/content type for crawlers. The service-worker cache version is bumped whenever this routing changes so existing clients activate the corrected worker.
