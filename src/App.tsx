@@ -1102,6 +1102,14 @@ function App() {
               : <span className="utility-menu-state">Unavailable</span>}
           </button>
 
+          <a className="utility-menu-row utility-menu-link" href="/sleep-tools/">
+            <span className="utility-menu-copy">
+              <strong>Sleep tools</strong>
+              <small>Black screen, rain and bedside clock</small>
+            </span>
+            <span className="utility-menu-state" aria-hidden="true">›</span>
+          </a>
+
           <a className="utility-menu-row utility-menu-link" href="/about/">
             <span className="utility-menu-copy">
               <strong>About</strong>

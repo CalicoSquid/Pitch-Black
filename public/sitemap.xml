@@ -1,15 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://thisquiet.world/</loc>
-  </url>
-  <url>
-    <loc>https://thisquiet.world/about/</loc>
-  </url>
-  <url>
-    <loc>https://thisquiet.world/rain-sounds/</loc>
-  </url>
-  <url>
-    <loc>https://thisquiet.world/bedside-clock/</loc>
-  </url>
+  <url><loc>https://thisquiet.world/</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://thisquiet.world/sleep-tools/</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://thisquiet.world/black-screen/</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://thisquiet.world/black-screen-for-sleep/</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://thisquiet.world/rain-sounds/</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://thisquiet.world/bedside-clock/</loc><lastmod>2026-10-01</lastmod></url>
+  <url><loc>https://thisquiet.world/about/</loc><lastmod>2026-10-01</lastmod></url>
 </urlset>

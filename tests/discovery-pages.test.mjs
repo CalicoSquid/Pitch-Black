@@ -8,8 +8,11 @@ async function text(path) { return readFile(new URL(path, import.meta.url), 'utf
 test('About remains consolidated and discovery pages are static, canonical HTML entries', async () => {
   await assert.rejects(access(new URL('../public/about/index.html', import.meta.url)))
   const pages = [
-    ['../rain-sounds/index.html', 'https://thisquiet.world/rain-sounds/', 'Rain Sounds for Sleep with a Dark Screen'],
-    ['../bedside-clock/index.html', 'https://thisquiet.world/bedside-clock/', 'A Dim Bedside Clock & Sunrise Wake-Up'],
+    ['../rain-sounds/index.html', 'https://thisquiet.world/rain-sounds/', 'Rain Sounds for Sleep on a Dark Screen'],
+    ['../bedside-clock/index.html', 'https://thisquiet.world/bedside-clock/', 'Dim Bedside Clock for Sleep & Sunrise Wake-Up'],
+    ['../black-screen/index.html', 'https://thisquiet.world/black-screen/', 'Black Screen'],
+    ['../black-screen-for-sleep/index.html', 'https://thisquiet.world/black-screen-for-sleep/', 'Black Screen for Sleep'],
+    ['../sleep-tools/index.html', 'https://thisquiet.world/sleep-tools/', 'Free Sleep Screen Tools'],
   ]
   const titles = new Set()
   const descriptions = new Set()
@@ -24,31 +27,40 @@ test('About remains consolidated and discovery pages are static, canonical HTML 
     assert.ok(title && description)
     titles.add(title); descriptions.add(description)
   }
-  assert.equal(titles.size, 2)
-  assert.equal(descriptions.size, 2)
+  assert.equal(titles.size, pages.length)
+  assert.equal(descriptions.size, pages.length)
 })
 
 test('discovery links, sitemap, Vite entries and redirects all agree on canonical routes', async () => {
-  const [about, sitemap, vite, netlify, rain, bedside] = await Promise.all([
+  const [about, sitemap, vite, netlify, rain, bedside, hub, black, sleepBlack, app] = await Promise.all([
     text('../about/index.html'), text('../public/sitemap.xml'), text('../vite.config.ts'), text('../netlify.toml'),
-    text('../rain-sounds/index.html'), text('../bedside-clock/index.html'),
+    text('../rain-sounds/index.html'), text('../bedside-clock/index.html'), text('../sleep-tools/index.html'),
+    text('../black-screen/index.html'), text('../black-screen-for-sleep/index.html'), text('../src/App.tsx'),
   ])
-  for (const route of ['/rain-sounds/', '/bedside-clock/']) {
+  const routes = ['/rain-sounds/', '/bedside-clock/', '/black-screen/', '/black-screen-for-sleep/', '/sleep-tools/']
+  for (const route of routes) assert.ok(sitemap.includes(`https://thisquiet.world${route}`))
+  for (const route of ['/rain-sounds/', '/bedside-clock/', '/black-screen/', '/black-screen-for-sleep/', '/sleep-tools/']) {
     assert.ok(about.includes(`href="${route}"`))
-    assert.ok(sitemap.includes(`https://thisquiet.world${route}`))
   }
-  assert.ok(vite.includes("'rain-sounds/index.html'"))
-  assert.ok(vite.includes("'bedside-clock/index.html'"))
-  assert.ok(netlify.includes('from = "/rain-sounds"'))
-  assert.ok(netlify.includes('from = "/bedside-clock"'))
+  for (const entry of ['rain-sounds/index.html', 'bedside-clock/index.html', 'black-screen/index.html', 'black-screen-for-sleep/index.html', 'sleep-tools/index.html']) {
+    assert.ok(vite.includes(`'${entry}'`))
+  }
+  for (const route of ['/rain-sounds', '/bedside-clock', '/black-screen', '/black-screen-for-sleep', '/sleep-tools']) assert.ok(netlify.includes(`from = "${route}"`))
+  for (const route of ['/black-screen/', '/black-screen-for-sleep/', '/rain-sounds/', '/bedside-clock/']) assert.ok(hub.includes(`href="${route}"`))
+  assert.ok(app.includes('href="/sleep-tools/"'))
   assert.ok(rain.includes('href="/?entry=rain"'))
   assert.ok(bedside.includes('href="/?entry=clock"'))
   assert.ok(bedside.includes('href="/?entry=sunrise"'))
+  assert.match(black, /id="go-black"/)
+  assert.match(black, /requestFullscreen/)
+  assert.match(black, /navigator\.wakeLock\.request\('screen'\)/)
+  assert.match(sleepBlack, /id="with-clock"/)
+  assert.match(sleepBlack, /Intl\.DateTimeFormat/)
 })
 
 test('service worker gives every static page its own cache key and never falls back to home for those routes', async () => {
   const sw = await text('../public/sw.js')
-  for (const route of ['/about/', '/rain-sounds/', '/bedside-clock/']) {
+  for (const route of ['/about/', '/rain-sounds/', '/bedside-clock/', '/sleep-tools/', '/black-screen/', '/black-screen-for-sleep/']) {
     assert.ok(sw.includes(`['${route}', '${route}']`))
   }
   assert.match(sw, /if \(staticCacheKey\)[\s\S]*status: 503/)
@@ -89,7 +101,7 @@ test('slashless static navigations cache under their canonical page key, never /
   const fetchHandler = handlers.get('fetch')
   assert.equal(typeof fetchHandler, 'function')
 
-  for (const route of ['/about', '/rain-sounds', '/bedside-clock']) {
+  for (const route of ['/about', '/rain-sounds', '/bedside-clock', '/sleep-tools', '/black-screen', '/black-screen-for-sleep']) {
     writes.length = 0
     const waits = []
     let responsePromise

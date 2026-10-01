@@ -50,3 +50,33 @@
   from = "/bedside-clock/index.html"
   to = "/bedside-clock/"
   status = 301
+
+[[redirects]]
+  from = "/black-screen"
+  to = "/black-screen/"
+  status = 301
+
+[[redirects]]
+  from = "/black-screen/index.html"
+  to = "/black-screen/"
+  status = 301
+
+[[redirects]]
+  from = "/black-screen-for-sleep"
+  to = "/black-screen-for-sleep/"
+  status = 301
+
+[[redirects]]
+  from = "/black-screen-for-sleep/index.html"
+  to = "/black-screen-for-sleep/"
+  status = 301
+
+[[redirects]]
+  from = "/sleep-tools"
+  to = "/sleep-tools/"
+  status = 301
+
+[[redirects]]
+  from = "/sleep-tools/index.html"
+  to = "/sleep-tools/"
+  status = 301

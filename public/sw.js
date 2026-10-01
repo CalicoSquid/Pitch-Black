@@ -1,10 +1,13 @@
-const CACHE_NAME = 'this-quiet-world-v1.66.9-adaptive-rendering'
+const CACHE_NAME = 'this-quiet-world-v1.67.0-search-doors'
 const APP_SHELL = [
   '/',
   '/index.html',
   '/about/',
   '/rain-sounds/',
   '/bedside-clock/',
+  '/sleep-tools/',
+  '/black-screen/',
+  '/black-screen-for-sleep/',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/icon-192.png',
@@ -17,6 +20,9 @@ const STATIC_NAVIGATION_CACHE_KEYS = new Map([
   ['/about/', '/about/'],
   ['/rain-sounds/', '/rain-sounds/'],
   ['/bedside-clock/', '/bedside-clock/'],
+  ['/sleep-tools/', '/sleep-tools/'],
+  ['/black-screen/', '/black-screen/'],
+  ['/black-screen-for-sleep/', '/black-screen-for-sleep/'],
 ])
 
 function normalizeNavigationPath(pathname) {
