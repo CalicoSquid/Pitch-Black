@@ -95,3 +95,16 @@ The approved recordings and core rare-event/weather visuals were not replaced or
 ### Service-worker crawler endpoint bypass
 
 `/sitemap.xml`, `/robots.txt`, and `/llms.txt` bypass the service worker completely. This prevents a browser with an older cached app shell from displaying the SPA under those machine-readable URLs and preserves the origin response/content type for crawlers. The service-worker cache version is bumped whenever this routing changes so existing clients activate the corrected worker.
+
+
+## Search-intent utility pages (2026-10-01)
+
+The crawlable utility pages intentionally satisfy distinct search intents instead of duplicating the main ambient app:
+
+- `/black-screen/` — pure #000000 fullscreen utility, with content for OLED/AMOLED darkness, display checks, second-monitor use, cleaning, focus and sleep.
+- `/black-screen-for-sleep/` — bedside-focused pure black screen with optional dim clock.
+- `/rain-sounds/` — standalone steady/heavy rain player with volume, black-screen mode, fullscreen and optional screen wake lock. No sleep timer is included yet.
+- `/bedside-clock/` — standalone dim black-screen night clock with adjustable glow, 12/24-hour display, fullscreen and optional screen wake lock. `/black-screen-with-clock` and `/night-clock` redirect here.
+- `/sleep-tools/` — hub linking the distinct utilities and the full This Quiet World experience.
+
+The service worker caches each static page under its own canonical route and bypasses `sitemap.xml`, `robots.txt` and `llms.txt` completely.

@@ -80,3 +80,23 @@
   from = "/sleep-tools/index.html"
   to = "/sleep-tools/"
   status = 301
+
+[[redirects]]
+  from = "/black-screen-with-clock"
+  to = "/bedside-clock/"
+  status = 301
+
+[[redirects]]
+  from = "/black-screen-with-clock/"
+  to = "/bedside-clock/"
+  status = 301
+
+[[redirects]]
+  from = "/night-clock"
+  to = "/bedside-clock/"
+  status = 301
+
+[[redirects]]
+  from = "/night-clock/"
+  to = "/bedside-clock/"
+  status = 301

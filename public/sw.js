@@ -1,4 +1,4 @@
-const CACHE_NAME = 'this-quiet-world-v1.67.1-static-bypass'
+const CACHE_NAME = 'this-quiet-world-v1.68.0-search-intent'
 const APP_SHELL = [
   '/',
   '/index.html',

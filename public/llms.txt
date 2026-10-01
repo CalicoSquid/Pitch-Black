@@ -7,8 +7,8 @@
 - Sleep tools hub: https://thisquiet.world/sleep-tools/
 - Pure black screen: https://thisquiet.world/black-screen/
 - Black screen for sleep: https://thisquiet.world/black-screen-for-sleep/
-- Rain sounds for sleep: https://thisquiet.world/rain-sounds/
-- Dim bedside clock and sunrise wake-up: https://thisquiet.world/bedside-clock/
+- Rain sounds for sleep with black-screen mode: https://thisquiet.world/rain-sounds/
+- Black screen with clock / dim bedside night clock: https://thisquiet.world/bedside-clock/
 - About and how it works: https://thisquiet.world/about/
 
 ## What it is

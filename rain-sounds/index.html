@@ -2,73 +2,160 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#000000" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
   <link rel="canonical" href="https://thisquiet.world/rain-sounds/" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="description" content="Free rain sounds for sleep on a dark black screen, with optional storms, simple volume controls and no ads. Open manual Rain in This Quiet World." />
+  <meta name="description" content="Free rain sounds for sleep with a black screen. Play steady or heavy rain in your browser, adjust volume, hide the controls and go fullscreen. No ads or account." />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="This Quiet World" />
   <meta property="og:url" content="https://thisquiet.world/rain-sounds/" />
-  <meta property="og:title" content="Rain Sounds for Sleep — Dark Screen, No Ads | This Quiet World" />
-  <meta property="og:description" content="A quiet guide to TQW's dark rain scene, optional storms, Alive mode and sound controls." />
+  <meta property="og:title" content="Rain Sounds for Sleep — Black Screen, No Ads" />
+  <meta property="og:description" content="Play free steady or heavy rain on a black screen with simple nighttime controls." />
   <meta property="og:image" content="https://thisquiet.world/social-preview.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Rain Sounds for Sleep — Dark Screen, No Ads | This Quiet World" />
-  <meta name="twitter:description" content="A dark rain scene with optional storms, Alive mode and simple sound controls." />
+  <meta name="twitter:title" content="Rain Sounds for Sleep — Black Screen, No Ads" />
+  <meta name="twitter:description" content="Free rain sounds with a black screen, fullscreen mode and no bright video player." />
   <meta name="twitter:image" content="https://thisquiet.world/social-preview.png" />
-  <title>Rain Sounds for Sleep — Dark Screen, No Ads | This Quiet World</title>
+  <title>Rain Sounds for Sleep — Black Screen, No Ads | This Quiet World</title>
   <style>
-    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#000;color:rgba(255,255,255,.72);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7}main{width:min(680px,calc(100% - 40px));margin:0 auto;padding:72px 0 88px}a{color:rgba(255,255,255,.7)}.back{display:inline-block;margin-bottom:48px;color:rgba(255,255,255,.35);font-size:12px;letter-spacing:.08em;text-decoration:none}h1{margin:0 0 10px;font-size:clamp(28px,6vw,44px);font-weight:400;line-height:1.14;letter-spacing:.015em}h2{margin:42px 0 8px;font-size:17px;font-weight:500;color:rgba(255,255,255,.78)}p{margin:0 0 16px;color:rgba(255,255,255,.48)}.lead{font-size:18px;color:rgba(255,255,255,.62)}ul{padding-left:20px;color:rgba(255,255,255,.46)}li{margin:7px 0}.actions{display:flex;flex-wrap:wrap;gap:18px;margin-top:30px}.enter{display:inline-block;padding:10px 0;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.18)}.secondary{color:rgba(255,255,255,.38)}.note{margin-top:30px;padding-top:18px;border-top:1px solid rgba(255,255,255,.07);font-size:13px;color:rgba(255,255,255,.32)}small{display:block;margin-top:56px;color:rgba(255,255,255,.22)}
+    :root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#000;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{min-height:100vh;min-height:100dvh}.screen{position:fixed;inset:0;background:#000}.panel{position:relative;z-index:2;width:min(760px,calc(100% - 36px));margin:0 auto;padding:clamp(54px,8vh,88px) 0 88px;color:rgba(255,255,255,.72);line-height:1.7;transition:opacity .35s ease}.eyebrow{display:inline-block;margin-bottom:32px;color:rgba(255,255,255,.32);font-size:12px;letter-spacing:.11em;text-decoration:none;text-transform:uppercase}h1{max-width:720px;margin:0 0 12px;font-size:clamp(34px,7vw,56px);font-weight:350;line-height:1.03;letter-spacing:-.025em}.lead{max-width:670px;margin:0 0 28px;color:rgba(255,255,255,.53);font-size:18px}.player{margin:30px 0 16px;padding:18px;border:1px solid rgba(255,255,255,.09);border-radius:18px;background:rgba(255,255,255,.025)}.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.button,select{border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.86);padding:11px 16px;font:inherit}.button{cursor:pointer}.button:hover{background:rgba(255,255,255,.13)}.button.secondary{background:transparent;color:rgba(255,255,255,.48)}select{appearance:none;padding-right:34px;background-image:linear-gradient(45deg,transparent 50%,rgba(255,255,255,.45) 50%),linear-gradient(135deg,rgba(255,255,255,.45) 50%,transparent 50%);background-position:calc(100% - 15px) 17px,calc(100% - 10px) 17px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}.volume{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;margin-top:18px;color:rgba(255,255,255,.4);font-size:13px}.volume input{width:100%;accent-color:#b8c4cb}.status{min-height:24px;margin-top:12px;color:rgba(255,255,255,.34);font-size:13px}.button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:1px solid rgba(255,255,255,.72);outline-offset:4px}.copy{margin-top:60px;padding-top:26px;border-top:1px solid rgba(255,255,255,.07)}h2{margin:36px 0 8px;color:rgba(255,255,255,.78);font-size:18px;font-weight:500}p{margin:0 0 15px;color:rgba(255,255,255,.43)}ul{padding-left:20px;color:rgba(255,255,255,.43)}li{margin:6px 0}.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:28px}.link-card{padding:16px;border:1px solid rgba(255,255,255,.08);border-radius:14px;color:rgba(255,255,255,.56);text-decoration:none}.link-card strong{display:block;margin-bottom:3px;color:rgba(255,255,255,.75);font-weight:500}.link-card span{font-size:13px;color:rgba(255,255,255,.34)}.blackout .panel{opacity:0;pointer-events:none}.wake-hint{position:fixed;z-index:3;right:18px;bottom:18px;opacity:0;color:rgba(255,255,255,.14);font-size:11px;pointer-events:none;transition:opacity .3s ease}.blackout .wake-hint{opacity:1}.blackout.idle .wake-hint{opacity:0}@media (prefers-reduced-motion:reduce){.panel,.wake-hint{transition:none}}
   </style>
   <script type="application/ld+json">
-  {
-    "@context":"https://schema.org",
-    "@type":"WebPage",
-    "@id":"https://thisquiet.world/rain-sounds/#webpage",
-    "url":"https://thisquiet.world/rain-sounds/",
-    "name":"Rain Sounds for Sleep — Dark Screen, No Ads",
-    "description":"How to use This Quiet World for a dark manual rain scene, optional storms, Alive mode and adjustable ambient sound.",
-    "isPartOf":{"@id":"https://thisquiet.world/#website"},
-    "about":{"@id":"https://thisquiet.world/#app"},
-    "inLanguage":"en"
-  }
+  {"@context":"https://schema.org","@graph":[
+    {"@type":"WebApplication","@id":"https://thisquiet.world/rain-sounds/#app","url":"https://thisquiet.world/rain-sounds/","name":"Rain Sounds for Sleep","applicationCategory":"LifestyleApplication","operatingSystem":"Any","browserRequirements":"A modern browser with audio playback.","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"A free browser rain player with steady or heavy rain, volume control, black-screen mode and fullscreen."},
+    {"@type":"WebPage","@id":"https://thisquiet.world/rain-sounds/#webpage","url":"https://thisquiet.world/rain-sounds/","name":"Rain Sounds for Sleep — Black Screen, No Ads","description":"Play free rain sounds for sleep with a black screen, simple volume controls and no ads.","isPartOf":{"@id":"https://thisquiet.world/#website"},"mainEntity":{"@id":"https://thisquiet.world/rain-sounds/#app"},"inLanguage":"en"},
+    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"This Quiet World","item":"https://thisquiet.world/"},{"@type":"ListItem","position":2,"name":"Sleep tools","item":"https://thisquiet.world/sleep-tools/"},{"@type":"ListItem","position":3,"name":"Rain sounds for sleep","item":"https://thisquiet.world/rain-sounds/"}]}
+  ]}
   </script>
 </head>
 <body>
-  <main>
-    <a class="back" href="/sleep-tools/">← quiet sleep tools</a>
-    <h1>Rain Sounds for Sleep on a Dark Screen</h1>
-    <p class="lead">Steady rain for sleep, with a mostly black screen and no bright video player left glowing beside the bed.</p>
-    <p>This Quiet World can be used as a simple bedside rain screen: a restrained nighttime landscape, real rain recordings, and no bright player interface left on display once the controls fade.</p>
+  <div class="screen" aria-hidden="true"></div>
+  <main class="panel">
+    <a class="eyebrow" href="/sleep-tools/">← quiet sleep tools</a>
+    <h1>Rain Sounds for Sleep — Black Screen</h1>
+    <p class="lead">Play steady or heavier rain directly in your browser, lower the volume, then hide everything behind a pure black screen. No music, talking, ads or account.</p>
 
-    <h2>Start with manual Rain</h2>
-    <p>Choose <strong>Rain</strong> when you want the weather to stay under your control. Opening Rain from this page changes only the world to manual Rain mode. It does not turn sound on for you, change your saved volume, remove your other saved atmosphere choices, or silently replace unrelated preferences.</p>
-    <p>To hear the rain, use the Sound control after you enter. Browsers require that first interaction before they will reliably start audio.</p>
+    <section class="player" aria-label="Rain sounds player">
+      <div class="row">
+        <button class="button" id="play" type="button">Play rain</button>
+        <select id="rain-type" aria-label="Rain sound">
+          <option value="/audio/rain-steady-loop.mp3">Steady rain</option>
+          <option value="/audio/rain-heavy-loop.mp3">Heavy rain</option>
+        </select>
+        <button class="button secondary" id="blackout" type="button">Black screen</button>
+        <button class="button secondary" id="fullscreen" type="button">Fullscreen</button>
+        <button class="button secondary" id="wake" type="button">Keep screen on</button>
+      </div>
+      <label class="volume" for="volume"><span>Volume</span><input id="volume" type="range" min="0" max="100" value="42" /><output id="volume-value">42%</output></label>
+      <div class="status" id="status" aria-live="polite">Press Play rain to start. Browsers require a user gesture before audio can play.</div>
+      <audio id="rain-audio" preload="metadata" loop src="/audio/rain-steady-loop.mp3"></audio>
+    </section>
 
-    <h2>Steady rain or a storm</h2>
-    <p>Rain and Storm are separate controls. Rain gives you the persistent rainfall scene. Storm can be added when you want drifting cloud, lightning and thunder as part of the same world. Leave Storm off for the quieter version.</p>
+    <section class="copy">
+      <h2>Rain without a glowing video player</h2>
+      <p>The audio plays from this page itself. Once you choose <strong>Black screen</strong>, the controls disappear while the rain keeps looping, leaving a pure black browser surface instead of a bright playback interface.</p>
 
-    <h2>Manual Rain versus Alive</h2>
-    <p>Manual Rain stays a choice you made. <strong>Alive</strong> is different: it lets the world move through its own weather over time, so rain can arrive, intensify, clear and leave water behind. Choosing a manual scene takes control back from Alive.</p>
+      <h2>Steady rain or heavy rain?</h2>
+      <p><strong>Steady rain</strong> is the quieter, more even texture. <strong>Heavy rain</strong> has more weight and movement. Neither preset adds music or speech, and thunder is not mixed into this standalone player.</p>
 
-    <h2>Volume and silence</h2>
-    <ul>
-      <li>The main Sound button turns nighttime audio on or off.</li>
-      <li>The volume slider under More controls TQW's own audio mix.</li>
-      <li>Your device's hardware or system volume remains under your control.</li>
-      <li>You can keep the rain visual running with TQW muted.</li>
-    </ul>
+      <h2>How to use rain sounds at night</h2>
+      <ul>
+        <li>Start quieter than you think you need and raise the volume only enough to mask distracting room noise.</li>
+        <li>Use Black screen when you want the browser open without lighting the room.</li>
+        <li>Use Keep screen on only if you specifically want the display to remain awake; browsers and operating systems can still release a wake lock.</li>
+      </ul>
 
-    <div class="actions">
-      <a class="enter" href="/?entry=rain">Open manual Rain</a>
-      <a class="enter secondary" href="/black-screen-for-sleep/">Use a pure sleep screen</a>
-      <a class="enter secondary" href="/">Enter TQW normally</a>
-    </div>
-    <p class="note">This is an ambient website, not a medical sleep treatment. Use whatever sound level and screen setup feels comfortable for your room.</p>
-    <small>thisquiet.world</small>
+      <h2>Want the living rain scene?</h2>
+      <p>The full This Quiet World experience adds rain visuals, optional storms and thunder, moonlight, weather changes and the rest of the nighttime world. The standalone player above stays deliberately simpler.</p>
+
+      <div class="links">
+        <a class="link-card" href="/?entry=rain"><strong>Open the living Rain scene</strong><span>Rain visuals and the full ambient world</span></a>
+        <a class="link-card" href="/black-screen-for-sleep/"><strong>Black screen for sleep</strong><span>Pure black or a dim bedside clock</span></a>
+        <a class="link-card" href="/bedside-clock/"><strong>Black screen with clock</strong><span>A dim fullscreen night clock</span></a>
+      </div>
+    </section>
   </main>
+  <div class="wake-hint">tap to show controls</div>
+  <script>
+    (() => {
+      const body = document.body;
+      const audio = document.getElementById('rain-audio');
+      const play = document.getElementById('play');
+      const type = document.getElementById('rain-type');
+      const volume = document.getElementById('volume');
+      const volumeValue = document.getElementById('volume-value');
+      const blackout = document.getElementById('blackout');
+      const fullscreen = document.getElementById('fullscreen');
+      const wake = document.getElementById('wake');
+      const status = document.getElementById('status');
+      let wakeLock = null;
+      let idleTimer = 0;
+
+      const setStatus = (message) => { status.textContent = message; };
+      const updatePlayLabel = () => { play.textContent = audio.paused ? 'Play rain' : 'Pause rain'; };
+      audio.volume = Number(volume.value) / 100;
+
+      play.addEventListener('click', async () => {
+        try {
+          if (audio.paused) await audio.play(); else audio.pause();
+          updatePlayLabel();
+          setStatus(audio.paused ? 'Rain paused.' : `${type.options[type.selectedIndex].text} is playing.`);
+        } catch { setStatus('Your browser blocked audio playback. Tap Play rain again.'); }
+      });
+
+      type.addEventListener('change', async () => {
+        const wasPlaying = !audio.paused;
+        audio.src = type.value;
+        audio.load();
+        if (wasPlaying) {
+          try { await audio.play(); } catch {}
+        }
+        updatePlayLabel();
+        setStatus(`${type.options[type.selectedIndex].text} selected${wasPlaying ? ' and playing' : ''}.`);
+      });
+
+      volume.addEventListener('input', () => {
+        audio.volume = Number(volume.value) / 100;
+        volumeValue.textContent = `${volume.value}%`;
+      });
+
+      const showControls = () => {
+        body.classList.remove('blackout','idle');
+        window.clearTimeout(idleTimer);
+      };
+      blackout.addEventListener('click', () => {
+        body.classList.add('blackout');
+        body.classList.remove('idle');
+        window.clearTimeout(idleTimer);
+        idleTimer = window.setTimeout(() => body.classList.add('idle'), 1800);
+      });
+      document.addEventListener('pointerdown', () => { if (body.classList.contains('blackout')) showControls(); });
+      document.addEventListener('keydown', () => { if (body.classList.contains('blackout')) showControls(); });
+
+      fullscreen.addEventListener('click', async () => {
+        try {
+          if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+          setStatus(document.fullscreenElement ? 'Fullscreen is on.' : 'Your browser did not enter fullscreen.');
+        } catch { setStatus('Fullscreen was blocked by the browser.'); }
+      });
+
+      wake.addEventListener('click', async () => {
+        if (!('wakeLock' in navigator)) { setStatus('Screen wake lock is not available in this browser.'); return; }
+        try {
+          if (wakeLock) { await wakeLock.release(); wakeLock = null; wake.textContent = 'Keep screen on'; setStatus('Screen wake lock released.'); return; }
+          wakeLock = await navigator.wakeLock.request('screen');
+          wake.textContent = 'Allow screen to sleep';
+          setStatus('Screen wake lock is active while this page remains visible.');
+          wakeLock.addEventListener('release', () => { wakeLock = null; wake.textContent = 'Keep screen on'; });
+        } catch { setStatus('The browser could not keep the screen awake.'); }
+      });
+
+      audio.addEventListener('play', updatePlayLabel);
+      audio.addEventListener('pause', updatePlayLabel);
+    })();
+  </script>
 </body>
 </html>

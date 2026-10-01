@@ -8,11 +8,11 @@ async function text(path) { return readFile(new URL(path, import.meta.url), 'utf
 test('About remains consolidated and discovery pages are static, canonical HTML entries', async () => {
   await assert.rejects(access(new URL('../public/about/index.html', import.meta.url)))
   const pages = [
-    ['../rain-sounds/index.html', 'https://thisquiet.world/rain-sounds/', 'Rain Sounds for Sleep on a Dark Screen'],
-    ['../bedside-clock/index.html', 'https://thisquiet.world/bedside-clock/', 'Dim Bedside Clock for Sleep & Sunrise Wake-Up'],
+    ['../rain-sounds/index.html', 'https://thisquiet.world/rain-sounds/', 'Rain Sounds for Sleep — Black Screen'],
+    ['../bedside-clock/index.html', 'https://thisquiet.world/bedside-clock/', 'Black Screen With Clock'],
     ['../black-screen/index.html', 'https://thisquiet.world/black-screen/', 'Black Screen'],
     ['../black-screen-for-sleep/index.html', 'https://thisquiet.world/black-screen-for-sleep/', 'Black Screen for Sleep'],
-    ['../sleep-tools/index.html', 'https://thisquiet.world/sleep-tools/', 'Free Sleep Screen Tools'],
+    ['../sleep-tools/index.html', 'https://thisquiet.world/sleep-tools/', 'Free Sleep Tools — Black Screen, Rain Sounds & Night Clock'],
   ]
   const titles = new Set()
   const descriptions = new Set()
@@ -49,8 +49,16 @@ test('discovery links, sitemap, Vite entries and redirects all agree on canonica
   for (const route of ['/black-screen/', '/black-screen-for-sleep/', '/rain-sounds/', '/bedside-clock/']) assert.ok(hub.includes(`href="${route}"`))
   assert.ok(app.includes('href="/sleep-tools/"'))
   assert.ok(rain.includes('href="/?entry=rain"'))
-  assert.ok(bedside.includes('href="/?entry=clock"'))
   assert.ok(bedside.includes('href="/?entry=sunrise"'))
+  assert.match(rain, /id="rain-audio"/)
+  assert.match(rain, /rain-steady-loop\.mp3/)
+  assert.match(rain, /rain-heavy-loop\.mp3/)
+  assert.match(rain, /id="blackout"/)
+  assert.match(bedside, /id="night-clock"/)
+  assert.match(bedside, /id="brightness"/)
+  assert.match(bedside, /Intl\.DateTimeFormat/)
+  assert.ok(netlify.includes('from = "/black-screen-with-clock"'))
+  assert.ok(netlify.includes('from = "/night-clock"'))
   assert.match(black, /id="go-black"/)
   assert.match(black, /requestFullscreen/)
   assert.match(black, /navigator\.wakeLock\.request\('screen'\)/)
